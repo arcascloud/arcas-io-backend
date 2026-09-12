@@ -12,7 +12,7 @@ export class TInvTrasladoDet {
   fecharegistro: Date;
 
   @ApiProperty()
-  @Column({ type: 'int' })
+  @Column({ type: 'int', name: 'trasladoId' })
   invtrasladomaeId: number;
 
   @ApiProperty()
@@ -27,21 +27,29 @@ export class TInvTrasladoDet {
   @Column({ type: 'varchar', length: 20 })
   codbarra: string;
 
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  descripcion: string;
-
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   cantidad: number;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'precioCosto' })
   costoUnitario: number;
 
+  @ApiProperty({ required: false })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'precioVenta', nullable: true })
+  precioVenta: number;
+
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'subTotal' })
   costoTotal: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bodegaOrigen: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bodegaDestino: string;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })

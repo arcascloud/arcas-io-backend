@@ -81,7 +81,7 @@ export class TrasladoInventarioController {
   @ApiOperation({ summary: 'Procesar traslado (kardex salida + entrada)' })
   procesar(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body('empresaId', ParseIntPipe) empresaId: number,
     @CurrentUser() user: any,
   ) {
     return this.service.procesar(id, empresaId, user?.usuario || 'admin');
@@ -91,7 +91,7 @@ export class TrasladoInventarioController {
   @ApiOperation({ summary: 'Anular traslado' })
   anular(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body('empresaId', ParseIntPipe) empresaId: number,
     @CurrentUser() user: any,
   ) {
     return this.service.anular(id, empresaId, user?.usuario || 'admin');

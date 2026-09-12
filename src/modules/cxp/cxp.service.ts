@@ -14,6 +14,8 @@ import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
 import { KardexService } from '../inventario/kardex.service';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
+import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 
 @Injectable()
 export class CxpService {
@@ -28,6 +30,8 @@ export class CxpService {
     @InjectRepository(TCxpSaldoAv) private readonly saldoAvRepo: Repository<TCxpSaldoAv>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
+    @InjectRepository(Tmodulos) private readonly moduloRepo: Repository<Tmodulos>,
+    @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -463,6 +467,57 @@ export class CxpService {
 
   async findAllHistoricos(empresaId: number) {
     return this.findAllByEmpresa(this.historicoRepo, empresaId);
+  }
+
+  async findHistoricoConFiltros(
+    empresaId: number,
+    dni?: string,
+    proveedor?: string,
+    fechaDesde?: string,
+    fechaHasta?: string,
+  ) {
+    const qb = this.movimientoRepo.createQueryBuilder('a')
+      .select('a.proveedorId', 'proveedorId')
+      .addSelect('a.fecharegistro', 'fecharegistro')
+      .addSelect('a.codproveedor', 'nroproveedor')
+      .addSelect('b.dni', 'dni')
+      .addSelect('b.razonsocial', 'proveedor')
+      .addSelect('c.descripcion', 'modulo')
+      .addSelect('d.abreviatura', 'abreviatura')
+      .addSelect('a.nroreferencia', 'nroreferencia')
+      .addSelect('a.tipomov', 'tipomov')
+      .addSelect('a.importe', 'importe')
+      .addSelect('COALESCE(a.descripcion1, a.descripcion2, \'\')', 'concepto')
+      .addSelect('a.sn_doc_anulado', 'sn_doc_anulado')
+      .addSelect('a.sn_contabilizado', 'sn_contabilizado')
+      .addSelect('a.bcomovId', 'bcomovId')
+      .addSelect('a.documentoId', 'documentoId')
+      .innerJoin('proveedor', 'b', 'b.proveedorId = a.proveedorId')
+      .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
+      .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
+      .where('a.empresaId = :empresaId', { empresaId })
+      .orderBy('b.razonsocial', 'ASC')
+      .addOrderBy('a.bcomovId', 'ASC');
+
+    if (dni && dni.trim()) {
+      qb.andWhere('b.dni LIKE :dni', { dni: `%${dni.trim()}%` });
+    }
+
+    if (proveedor && proveedor.trim()) {
+      qb.andWhere('(b.razonsocial LIKE :proveedor OR b.nombres LIKE :proveedor OR b.apellidos LIKE :proveedor)', {
+        proveedor: `%${proveedor.trim()}%`,
+      });
+    }
+
+    if (fechaDesde && fechaDesde.trim()) {
+      qb.andWhere('a.fecharegistro >= :fechaDesde', { fechaDesde: `${fechaDesde.trim()} 00:00:00` });
+    }
+
+    if (fechaHasta && fechaHasta.trim()) {
+      qb.andWhere('a.fecharegistro <= :fechaHasta', { fechaHasta: `${fechaHasta.trim()} 23:59:59` });
+    }
+
+    return qb.getRawMany();
   }
 
   async findHistorico(cxphistoId: number, empresaId: number) {

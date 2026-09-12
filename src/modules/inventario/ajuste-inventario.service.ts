@@ -28,23 +28,10 @@ export class AjusteInventarioService {
   }
 
   async findDetByMae(invmovmaeid: number, empresaId: number) {
-    const rows = await this.detRepo.createQueryBuilder('d')
-      .leftJoin(Tproducto, 'p', 'p.produtoId = d.productoId AND p.empresaId = d.empresaId')
-      .select([
-        'd.invmovdetid', 'd.fecharegistro', 'd.invmovmaeid', 'd.nrofila',
-        'd.bodegaId', 'd.productoId', 'd.codbarra', 'd.cantidad',
-        'd.costoUnitario', 'd.costoTotal', 'd.verificador',
-        'd.sn_entrada', 'd.sn_anulado', 'd.empresaId', 'd.usuarioCreated',
-        'p.descripcion',
-      ])
-      .where('d.invmovmaeid = :invmovmaeid', { invmovmaeid })
-      .andWhere('d.empresaId = :empresaId', { empresaId })
-      .orderBy('d.nrofila', 'ASC')
-      .getRawMany();
-    return rows.map(r => ({
-      ...r,
-      descripcion: r.descripcion || '',
-    }));
+    return this.detRepo.find({
+      where: { invmovmaeid, empresaId } as any,
+      order: { nrofila: 'ASC' } as any,
+    });
   }
 
   async createMae(dto: any, usuario: string) {
@@ -102,6 +89,7 @@ export class AjusteInventarioService {
       bodegaId: dto.bodegaId,
       productoId,
       codbarra: dto.codbarra,
+      descripcion,
       cantidad,
       costoUnitario,
       costoTotal: cantidad * costoUnitario,

@@ -32,6 +32,11 @@ export class TInvMovDet {
   codbarra: string;
 
   @ApiProperty()
+  @Column({ type: 'varchar', length: 50 })
+  descripcion: string;
+
+
+  @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   cantidad: number;
 

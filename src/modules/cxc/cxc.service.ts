@@ -388,6 +388,60 @@ export class CxcService {
     return this.findAllByEmpresa(this.historoRepo, empresaId);
   }
 
+  /**
+   * Consulta histórico de movimientos con filtros por DNI, cliente y rango de fechas
+   */
+  async findHistoricoConFiltros(
+    empresaId: number,
+    dni?: string,
+    cliente?: string,
+    fechaDesde?: string,
+    fechaHasta?: string,
+  ) {
+    const qb = this.movimientoRepo.createQueryBuilder('a')
+      .select('a.clienteId', 'clienteId')
+      .addSelect('a.fecharegistro', 'fecharegistro')
+      .addSelect('a.nrocliente', 'nrocliente')
+      .addSelect('b.dni', 'dni')
+      .addSelect('b.razonsocial', 'cliente')
+      .addSelect('c.descripcion', 'modulo')
+      .addSelect('d.abreviatura', 'abreviatura')
+      .addSelect('a.nroreferencia', 'nroreferencia')
+      .addSelect('a.tipomov', 'tipomov')
+      .addSelect('a.importe', 'importe')
+      .addSelect('a.concepto', 'concepto')
+      .addSelect('a.sn_doc_anulado', 'sn_doc_anulado')
+      .addSelect('a.sn_cotabilizada', 'sn_cotabilizada')
+      .addSelect('a.clienteMovId', 'clienteMovId')
+      .addSelect('a.documentoId', 'documentoId')
+      .innerJoin('cxcclientes', 'b', 'b.clienteId = a.clienteId')
+      .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
+      .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
+      .where('a.empresaId = :empresaId', { empresaId })
+      .orderBy('b.razonsocial', 'ASC')
+      .addOrderBy('a.clienteMovId', 'ASC');
+
+    if (dni && dni.trim()) {
+      qb.andWhere('b.dni LIKE :dni', { dni: `%${dni.trim()}%` });
+    }
+
+    if (cliente && cliente.trim()) {
+      qb.andWhere('(b.razonsocial LIKE :cliente OR b.nombres LIKE :cliente OR b.apellidos LIKE :cliente)', { 
+        cliente: `%${cliente.trim()}%` 
+      });
+    }
+
+    if (fechaDesde && fechaDesde.trim()) {
+      qb.andWhere('a.fecharegistro >= :fechaDesde', { fechaDesde: `${fechaDesde.trim()} 00:00:00` });
+    }
+
+    if (fechaHasta && fechaHasta.trim()) {
+      qb.andWhere('a.fecharegistro <= :fechaHasta', { fechaHasta: `${fechaHasta.trim()} 23:59:59` });
+    }
+
+    return qb.getRawMany();
+  }
+
   async findHistoricoByCliente(clienteId: number, empresaId: number) {
     return this.historoRepo.find({
       where: { clienteId, empresaId } as FindOptionsWhere<CxcHistoro>,
@@ -466,8 +520,10 @@ export class CxcService {
     return this.softDelete(this.prestamoRepo, 'prestamoId', prestamoId, empresaId, 'Prestamo');
   }
 
-  async findAllPrestamoPP(empresaId: number) {
-    return this.findAllByEmpresa(this.prestamoPPRepo, empresaId);
+  async findAllPrestamoPP(empresaId: number, prestamoId?: number) {
+    const where: any = { empresaId };
+    if (prestamoId) where.prestamoId = prestamoId;
+    return this.prestamoPPRepo.find({ where, order: { nrofila: 'ASC' } });
   }
 
   async findPrestamoPP(pppId: number, empresaId: number) {

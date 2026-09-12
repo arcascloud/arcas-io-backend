@@ -706,8 +706,11 @@ export class InventarioController {
   @Get('productos-det')
   @ApiOperation({ summary: 'Listar detalle de productos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllProdDet(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProdDet(empresaId);
+  findAllProdDet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('produtoId') produtoId?: string,
+  ) {
+    return this.service.findAllProdDet(empresaId, produtoId ? Number(produtoId) : undefined);
   }
 
   @Get('productos-det/:id')
@@ -754,8 +757,11 @@ export class InventarioController {
   @Get('productos-img')
   @ApiOperation({ summary: 'Listar imágenes de productos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllProdImg(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProdImg(empresaId);
+  findAllProdImg(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('productoId') productoId?: string,
+  ) {
+    return this.service.findAllProdImg(empresaId, productoId ? Number(productoId) : undefined);
   }
 
   @Get('productos-img/:id')

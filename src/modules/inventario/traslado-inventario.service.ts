@@ -28,7 +28,17 @@ export class TrasladoInventarioService {
   }
 
   async findDetByMae(id: number, empresaId: number) {
-    return this.detRepo.find({ where: { invtrasladomaeId: id, empresaId } as any, order: { nrofila: 'ASC' } as any });
+    const rows = await this.detRepo.createQueryBuilder('d')
+      .leftJoinAndSelect(Tproducto, 'p', 'p.produtoId = d.productoId AND p.empresaId = d.empresaId')
+      .select([
+        'd.*',
+        'p.descripcion AS descripcion',
+      ])
+      .where('d.invtrasladomaeId = :id', { id })
+      .andWhere('d.empresaId = :empresaId', { empresaId })
+      .orderBy('d.nrofila', 'ASC')
+      .getRawMany();
+    return rows;
   }
 
   async createMae(dto: any, usuario: string) {
@@ -74,7 +84,6 @@ export class TrasladoInventarioService {
       .getRawOne();
     const nrofila = (maxNro?.maxNro || 0) + 1;
 
-    let descripcion = dto.descripcion || '';
     let costoUnitario = Number(dto.costoUnitario) || 0;
     let productoId = dto.productoId;
 
@@ -82,10 +91,14 @@ export class TrasladoInventarioService {
       const prod = await this.productoRepo.findOne({ where: { codbarra: dto.codbarra, empresaId: dto.empresaId } as any });
       if (prod) {
         productoId = prod.produtoId;
-        descripcion = prod.descripcion;
         costoUnitario = Number(prod.cstounit) || 0;
       }
     }
+
+    // Obtener bodegas del maestro
+    const mae = await this.maeRepo.findOne({ where: { invtrasladomaeId: dto.invtrasladomaeId } as any });
+    const bodegaOrigen = String(mae?.bodegaOrigenId || '');
+    const bodegaDestino = String(mae?.bodegaDestinoId || '');
 
     const cantidad = Number(dto.cantidad) || 0;
     const costoTotal = cantidad * costoUnitario;
@@ -95,10 +108,11 @@ export class TrasladoInventarioService {
       nrofila,
       productoId,
       codbarra: dto.codbarra || '',
-      descripcion,
       cantidad,
       costoUnitario,
       costoTotal,
+      bodegaOrigen,
+      bodegaDestino,
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,

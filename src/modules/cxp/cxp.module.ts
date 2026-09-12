@@ -11,6 +11,8 @@ import { TCxpHistorico } from './entities/historico.entity';
 import { TCxpSaldoAv } from './entities/saldoav.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
+import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { CxpService } from './cxp.service';
 import { CxpController } from './cxp.controller';
 import { InventarioModule } from '../inventario/inventario.module';
@@ -29,6 +31,8 @@ import { InventarioModule } from '../inventario/inventario.module';
       TCxpSaldoAv,
       Tproducto,
       TPosPrecioVtas,
+      Tmodulos,
+      TCoTipoDocumentoFiscal,
     ]),
     InventarioModule,
   ],

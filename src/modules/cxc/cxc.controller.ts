@@ -331,6 +331,20 @@ export class CxcController {
     return this.service.findAllHistoro(empresaId);
   }
 
+  @Get('historico/filtros')
+  @ApiOperation({ summary: 'Histórico con filtros (dni, cliente, fecha)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findHistoricoConFiltros(
+    @Query('empresaId') empresaId: number,
+    @Query('dni') dni?: string,
+    @Query('cliente') cliente?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ) {
+    const id = Number(empresaId);
+    return this.service.findHistoricoConFiltros(id, dni, cliente, fechaDesde, fechaHasta);
+  }
+
   @Get('historico/cliente/:clienteId')
   @ApiOperation({ summary: 'Histórico por cliente' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -487,8 +501,11 @@ export class CxcController {
   @Get('prestamo-pp')
   @ApiOperation({ summary: 'Listar plan de pagos de préstamos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllPrestamoPP(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllPrestamoPP(empresaId);
+  findAllPrestamoPP(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('prestamoId') prestamoId?: string,
+  ) {
+    return this.service.findAllPrestamoPP(empresaId, prestamoId ? Number(prestamoId) : undefined);
   }
 
   @Get('prestamo-pp/:id')

@@ -475,8 +475,10 @@ export class InventarioService {
 
   // ===== ProductoDet =====
 
-  async findAllProdDet(empresaId: number) {
-    return this.prodDetRepo.find({ where: { empresaId } });
+  async findAllProdDet(empresaId: number, produtoId?: number) {
+    const where: any = { empresaId };
+    if (produtoId) where.produtoId = produtoId;
+    return this.prodDetRepo.find({ where });
   }
 
   async findProdDet(productosdetsId: number, empresaId: number) {
@@ -497,8 +499,10 @@ export class InventarioService {
 
   // ===== ProductoImg =====
 
-  async findAllProdImg(empresaId: number) {
-    return this.prodImgRepo.find({ where: { empresaId } });
+  async findAllProdImg(empresaId: number, productoId?: number) {
+    const where: any = { empresaId };
+    if (productoId) where.productoId = productoId;
+    return this.prodImgRepo.find({ where });
   }
 
   async findProductosTienda(empresaId: number) {

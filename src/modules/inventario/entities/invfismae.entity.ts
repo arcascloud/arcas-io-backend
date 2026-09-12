@@ -24,6 +24,10 @@ export class TInvFisMae {
   sn_anulado: string;
 
   @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_procesado: string;
+
+  @ApiProperty()
   @Column()
   empresaId: number;
 

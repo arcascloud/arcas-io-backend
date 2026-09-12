@@ -181,6 +181,19 @@ export class CxpController {
     return this.service.findAllHistoricos(empresaId);
   }
 
+  @Get('historicos/filtros')
+  @ApiOperation({ summary: 'Históricos con filtros (DNI, proveedor, fechas)' })
+  @ApiResponse({ status: 200, description: 'Lista filtrada obtenida exitosamente' })
+  findHistoricoConFiltros(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('dni') dni?: string,
+    @Query('proveedor') proveedor?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ) {
+    return this.service.findHistoricoConFiltros(empresaId, dni, proveedor, fechaDesde, fechaHasta);
+  }
+
   @Get('saldos-av')
   @ApiOperation({ summary: 'Listar saldos anticipo de proveedores' })
   @ApiResponse({ status: 200, description: 'Lista de saldos obtenida exitosamente' })
