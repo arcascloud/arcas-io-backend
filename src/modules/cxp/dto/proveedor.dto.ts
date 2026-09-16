@@ -2,9 +2,9 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProveedorDto {
-  @ApiProperty({ description: 'Número de Proveedor' })
-  @IsString() @IsNotEmpty()
-  nroproveedor: string;
+  @ApiProperty({ required: false, description: 'Número de Proveedor (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroproveedor?: string;
 
   @ApiProperty({ description: 'Nombres' })
   @IsString() @IsNotEmpty()

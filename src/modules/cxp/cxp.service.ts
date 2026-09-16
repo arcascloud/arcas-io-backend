@@ -11,6 +11,7 @@ import { TCxpMovimiento } from './entities/movimiento.entity';
 import { TCxpHistorico } from './entities/historico.entity';
 import { TCxpSaldoAv } from './entities/saldoav.entity';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { KardexService } from '../inventario/kardex.service';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
@@ -32,6 +33,7 @@ export class CxpService {
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
     @InjectRepository(Tmodulos) private readonly moduloRepo: Repository<Tmodulos>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -129,7 +131,40 @@ export class CxpService {
   }
 
   async createProveedor(dto: CreateProveedorDto, currentUser: string) {
-    return this.createEntity(this.proveedorRepo, dto, currentUser);
+    // Auto-generar nroproveedor desde ttipoparametros (moduloId=5)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 5, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroproveedor', 0);
+    const nro = Number(nroActual) + 1;
+    const nroproveedor = dto.nroproveedor || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroproveedor,
+      razonsocial: dto.razonsocial || `${dto.nombres} ${dto.apellidos}`,
+      dni: dto.dni || '0000000000000',
+    };
+
+    const saved = await this.createEntity(this.proveedorRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 5 AND field = :field', { eid: dto.empresaId, field: 'nroproveedor' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updateProveedor(proveedorId: number, empresaId: number, dto: UpdateProveedorDto, currentUser: string) {

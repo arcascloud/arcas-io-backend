@@ -20,7 +20,8 @@ import { CxcCliente } from '../cxc/entities/cxccliente.entity';
 import { CxccClientesDir } from '../cxc/entities/cxccclientesdir.entity';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
-import { TtipoParamFac } from '../parametros/entities/param-fac.entity';
+import { TImpresora } from '../companies/entities/impresoras.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
 import { FacturacionService } from './facturacion.service';
@@ -51,7 +52,8 @@ import { CxcModule } from '../cxc/cxc.module';
       CxccClientesDir,
       Tempresas,
       TempresasDet,
-      TtipoParamFac,
+      TImpresora,
+      TipoParametro,
       Tproducto,
       TproductoImg,
     ]),

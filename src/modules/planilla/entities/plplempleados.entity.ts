@@ -10,6 +10,10 @@ export class PlPlEmpleados {
   empleadoId: number;
 
   @ApiProperty()
+  @Column({ type: 'varchar', length: 20, default: '' })
+  nroempleado: string;
+
+  @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   fecharegistro: Date;
 

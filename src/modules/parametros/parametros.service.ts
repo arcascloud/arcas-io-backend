@@ -16,22 +16,16 @@ import { TtipoGestor } from './entities/gestor.entity';
 import { TtipoImpuesto } from './entities/impuesto.entity';
 import { TtipoProforma } from './entities/proforma.entity';
 import { TtipoZonaVtaCob } from './entities/zona-vta-cob.entity';
-import { TtipoParamBco } from './entities/param-bco.entity';
-import { TtipoParamCon } from './entities/param-con.entity';
-import { TtipoParamCxc } from './entities/param-cxc.entity';
-import { TtipoParamCxp } from './entities/param-cxp.entity';
-import { TtipoParamFac } from './entities/param-fac.entity';
-import { TtipoParamInv } from './entities/param-inv.entity';
-import { TtipoParamPap } from './entities/param-pap.entity';
-import { TtipoParamPla } from './entities/param-pla.entity';
-import { TtipoParamPres } from './entities/param-pres.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { PlPlEmpleados } from '../planilla/entities/plplempleados.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { TipoParametro } from './entities/tipo-parametro.entity';
 
 @Injectable()
 export class ParametrosService {
   constructor(
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepoDup: Repository<TipoParametro>,
     @InjectRepository(TtipoMoneda) private readonly monedaRepo: Repository<TtipoMoneda>,
     @InjectRepository(TtipoPais) private readonly paisRepo: Repository<TtipoPais>,
     @InjectRepository(TtipoDeptoPais) private readonly deptoPaisRepo: Repository<TtipoDeptoPais>,
@@ -47,21 +41,11 @@ export class ParametrosService {
     @InjectRepository(TtipoImpuesto) private readonly impuestoRepo: Repository<TtipoImpuesto>,
     @InjectRepository(TtipoProforma) private readonly proformaRepo: Repository<TtipoProforma>,
     @InjectRepository(TtipoZonaVtaCob) private readonly zonaVtaCobRepo: Repository<TtipoZonaVtaCob>,
-    @InjectRepository(TtipoParamBco) private readonly paramBcoRepo: Repository<TtipoParamBco>,
-    @InjectRepository(TtipoParamCon) private readonly paramConRepo: Repository<TtipoParamCon>,
-    @InjectRepository(TtipoParamCxc) private readonly paramCxcRepo: Repository<TtipoParamCxc>,
-    @InjectRepository(TtipoParamCxp) private readonly paramCxpRepo: Repository<TtipoParamCxp>,
-    @InjectRepository(TtipoParamFac) private readonly paramFacRepo: Repository<TtipoParamFac>,
-    @InjectRepository(TtipoParamInv) private readonly paramInvRepo: Repository<TtipoParamInv>,
-    @InjectRepository(TtipoParamPap) private readonly paramPapRepo: Repository<TtipoParamPap>,
-    @InjectRepository(TtipoParamPla) private readonly paramPlaRepo: Repository<TtipoParamPla>,
-    @InjectRepository(TtipoParamPres) private readonly paramPresRepo: Repository<TtipoParamPres>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @InjectRepository(PlPlEmpleados) private readonly empleadoRepo: Repository<PlPlEmpleados>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
   ) {}
 
-  
   findAllTiposDocFiscal(empresaId: number) {
     return this.findAllByEmpresa(this.tipoDocFiscalRepo, empresaId);
   }
@@ -86,17 +70,6 @@ export class ParametrosService {
     const where = { [idField]: id, empresaId } as unknown as FindOptionsWhere<T>;
     const found = await repo.findOne({ where });
     if (!found) throw new NotFoundException(`${entityName} ${id} no encontrado`);
-    return found;
-  }
-
-  private async findOneByEmpresaId<T extends ObjectLiteral>(
-    repo: Repository<T>,
-    empresaId: number,
-    entityName: string,
-  ) {
-    const where = { empresaId } as unknown as FindOptionsWhere<T>;
-    const found = await repo.findOne({ where });
-    if (!found) throw new NotFoundException(`${entityName} empresa ${empresaId} no encontrado`);
     return found;
   }
 
@@ -129,29 +102,6 @@ export class ParametrosService {
     return repo.save(entity);
   }
 
-  private async upsertParam<T extends ObjectLiteral>(
-    repo: Repository<T>,
-    empresaId: number,
-    dto: any,
-    currentUser: string,
-    entityName: string,
-  ) {
-    const found = await repo.findOne({ where: { empresaId } as unknown as FindOptionsWhere<T> });
-    if (found) {
-      Object.assign(found, dto, {
-        usuarioUpdated: currentUser,
-        fechaUpdated: new Date(),
-      });
-      return repo.save(found);
-    }
-    const entity = repo.create({
-      empresaId,
-      ...dto,
-      usuarioCreated: currentUser,
-    });
-    return repo.save(entity);
-  }
-
   private async softDelete<T extends ObjectLiteral>(
     repo: Repository<T>,
     idField: string,
@@ -167,238 +117,84 @@ export class ParametrosService {
     return repo.save(entity);
   }
 
-  async findAllMonedas(empresaId: number) {
-    return this.findAllByEmpresa(this.monedaRepo, empresaId);
-  }
+  // ── Monedas ──────────────────────────────────────────────
+  async findAllMonedas(empresaId: number) { return this.findAllByEmpresa(this.monedaRepo, empresaId); }
+  async findMoneda(id: number, empresaId: number) { return this.findOneById(this.monedaRepo, 'monedaId', id, empresaId, 'Moneda'); }
+  async createMoneda(dto: any, user: string) { return this.createEntity(this.monedaRepo, dto, user); }
+  async updateMoneda(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.monedaRepo, 'monedaId', id, eid, dto, user, 'Moneda'); }
+  async removeMoneda(id: number, eid: number) { return this.softDelete(this.monedaRepo, 'monedaId', id, eid, 'Moneda'); }
 
-  async findMoneda(monedaId: number, empresaId: number) {
-    return this.findOneById(this.monedaRepo, 'monedaId', monedaId, empresaId, 'Moneda');
-  }
+  // ── Países ───────────────────────────────────────────────
+  async findAllPaises(empresaId: number) { return this.findAllByEmpresa(this.paisRepo, empresaId); }
+  async findPais(id: number, empresaId: number) { return this.findOneById(this.paisRepo, 'paisId', id, empresaId, 'Pais'); }
+  async createPais(dto: any, user: string) { return this.createEntity(this.paisRepo, dto, user); }
+  async updatePais(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.paisRepo, 'paisId', id, eid, dto, user, 'Pais'); }
+  async removePais(id: number, eid: number) { return this.softDelete(this.paisRepo, 'paisId', id, eid, 'Pais'); }
 
-  async createMoneda(dto: any, currentUser: string) {
-    return this.createEntity(this.monedaRepo, dto, currentUser);
-  }
+  // ── Depto País ───────────────────────────────────────────
+  async findAllDeptoPais(empresaId: number) { return this.findAllByEmpresa(this.deptoPaisRepo, empresaId); }
+  async findDeptoPais(id: number, empresaId: number) { return this.findOneById(this.deptoPaisRepo, 'ttipodeptopaisId', id, empresaId, 'Depto Pais'); }
+  async createDeptoPais(dto: any, user: string) { return this.createEntity(this.deptoPaisRepo, dto, user); }
+  async updateDeptoPais(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoPaisRepo, 'ttipodeptopaisId', id, eid, dto, user, 'Depto Pais'); }
+  async removeDeptoPais(id: number, eid: number) { return this.softDelete(this.deptoPaisRepo, 'ttipodeptopaisId', id, eid, 'Depto Pais'); }
 
-  async updateMoneda(monedaId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.monedaRepo, 'monedaId', monedaId, empresaId, dto, currentUser, 'Moneda');
-  }
+  // ── Depto Empresa ────────────────────────────────────────
+  async findAllDeptoEmpresa(empresaId: number) { return this.findAllByEmpresa(this.deptoEmpresaRepo, empresaId); }
+  async findDeptoEmpresa(id: number, empresaId: number) { return this.findOneById(this.deptoEmpresaRepo, 'departamentostempresasId', id, empresaId, 'Depto Empresa'); }
+  async createDeptoEmpresa(dto: any, user: string) { return this.createEntity(this.deptoEmpresaRepo, dto, user); }
+  async updateDeptoEmpresa(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, dto, user, 'Depto Empresa'); }
+  async removeDeptoEmpresa(id: number, eid: number) { return this.softDelete(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, 'Depto Empresa'); }
 
-  async removeMoneda(monedaId: number, empresaId: number) {
-    return this.softDelete(this.monedaRepo, 'monedaId', monedaId, empresaId, 'Moneda');
-  }
+  // ── Direcciones ──────────────────────────────────────────
+  async findAllDirecciones(empresaId: number) { return this.findAllByEmpresa(this.direccionRepo, empresaId); }
+  async findDireccion(id: number, empresaId: number) { return this.findOneById(this.direccionRepo, 'direccionId', id, empresaId, 'Direccion'); }
+  async createDireccion(dto: any, user: string) { return this.createEntity(this.direccionRepo, dto, user); }
+  async updateDireccion(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.direccionRepo, 'direccionId', id, eid, dto, user, 'Direccion'); }
+  async removeDireccion(id: number, eid: number) { return this.softDelete(this.direccionRepo, 'direccionId', id, eid, 'Direccion'); }
 
-  async findAllPaises(empresaId: number) {
-    return this.findAllByEmpresa(this.paisRepo, empresaId);
-  }
+  // ── Estados ──────────────────────────────────────────────
+  async findAllEstados(empresaId: number) { return this.findAllByEmpresa(this.estadoRepo, empresaId); }
+  async findEstado(id: number, empresaId: number) { return this.findOneById(this.estadoRepo, 'estadoId', id, empresaId, 'Estado'); }
+  async createEstado(dto: any, user: string) { return this.createEntity(this.estadoRepo, dto, user); }
+  async updateEstado(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.estadoRepo, 'estadoId', id, eid, dto, user, 'Estado'); }
+  async removeEstado(id: number, eid: number) { return this.softDelete(this.estadoRepo, 'estadoId', id, eid, 'Estado'); }
 
-  async findPais(paisId: number, empresaId: number) {
-    return this.findOneById(this.paisRepo, 'paisId', paisId, empresaId, 'Pais');
-  }
+  // ── Formas de Pago ───────────────────────────────────────
+  async findAllFormasPago(empresaId: number) { return this.findAllByEmpresa(this.formaPagoRepo, empresaId); }
+  async findFormaPago(id: number, empresaId: number) { return this.findOneById(this.formaPagoRepo, 'formapagoId', id, empresaId, 'Forma Pago'); }
+  async createFormaPago(dto: any, user: string) { return this.createEntity(this.formaPagoRepo, dto, user); }
+  async updateFormaPago(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.formaPagoRepo, 'formapagoId', id, eid, dto, user, 'Forma Pago'); }
+  async removeFormaPago(id: number, eid: number) { return this.softDelete(this.formaPagoRepo, 'formapagoId', id, eid, 'Forma Pago'); }
 
-  async createPais(dto: any, currentUser: string) {
-    return this.createEntity(this.paisRepo, dto, currentUser);
-  }
+  // ── Teléfonos ────────────────────────────────────────────
+  async findAllTelefonos(empresaId: number) { return this.findAllByEmpresa(this.telefonoRepo, empresaId); }
+  async findTelefono(id: number, empresaId: number) { return this.findOneById(this.telefonoRepo, 'telefonoId', id, empresaId, 'Telefono'); }
+  async createTelefono(dto: any, user: string) { return this.createEntity(this.telefonoRepo, dto, user); }
+  async updateTelefono(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.telefonoRepo, 'telefonoId', id, eid, dto, user, 'Telefono'); }
+  async removeTelefono(id: number, eid: number) { return this.softDelete(this.telefonoRepo, 'telefonoId', id, eid, 'Telefono'); }
 
-  async updatePais(paisId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.paisRepo, 'paisId', paisId, empresaId, dto, currentUser, 'Pais');
-  }
+  // ── Tarjetas de Crédito ──────────────────────────────────
+  async findAllTarjetasCredito(empresaId: number) { return this.findAllByEmpresa(this.tarjetaCreditoRepo, empresaId); }
+  async findTarjetaCredito(id: number, empresaId: number) { return this.findOneById(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, empresaId, 'Tarjeta Credito'); }
+  async createTarjetaCredito(dto: any, user: string) { return this.createEntity(this.tarjetaCreditoRepo, dto, user); }
+  async updateTarjetaCredito(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, eid, dto, user, 'Tarjeta Credito'); }
+  async removeTarjetaCredito(id: number, eid: number) { return this.softDelete(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, eid, 'Tarjeta Credito'); }
 
-  async removePais(paisId: number, empresaId: number) {
-    return this.softDelete(this.paisRepo, 'paisId', paisId, empresaId, 'Pais');
-  }
+  // ── Pasatiempos ──────────────────────────────────────────
+  async findAllPasatiempos(empresaId: number) { return this.findAllByEmpresa(this.pasatiempoRepo, empresaId); }
+  async findPasatiempo(id: number, empresaId: number) { return this.findOneById(this.pasatiempoRepo, 'pasatiempoId', id, empresaId, 'Pasatiempo'); }
+  async createPasatiempo(dto: any, user: string) { return this.createEntity(this.pasatiempoRepo, dto, user); }
+  async updatePasatiempo(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.pasatiempoRepo, 'pasatiempoId', id, eid, dto, user, 'Pasatiempo'); }
+  async removePasatiempo(id: number, eid: number) { return this.softDelete(this.pasatiempoRepo, 'pasatiempoId', id, eid, 'Pasatiempo'); }
 
-  async findAllDeptoPais(empresaId: number) {
-    return this.findAllByEmpresa(this.deptoPaisRepo, empresaId);
-  }
+  // ── Zonas ────────────────────────────────────────────────
+  async findAllZonas(empresaId: number) { return this.findAllByEmpresa(this.zonaRepo, empresaId); }
+  async findZona(id: number, empresaId: number) { return this.findOneById(this.zonaRepo, 'tzonadId', id, empresaId, 'Zona'); }
+  async createZona(dto: any, user: string) { return this.createEntity(this.zonaRepo, dto, user); }
+  async updateZona(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.zonaRepo, 'tzonadId', id, eid, dto, user, 'Zona'); }
+  async removeZona(id: number, eid: number) { return this.softDelete(this.zonaRepo, 'tzonadId', id, eid, 'Zona'); }
 
-  async findDeptoPais(ttipodeptopaisId: number, empresaId: number) {
-    return this.findOneById(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, 'Depto Pais');
-  }
-
-  async createDeptoPais(dto: any, currentUser: string) {
-    return this.createEntity(this.deptoPaisRepo, dto, currentUser);
-  }
-
-  async updateDeptoPais(ttipodeptopaisId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, dto, currentUser, 'Depto Pais');
-  }
-
-  async removeDeptoPais(ttipodeptopaisId: number, empresaId: number) {
-    return this.softDelete(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, 'Depto Pais');
-  }
-
-  async findAllDeptoEmpresa(empresaId: number) {
-    return this.findAllByEmpresa(this.deptoEmpresaRepo, empresaId);
-  }
-
-  async findDeptoEmpresa(departamentostempresasId: number, empresaId: number) {
-    return this.findOneById(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, 'Depto Empresa');
-  }
-
-  async createDeptoEmpresa(dto: any, currentUser: string) {
-    return this.createEntity(this.deptoEmpresaRepo, dto, currentUser);
-  }
-
-  async updateDeptoEmpresa(departamentostempresasId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, dto, currentUser, 'Depto Empresa');
-  }
-
-  async removeDeptoEmpresa(departamentostempresasId: number, empresaId: number) {
-    return this.softDelete(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, 'Depto Empresa');
-  }
-
-  async findAllDirecciones(empresaId: number) {
-    return this.findAllByEmpresa(this.direccionRepo, empresaId);
-  }
-
-  async findDireccion(direccionId: number, empresaId: number) {
-    return this.findOneById(this.direccionRepo, 'direccionId', direccionId, empresaId, 'Direccion');
-  }
-
-  async createDireccion(dto: any, currentUser: string) {
-    return this.createEntity(this.direccionRepo, dto, currentUser);
-  }
-
-  async updateDireccion(direccionId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.direccionRepo, 'direccionId', direccionId, empresaId, dto, currentUser, 'Direccion');
-  }
-
-  async removeDireccion(direccionId: number, empresaId: number) {
-    return this.softDelete(this.direccionRepo, 'direccionId', direccionId, empresaId, 'Direccion');
-  }
-
-  async findAllEstados(empresaId: number) {
-    return this.findAllByEmpresa(this.estadoRepo, empresaId);
-  }
-
-  async findEstado(estadoId: number, empresaId: number) {
-    return this.findOneById(this.estadoRepo, 'estadoId', estadoId, empresaId, 'Estado');
-  }
-
-  async createEstado(dto: any, currentUser: string) {
-    return this.createEntity(this.estadoRepo, dto, currentUser);
-  }
-
-  async updateEstado(estadoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.estadoRepo, 'estadoId', estadoId, empresaId, dto, currentUser, 'Estado');
-  }
-
-  async removeEstado(estadoId: number, empresaId: number) {
-    return this.softDelete(this.estadoRepo, 'estadoId', estadoId, empresaId, 'Estado');
-  }
-
-  async findAllFormasPago(empresaId: number) {
-    return this.findAllByEmpresa(this.formaPagoRepo, empresaId);
-  }
-
-  async findFormaPago(formapagoId: number, empresaId: number) {
-    return this.findOneById(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, 'Forma Pago');
-  }
-
-  async createFormaPago(dto: any, currentUser: string) {
-    return this.createEntity(this.formaPagoRepo, dto, currentUser);
-  }
-
-  async updateFormaPago(formapagoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, dto, currentUser, 'Forma Pago');
-  }
-
-  async removeFormaPago(formapagoId: number, empresaId: number) {
-    return this.softDelete(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, 'Forma Pago');
-  }
-
-  async findAllTelefonos(empresaId: number) {
-    return this.findAllByEmpresa(this.telefonoRepo, empresaId);
-  }
-
-  async findTelefono(telefonoId: number, empresaId: number) {
-    return this.findOneById(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, 'Telefono');
-  }
-
-  async createTelefono(dto: any, currentUser: string) {
-    return this.createEntity(this.telefonoRepo, dto, currentUser);
-  }
-
-  async updateTelefono(telefonoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, dto, currentUser, 'Telefono');
-  }
-
-  async removeTelefono(telefonoId: number, empresaId: number) {
-    return this.softDelete(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, 'Telefono');
-  }
-
-  async findAllTarjetasCredito(empresaId: number) {
-    return this.findAllByEmpresa(this.tarjetaCreditoRepo, empresaId);
-  }
-
-  async findTarjetaCredito(tarjetacreditoId: number, empresaId: number) {
-    return this.findOneById(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, 'Tarjeta Credito');
-  }
-
-  async createTarjetaCredito(dto: any, currentUser: string) {
-    return this.createEntity(this.tarjetaCreditoRepo, dto, currentUser);
-  }
-
-  async updateTarjetaCredito(tarjetacreditoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, dto, currentUser, 'Tarjeta Credito');
-  }
-
-  async removeTarjetaCredito(tarjetacreditoId: number, empresaId: number) {
-    return this.softDelete(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, 'Tarjeta Credito');
-  }
-
-  async findAllPasatiempos() {
-    return this.findAllSimple(this.pasatiempoRepo);
-  }
-
-  async findPasatiempo(pasatiempoId: number) {
-    const found = await this.pasatiempoRepo.findOne({ where: { pasatiempoId } });
-    if (!found) throw new NotFoundException(`Pasatiempo ${pasatiempoId} no encontrado`);
-    return found;
-  }
-
-  async createPasatiempo(dto: any, currentUser: string) {
-    return this.createEntity(this.pasatiempoRepo, dto, currentUser);
-  }
-
-  async updatePasatiempo(pasatiempoId: number, dto: any, currentUser: string) {
-    const entity = await this.findPasatiempo(pasatiempoId);
-    Object.assign(entity, dto, {
-      usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
-    });
-    return this.pasatiempoRepo.save(entity);
-  }
-
-  async removePasatiempo(pasatiempoId: number) {
-    const entity = await this.findPasatiempo(pasatiempoId);
-    Object.assign(entity, {
-      sn_activo: 'N',
-      fechaUpdated: new Date(),
-    });
-    return this.pasatiempoRepo.save(entity);
-  }
-
-  async findAllZonas(empresaId: number) {
-    return this.findAllByEmpresa(this.zonaRepo, empresaId);
-  }
-
-  async findZona(tzonadId: number, empresaId: number) {
-    return this.findOneById(this.zonaRepo, 'tzonadId', tzonadId, empresaId, 'Zona');
-  }
-
-  async createZona(dto: any, currentUser: string) {
-    return this.createEntity(this.zonaRepo, dto, currentUser);
-  }
-
-  async updateZona(tzonadId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.zonaRepo, 'tzonadId', tzonadId, empresaId, dto, currentUser, 'Zona');
-  }
-
-  async removeZona(tzonadId: number, empresaId: number) {
-    return this.softDelete(this.zonaRepo, 'tzonadId', tzonadId, empresaId, 'Zona');
-  }
-
+  // ── Gestores ─────────────────────────────────────────────
   async findAllGestores(empresaId: number) {
     return this.gestorRepo
       .createQueryBuilder('g')
@@ -407,165 +203,123 @@ export class ParametrosService {
       .where('g.empresaId = :empresaId', { empresaId })
       .getRawMany();
   }
+  async findGestor(id: number, empresaId: number) { return this.findOneById(this.gestorRepo, 'gestorId', id, empresaId, 'Gestor'); }
+  async createGestor(dto: any, user: string) { return this.createEntity(this.gestorRepo, dto, user); }
+  async updateGestor(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.gestorRepo, 'gestorId', id, eid, dto, user, 'Gestor'); }
+  async removeGestor(id: number, eid: number) { return this.softDelete(this.gestorRepo, 'gestorId', id, eid, 'Gestor'); }
 
-  async findGestor(gestorId: number, empresaId: number) {
-    return this.findOneById(this.gestorRepo, 'gestorId', gestorId, empresaId, 'Gestor');
-  }
+  // ── Impuestos ────────────────────────────────────────────
+  async findAllImpuestos(empresaId: number) { return this.findAllByEmpresa(this.impuestoRepo, empresaId); }
+  async findImpuesto(id: number, empresaId: number) { return this.findOneById(this.impuestoRepo, 'impuestoId', id, empresaId, 'Impuesto'); }
+  async createImpuesto(dto: any, user: string) { return this.createEntity(this.impuestoRepo, dto, user); }
+  async updateImpuesto(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.impuestoRepo, 'impuestoId', id, eid, dto, user, 'Impuesto'); }
+  async removeImpuesto(id: number, eid: number) { return this.softDelete(this.impuestoRepo, 'impuestoId', id, eid, 'Impuesto'); }
 
-  async createGestor(dto: any, currentUser: string) {
-    return this.createEntity(this.gestorRepo, dto, currentUser);
-  }
+  // ── Proformas ────────────────────────────────────────────
+  async findAllProformas(empresaId: number) { return this.findAllByEmpresa(this.proformaRepo, empresaId); }
+  async findProforma(id: number, empresaId: number) { return this.findOneById(this.proformaRepo, 'proformaId', id, empresaId, 'Proforma'); }
+  async createProforma(dto: any, user: string) { return this.createEntity(this.proformaRepo, dto, user); }
+  async updateProforma(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.proformaRepo, 'proformaId', id, eid, dto, user, 'Proforma'); }
+  async removeProforma(id: number, eid: number) { return this.softDelete(this.proformaRepo, 'proformaId', id, eid, 'Proforma'); }
 
-  async updateGestor(gestorId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.gestorRepo, 'gestorId', gestorId, empresaId, dto, currentUser, 'Gestor');
-  }
+  // ── Zonas Vta/Cob ───────────────────────────────────────
+  async findAllZonasVtaCob(empresaId: number) { return this.findAllByEmpresa(this.zonaVtaCobRepo, empresaId); }
+  async findZonaVtaCob(id: number, empresaId: number) { return this.findOneById(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, empresaId, 'Zona Vta Cob'); }
+  async createZonaVtaCob(dto: any, user: string) { return this.createEntity(this.zonaVtaCobRepo, dto, user); }
+  async updateZonaVtaCob(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, eid, dto, user, 'Zona Vta Cob'); }
+  async removeZonaVtaCob(id: number, eid: number) { return this.softDelete(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, eid, 'Zona Vta Cob'); }
 
-  async removeGestor(gestorId: number, empresaId: number) {
-    return this.softDelete(this.gestorRepo, 'gestorId', gestorId, empresaId, 'Gestor');
-  }
-
-  async findAllImpuestos(empresaId: number) {
-    return this.findAllByEmpresa(this.impuestoRepo, empresaId);
-  }
-
-  async findImpuesto(impuestoId: number, empresaId: number) {
-    return this.findOneById(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, 'Impuesto');
-  }
-
-  async createImpuesto(dto: any, currentUser: string) {
-    return this.createEntity(this.impuestoRepo, dto, currentUser);
-  }
-
-  async updateImpuesto(impuestoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, dto, currentUser, 'Impuesto');
-  }
-
-  async removeImpuesto(impuestoId: number, empresaId: number) {
-    return this.softDelete(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, 'Impuesto');
-  }
-
-  async findAllProformas(empresaId: number) {
-    return this.findAllByEmpresa(this.proformaRepo, empresaId);
-  }
-
-  async findProforma(proformaId: number, empresaId: number) {
-    return this.findOneById(this.proformaRepo, 'proformaId', proformaId, empresaId, 'Proforma');
-  }
-
-  async createProforma(dto: any, currentUser: string) {
-    return this.createEntity(this.proformaRepo, dto, currentUser);
-  }
-
-  async updateProforma(proformaId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.proformaRepo, 'proformaId', proformaId, empresaId, dto, currentUser, 'Proforma');
-  }
-
-  async removeProforma(proformaId: number, empresaId: number) {
-    return this.softDelete(this.proformaRepo, 'proformaId', proformaId, empresaId, 'Proforma');
-  }
-
-  async findAllZonasVtaCob(empresaId: number) {
-    return this.findAllByEmpresa(this.zonaVtaCobRepo, empresaId);
-  }
-
-  async findZonaVtaCob(ttipozonasvtacobId: number, empresaId: number) {
-    return this.findOneById(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, 'Zona Vta Cob');
-  }
-
-  async createZonaVtaCob(dto: any, currentUser: string) {
-    return this.createEntity(this.zonaVtaCobRepo, dto, currentUser);
-  }
-
-  async updateZonaVtaCob(ttipozonasvtacobId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, dto, currentUser, 'Zona Vta Cob');
-  }
-
-  async removeZonaVtaCob(ttipozonasvtacobId: number, empresaId: number) {
-    return this.softDelete(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, 'Zona Vta Cob');
-  }
-
-  async findParamBco(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramBcoRepo, empresaId, 'Param Bco');
-  }
-
-  async upsertParamBco(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramBcoRepo, empresaId, dto, currentUser, 'Param Bco');
-  }
-
-  async findParamCon(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramConRepo, empresaId, 'Param Con');
-  }
-
-  async upsertParamCon(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramConRepo, empresaId, dto, currentUser, 'Param Con');
-  }
-
-  async findParamCxc(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramCxcRepo, empresaId, 'Param Cxc');
-  }
-
-  async upsertParamCxc(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramCxcRepo, empresaId, dto, currentUser, 'Param Cxc');
-  }
-
-  async findParamCxp(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramCxpRepo, empresaId, 'Param Cxp');
-  }
-
-  async upsertParamCxp(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramCxpRepo, empresaId, dto, currentUser, 'Param Cxp');
-  }
-
-  async findParamFac(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramFacRepo, empresaId, 'Param Fac');
-  }
-
-  async upsertParamFac(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramFacRepo, empresaId, dto, currentUser, 'Param Fac');
-  }
-
-  async findParamInv(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramInvRepo, empresaId, 'Param Inv');
-  }
-
-  async upsertParamInv(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramInvRepo, empresaId, dto, currentUser, 'Param Inv');
-  }
-
-  async findParamPap(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPapRepo, empresaId, 'Param Pap');
-  }
-
-  async upsertParamPap(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPapRepo, empresaId, dto, currentUser, 'Param Pap');
-  }
-
-  async findParamPla(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPlaRepo, empresaId, 'Param Pla');
-  }
-
-  async upsertParamPla(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPlaRepo, empresaId, dto, currentUser, 'Param Pla');
-  }
-
-  async findParamPres(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPresRepo, empresaId, 'Param Pres');
-  }
-
-  async upsertParamPres(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPresRepo, empresaId, dto, currentUser, 'Param Pres');
-  }
-
+  // ── Precios de Venta ─────────────────────────────────────
   async findAllPreciosVta(empresaId: number) {
     return this.posPrecioVtaRepo.find({
       where: { empresaId, sn_activo: 'S' } as any,
       order: { descripcion: 'ASC' } as any,
     });
   }
+  async findPreciosVta(id: number, empresaId: number) {
+    return this.posPrecioVtaRepo.findOne({ where: { preciovtaId: id, empresaId } as any });
+  }
 
-  async findPreciosVta(preciovtaId: number, empresaId: number) {
-    return this.posPrecioVtaRepo.findOne({
-      where: { preciovtaId, empresaId } as any,
+  // ══════════════════════════════════════════════════════════
+  // PARÁMETROS UNIFICADOS (ttipoparametros)
+  // ══════════════════════════════════════════════════════════
+
+  async findAllParametros(empresaId: number, moduloId?: number) {
+    const where: any = { empresaId, sn_activo: 'S' };
+    if (moduloId) where.moduloId = moduloId;
+    return this.tipoParametroRepo.find({ where, order: { moduloId: 'ASC', field: 'ASC' } });
+  }
+
+  async findParametroById(id: number) {
+    const found = await this.tipoParametroRepo.findOne({ where: { ttipoparametrosId: id } });
+    if (!found) throw new NotFoundException(`Parámetro ${id} no encontrado`);
+    return found;
+  }
+
+  async findParametroByField(empresaId: number, moduloId: number, field: string) {
+    return this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field, sn_activo: 'S' } as any,
     });
+  }
+
+  async upsertParametroModulo(empresaId: number, moduloId: number, field: string, valor: string, tipo: string, currentUser: string) {
+    const existing = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field } as any,
+    });
+    if (existing) {
+      existing.valor = valor;
+      existing.tipo = tipo;
+      existing.usuarioUpdate = currentUser;
+      existing.fechaUpdate = new Date();
+      return this.tipoParametroRepo.save(existing);
+    }
+    const entity = this.tipoParametroRepo.create({
+      empresaId, moduloId, field, valor, tipo,
+      sn_activo: 'S',
+      usuarioCreated: currentUser,
+    });
+    return this.tipoParametroRepo.save(entity);
+  }
+
+  async upsertParametrosLote(empresaId: number, moduloId: number, items: { field: string; valor: string; tipo: string; sn_activo?: string }[], currentUser: string) {
+    const results: TipoParametro[] = [];
+    for (const item of items) {
+      const result = await this.upsertParametroModulo(empresaId, moduloId, item.field, item.valor, item.tipo, currentUser);
+      results.push(result);
+    }
+    return results;
+  }
+
+  async getParametrosComoObjeto(empresaId: number, moduloId: number) {
+    const rows = await this.tipoParametroRepo.find({
+      where: { empresaId, moduloId, sn_activo: 'S' } as any,
+    });
+    const obj: Record<string, string> = {};
+    for (const row of rows) { obj[row.field] = row.valor; }
+    return obj;
+  }
+
+  async deleteParametro(id: number) {
+    const found = await this.findParametroById(id);
+    found.sn_activo = 'N';
+    found.fechaUpdate = new Date();
+    return this.tipoParametroRepo.save(found);
+  }
+
+  async getValor(empresaId: number, moduloId: number, field: string, defaultValue?: string) {
+    const row = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field, sn_activo: 'S' } as any,
+    });
+    return row ? row.valor : (defaultValue || '0');
+  }
+
+  async setValor(empresaId: number, moduloId: number, field: string, valor: string, currentUser: string) {
+    return this.upsertParametroModulo(empresaId, moduloId, field, valor, 'STRING', currentUser);
+  }
+
+  async incrementarValor(empresaId: number, moduloId: number, field: string, currentUser: string, incremento: number = 1) {
+    const actual = await this.getValor(empresaId, moduloId, field, '0');
+    const nuevo = String(Number(actual) + incremento);
+    return this.upsertParametroModulo(empresaId, moduloId, field, nuevo, 'NUMBER', currentUser);
   }
 }

@@ -23,6 +23,14 @@ export class TPosCboMae {
   @Column()
   empresaId: number;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  descuentoId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  tipocombo: string;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;

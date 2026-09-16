@@ -97,6 +97,7 @@ export class FacturacionController {
   @ApiOperation({ summary: 'Crear factura' })
   @ApiResponse({ status: 201, description: 'Factura creada exitosamente' })
   createFactura(@Body() dto: CreatePosFacMaeDto, @CurrentUser() user: any) {
+    dto.Idsucursal = user.idsucursal;
     return this.service.createFactura(dto, user.usuario);
   }
 
@@ -442,6 +443,13 @@ export class FacturacionController {
   @ApiResponse({ status: 200, description: 'Lista de combos obtenida exitosamente' })
   findAllCombos(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllComboMae(empresaId);
+  }
+
+  @Get('combos-ofertas')
+  @ApiOperation({ summary: 'Productos en oferta/promoción (combo vigente, tipocombo != C)' })
+  @ApiResponse({ status: 200, description: 'Productos con precio descontado' })
+  findProductosEnOferta(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findProductosEnOferta(empresaId);
   }
 
   @Get('combos/:id')

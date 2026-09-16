@@ -15,7 +15,7 @@ import { TcctDiasCobro } from './entities/tcctdiascobro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
-import { TtipoParamCxc } from '../parametros/entities/param-cxc.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxcService } from './cxc.service';
 import { CxcController } from './cxc.controller';
 
@@ -37,7 +37,7 @@ import { CxcController } from './cxc.controller';
       CxcPrestamo,
       CxcPrestamoPP,
       CxcPariente,
-      TtipoParamCxc,
+      TipoParametro,
     ]),
   ],
   controllers: [CxcController],

@@ -97,6 +97,10 @@ export class CreatePosFacMaeDto {
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber() @IsNotEmpty()
   empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }
 
 export class UpdatePosFacMaeDto {

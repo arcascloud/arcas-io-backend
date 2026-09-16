@@ -30,7 +30,8 @@ import { CxcService } from '../cxc/cxc.service';
 import { KardexService } from '../inventario/kardex.service';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
-import { TtipoParamFac } from '../parametros/entities/param-fac.entity';
+import { TImpresora } from '../companies/entities/impresoras.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
 import { getTransporter, getMailFrom } from '../../config/mail';
@@ -57,7 +58,8 @@ export class FacturacionService {
     @InjectRepository(CxccClientesDir) private readonly clienteDirRepo: Repository<CxccClientesDir>,
     @InjectRepository(Tempresas) private readonly empresaRepo: Repository<Tempresas>,
     @InjectRepository(TempresasDet) private readonly empresaDetRepo: Repository<TempresasDet>,
-    @InjectRepository(TtipoParamFac) private readonly paramFacRepo: Repository<TtipoParamFac>,
+    @InjectRepository(TImpresora) private readonly impRepo: Repository<TImpresora>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TproductoImg) private readonly productoImgRepo: Repository<TproductoImg>,
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
@@ -196,7 +198,6 @@ export class FacturacionService {
 
     const empresa = await this.empresaRepo.findOne({ where: { empresaId } });
     const empresaDet = await this.empresaDetRepo.find({ where: { empresaId, sn_activo: 'S' } });
-    const paramFac = await this.paramFacRepo.findOne({ where: { empresaId } });
 
     const rtn = empresaDet.find((d) => d.tipo === 'RTN')?.descripcion || null;
     const telefono = empresaDet.find((d) => d.tipo === 'TELEFONO')?.descripcion || null;
@@ -211,7 +212,7 @@ export class FacturacionService {
         rtn,
         telefono,
         direccion,
-        mensajeFactura: empresa?.msjfactura || paramFac?.mensajeFactura || '',
+        mensajeFactura: empresa?.msjfactura || '',
         mensajeDevolucion: empresa?.msjdevfactura || '',
       },
     };
@@ -219,7 +220,7 @@ export class FacturacionService {
 
   async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
     if (!dto.nrofactura) {
-      dto.nrofactura = await this.asignarCorrelativo(dto.empresaId, currentUser);
+      dto.nrofactura = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
     }
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
 
@@ -275,17 +276,95 @@ export class FacturacionService {
     return { procesados, errores };
   }
 
-  private async asignarCorrelativo(empresaId: number, currentUser: string): Promise<number> {
-    const doc = await this.tipoDocFiscalRepo.findOne({
-      where: { abreviatura: 'FAC', empresaId } as unknown as FindOptionsWhere<TCoTipoDocumentoFiscal>,
+  /**
+   * Extrae el número secuencial del rango formateado.
+   * Ej: '000-001-01-00120001' → 120001
+   */
+  private extractRangoNumero(rango: string): number {
+    const partes = rango.split('-');
+    const ultimo = partes[partes.length - 1];
+    return parseInt(ultimo, 10) || 0;
+  }
+
+  /**
+   * Asigna el número de factura siguiente.
+   * - Si existe correlativo (CAI) en poscorrelativos para la sucursal → usa nrofactura del CAI
+   * - Si NO existe correlativo → usa nrocorrelativo de tcotipodocumentofiscal (FAC)
+   * - Si modo es manual o no hay impresora → retorna 0 (frontend envía el número)
+   */
+  private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<number> {
+    // 1. Buscar impresora de la sucursal para determinar modo
+    const imp = await this.impRepo.findOne({
+      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TImpresora>,
     });
-    if (!doc) return 1;
-    const actual = Number(doc.nrocorrelativo) || 0;
-    doc.nrocorrelativo = actual + 1;
-    doc.usuarioUpdated = currentUser;
-    doc.fechaUpdated = new Date();
-    await this.tipoDocFiscalRepo.save(doc);
-    return actual;
+
+    // 2. Si modo manual ('M') o no hay impresora → no auto-asignar
+    if (!imp || imp.modo_correlativo === 'M') {
+      console.log(`[asignarCorrelativo] Modo manual o sin impresora. empresaId=${empresaId}, sucursal=${idsucursal}`);
+      return 0; // 0 indica que el frontend debe enviar el nrofactura
+    }
+
+    // 3. Buscar correlativo (CAI) en poscorrelativos para esta empresa/sucursal
+    const corr = await this.correlativosRepo.findOne({
+      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TPosCorrelativos>,
+      order: { poscorrelativosId: 'DESC' },
+    });
+
+    // 4. SI hay correlativo (CAI) → usar nrofactura del CAI
+    if (corr) {
+      const nroActual = Number(corr.nrofactura) || 0;
+      const hasta = this.extractRangoNumero(corr.rangoHasta);
+      const desde = this.extractRangoNumero(corr.rangoDesde);
+      const total = hasta - desde + 1;
+
+      // Validar que no se agote el rango
+      if (total > 0 && nroActual >= total) {
+        throw new BadRequestException(
+          `Rango de facturación agotado para esta sucursal. Último número: ${nroActual}. Renueve el CAI ante la SAT.`
+        );
+      }
+
+      // Alerta si quedan poco (80%+)
+      if (total > 0) {
+        const porcentaje = (nroActual / total) * 100;
+        if (porcentaje >= 90) {
+          console.warn(`[asignarCorrelativo] ⚠️ CRÍTICO: Rango al ${porcentaje.toFixed(1)}%. Quedan ${total - nroActual} facturas.`);
+        } else if (porcentaje >= 80) {
+          console.warn(`[asignarCorrelativo] ⚠️ ALERTA: Rango al ${porcentaje.toFixed(1)}%. Quedan ${total - nroActual} facturas.`);
+        }
+      }
+
+      // Incrementar y guardar
+      const siguiente = nroActual + 1;
+      corr.nrofactura = siguiente;
+      corr.usuarioUpdated = currentUser;
+      corr.fechaUpdated = new Date();
+      await this.correlativosRepo.save(corr);
+
+      console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}`);
+      return siguiente;
+    }
+
+    // 5. NO hay correlativo (CAI) → usar nrocorrelativo de tcotipodocumentofiscal (FAC)
+    const tipoDocFAC = await this.tipoDocFiscalRepo.findOne({
+      where: { empresaId, tipodocumentofiscalId: 1 } as unknown as FindOptionsWhere<TCoTipoDocumentoFiscal>,
+    });
+
+    if (!tipoDocFAC) {
+      console.warn(`[asignarCorrelativo] No hay correlativo CAI ni tipo doc fiscal FAC para empresaId=${empresaId}`);
+      return 1;
+    }
+
+    const nroCorrelativo = Number(tipoDocFAC.nrocorrelativo) || 0;
+    const siguiente = nroCorrelativo + 1;
+
+    tipoDocFAC.nrocorrelativo = siguiente;
+    tipoDocFAC.usuarioUpdated = currentUser;
+    tipoDocFAC.fechaUpdated = new Date();
+    await this.tipoDocFiscalRepo.save(tipoDocFAC);
+
+    console.log(`[asignarCorrelativo] FAC (sin CAI): empresaId=${empresaId}, nrocorrelativo=${siguiente}`);
+    return siguiente;
   }
 
   async updateFactura(facturaId: number, empresaId: number, dto: UpdatePosFacMaeDto, currentUser: string) {
@@ -492,11 +571,16 @@ export class FacturacionService {
     });
     if (detalles.length === 0) throw new NotFoundException('El carrito estÃ¡ vacÃ­o');
 
-    const paramFac = await this.paramFacRepo.findOne({
-      where: { empresaId } as unknown as FindOptionsWhere<TtipoParamFac>,
-    });
-    const bodegaId = paramFac?.bodegaId || 1;
-    const cajaId = paramFac?.cajaId || 1;
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+    const bodegaId = await getParam('bodegaId', 1);
+    const cajaId = await getParam('cajaId', 1);
 
     let subTotal = 0;
     let impuestoTotal = 0;
@@ -529,7 +613,7 @@ export class FacturacionService {
       })) as CxcCliente;
     }
 
-    const nrofactura = await this.asignarCorrelativo(empresaId, currentUser);
+    const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
 
     const facturaPayload: any = {
       nrofactura,
@@ -700,11 +784,16 @@ export class FacturacionService {
     });
     if (detalles.length === 0) throw new BadRequestException('El pedido está vacío');
 
-    const paramFac = await this.paramFacRepo.findOne({
-      where: { empresaId } as unknown as FindOptionsWhere<TtipoParamFac>,
-    });
-    const bodegaId = paramFac?.bodegaId || 1;
-    const cajaId = paramFac?.cajaId || 1;
+    const getParamPedido = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+    const bodegaId = await getParamPedido('bodegaId', 1);
+    const cajaId = await getParamPedido('cajaId', 1);
 
     let subTotal = 0;
     let impuestoTotal = 0;
@@ -742,7 +831,7 @@ export class FacturacionService {
       })) as CxcCliente;
     }
 
-    const nrofactura = await this.asignarCorrelativo(empresaId, currentUser);
+    const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
 
     const facturaPayload: any = {
       nrofactura,
@@ -881,6 +970,47 @@ export class FacturacionService {
   async removeCombo(poscbomaeId: number, empresaId: number) {
     await this.cboDetRepo.delete({ poscbomaeId, empresaId } as any);
     return this.cboMaeRepo.delete({ poscbomaeId, empresaId } as any);
+  }
+
+  /** Productos en oferta/promoción: combo vigente con tipocombo != 'C' */
+  async findProductosEnOferta(empresaId: number) {
+    const rows = await this.cboDetRepo
+      .createQueryBuilder('det')
+      .select([
+        'det.productoId AS productoId',
+        'det.codbarra AS codbarra',
+        'det.precioventa AS precioCbo',
+        'pro.precioventa AS precioNormal',
+        'des.porcentaje AS porcentaje',
+        'des.descripcion AS descuentoDesc',
+        'mae.tipocombo AS tipocombo',
+        'mae.descripcion AS comboDesc',
+        'mae.fec_vig_desde AS fecVigDesde',
+        'mae.fec_vig_hasta AS fecVigHasta',
+      ])
+      .innerJoin('tposdescuentos', 'des', 'des.descuentoId = det.descuentoId')
+      .innerJoin('productos', 'pro', 'pro.productoId = det.productoId')
+      .innerJoin('poscbomae', 'mae', 'mae.poscbomaeId = det.poscbomaeId')
+      .where('det.empresaId = :empresaId', { empresaId })
+      .andWhere('mae.empresaId = :empresaId', { empresaId })
+      .andWhere('DATE(mae.fec_vig_hasta) >= DATE(NOW())')
+      .andWhere('DATE(mae.fec_vig_desde) <= DATE(NOW())')
+      .andWhere("mae.tipocombo <> 'C'")
+      .andWhere('det.descuentoId IS NOT NULL')
+      .getRawMany();
+
+    return rows.map(r => ({
+      productoId: Number(r.productoId),
+      codbarra: r.codbarra,
+      precioNormal: Number(r.precioNormal),
+      precioConDescuento: Number(r.precioNormal) - (Number(r.precioNormal) * (Number(r.porcentaje) / 100)),
+      porcentaje: Number(r.porcentaje),
+      descuentoDesc: r.descuentoDesc,
+      tipocombo: r.tipocombo,
+      comboDesc: r.comboDesc,
+      fecVigDesde: r.fecVigDesde,
+      fecVigHasta: r.fecVigHasta,
+    }));
   }
 
   async findAllPrecios(empresaId: number) {

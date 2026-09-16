@@ -18,6 +18,7 @@ import { CreatePlPlaMaeDto, UpdatePlPlaMaeDto } from './dto/pleplamae.dto';
 import { CreatePlPlaDetDto, UpdatePlPlaDetDto } from './dto/plepladet.dto';
 import { CreateTplDeduccionesDto, UpdateTplDeduccionesDto } from './dto/tpldeducciones.dto';
 import { CreateTplIngresosDto, UpdateTplIngresosDto } from './dto/tplingresos.dto';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 
 @Injectable()
 export class PlanillaService {
@@ -34,6 +35,7 @@ export class PlanillaService {
     @InjectRepository(TplProfesiones) private readonly profesionRepo: Repository<TplProfesiones>,
     @InjectRepository(TplDeducciones) private readonly deduccionRepo: Repository<TplDeducciones>,
     @InjectRepository(TplIngresos) private readonly ingresoRepo: Repository<TplIngresos>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -120,7 +122,39 @@ export class PlanillaService {
   }
 
   async createEmpleado(dto: CreatePlEmpleadosDto, currentUser: string) {
-    return this.createEntity(this.empleadoRepo, dto, currentUser);
+    // Auto-generar nroempleado desde ttipoparametros (moduloId=8)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 8, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroempleado', 0);
+    const nro = Number(nroActual) + 1;
+    const nroempleado = dto.nroempleado || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroempleado,
+      dni: dto.dni || '0000000000000',
+    };
+
+    const saved = await this.createEntity(this.empleadoRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 8 AND field = :field', { eid: dto.empresaId, field: 'nroempleado' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updateEmpleado(empleadoId: number, empresaId: number, dto: UpdatePlEmpleadosDto, currentUser: string) {
@@ -236,7 +270,38 @@ export class PlanillaService {
   }
 
   async createPlanilla(dto: CreatePlPlaMaeDto, currentUser: string) {
-    return this.createEntity(this.plamaeRepo, dto, currentUser);
+    // Auto-generar nroplanilla desde ttipoparametros (moduloId=8)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 8, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroplanilla', 0);
+    const nro = Number(nroActual) + 1;
+    const nroplanilla = dto.nroplanilla || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroplanilla,
+    };
+
+    const saved = await this.createEntity(this.plamaeRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 8 AND field = :field', { eid: dto.empresaId, field: 'nroplanilla' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updatePlanilla(planillaId: number, empresaId: number, dto: UpdatePlPlaMaeDto, currentUser: string) {

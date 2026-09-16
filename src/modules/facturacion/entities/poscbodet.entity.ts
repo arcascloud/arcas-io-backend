@@ -31,6 +31,10 @@ export class TPosCboDet {
   @Column()
   empresaId: number;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  descuentoId: number;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;

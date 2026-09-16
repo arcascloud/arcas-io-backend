@@ -179,24 +179,24 @@ export class ContabilidadService {
 
   async findAllGrupocontable(empresaId: number) {
     return this.grupocontableRepo.find({
-      where: { sn_activo: 'S' } as unknown as FindOptionsWhere<Tcogrupocontable>,
+      where: { empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<Tcogrupocontable>,
     });
   }
 
-  async findGrupocontable(tcogrupocontableId: number) {
-    return this.findOneByIdNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, 'Grupo Contable');
+  async findGrupocontable(tcogrupocontableId: number, empresaId: number) {
+    return this.findOneById(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, 'Grupo Contable');
   }
 
   async createGrupocontable(dto: any, currentUser: string) {
     return this.createEntity(this.grupocontableRepo, dto, currentUser);
   }
 
-  async updateGrupocontable(tcogrupocontableId: number, dto: any, currentUser: string) {
-    return this.updateEntityNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, dto, currentUser, 'Grupo Contable');
+  async updateGrupocontable(tcogrupocontableId: number, empresaId: number, dto: any, currentUser: string) {
+    return this.updateEntity(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, dto, currentUser, 'Grupo Contable');
   }
 
-  async removeGrupocontable(tcogrupocontableId: number) {
-    return this.softDeleteNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, 'Grupo Contable');
+  async removeGrupocontable(tcogrupocontableId: number, empresaId: number) {
+    return this.softDelete(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, 'Grupo Contable');
   }
 
   async findAllPlantillapdamae(empresaId: number) {

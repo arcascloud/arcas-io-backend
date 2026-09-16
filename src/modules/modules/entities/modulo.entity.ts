@@ -21,6 +21,10 @@ export class Tmodulos {
   @Column()
   empresaId: number;
 
+  @ApiProperty({ required: false, description: 'Orden de presentación en el menú' })
+  @Column({ type: 'int', default: 0 })
+  zorden: number;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;

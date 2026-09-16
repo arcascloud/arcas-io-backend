@@ -67,7 +67,7 @@ function extractCodebase() {
 
   console.log(`📁 Se encontraron ${files.length} archivos.`);
 
-  let mdContent = `# ERP Arcas - Código Fuente Completo\n`;
+  let mdContent = `# ERP backend - Código Fuente Completo\n`;
   mdContent += `> Generado automáticamente el ${new Date().toLocaleString()}\n\n`;
   mdContent += `---\n\n`;
 

@@ -81,8 +81,8 @@ export class ContabilidadController {
   @ApiOperation({ summary: 'Obtener grupo contable por ID' })
   @ApiResponse({ status: 200, description: 'Grupo contable encontrado' })
   @ApiResponse({ status: 404, description: 'Grupo contable no encontrado' })
-  findGrupocontable(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findGrupocontable(id);
+  findGrupocontable(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findGrupocontable(id, empresaId);
   }
 
   @Post('grupocontable')
@@ -97,17 +97,18 @@ export class ContabilidadController {
   @ApiResponse({ status: 200, description: 'Grupo contable actualizado exitosamente' })
   updateGrupocontable(
     @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: any,
     @CurrentUser() user: any,
   ) {
-    return this.service.updateGrupocontable(id, dto, user.usuario);
+    return this.service.updateGrupocontable(id, empresaId, dto, user.usuario);
   }
 
   @Put('grupocontable/:id/remove')
   @ApiOperation({ summary: 'Eliminar grupo contable' })
   @ApiResponse({ status: 200, description: 'Grupo contable eliminado exitosamente' })
-  removeGrupocontable(@Param('id', ParseIntPipe) id: number) {
-    return this.service.removeGrupocontable(id);
+  removeGrupocontable(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.removeGrupocontable(id, empresaId);
   }
 
   // ===== Plantilla PDAMAE =====

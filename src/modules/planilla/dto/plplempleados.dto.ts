@@ -2,6 +2,10 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePlEmpleadosDto {
+  @ApiProperty({ required: false, description: 'Número de empleado (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroempleado?: string;
+
   @ApiProperty({ description: 'Nombres del empleado' })
   @IsString() @IsNotEmpty()
   nombres: string;

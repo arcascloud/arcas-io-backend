@@ -41,6 +41,9 @@ export class TusuarioMnuItem {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
 
+  @Column({ type: 'int', default: 0 })
+  zorden: number;
+
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
 

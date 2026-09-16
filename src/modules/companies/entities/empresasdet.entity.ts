@@ -8,7 +8,7 @@ export class TempresasDet {
   empresasdetId: number;
 
   @ApiProperty()
-  @Column({ type: 'enum', enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'] })
+  @Column({ type: 'enum', enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'] })
   tipo: string;
 
   @ApiProperty()

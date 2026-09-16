@@ -8,13 +8,7 @@ import { CreateSimpleParamDto, UpdateSimpleParamDto } from './dto/simple-param.d
 import { CreateMonedaDto, UpdateMonedaDto } from './dto/moneda.dto';
 import { CreateGestorDto, UpdateGestorDto } from './dto/gestor.dto';
 import { CreateImpuestoDto, UpdateImpuestoDto } from './dto/impuesto.dto';
-import { CreateParamFacDto, UpdateParamFacDto } from './dto/param-fac.dto';
-import { CreateParamInvDto, UpdateParamInvDto } from './dto/param-inv.dto';
-import { CreateParamConDto, UpdateParamConDto } from './dto/param-con.dto';
-import { CreateParamCxcDto, UpdateParamCxcDto } from './dto/param-cxc.dto';
-import { CreateParamCxpDto, UpdateParamCxpDto } from './dto/param-cxp.dto';
-import { CreateParamPlaDto, UpdateParamPlaDto } from './dto/param-pla.dto';
-import { CreateParamPresDto, UpdateParamPresDto } from './dto/param-pres.dto';
+
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -359,15 +353,15 @@ export class ParametrosController {
   @Get('pasatiempos')
   @ApiOperation({ summary: 'Listar pasatiempos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllPasatiempos() {
-    return this.service.findAllPasatiempos();
+  findAllPasatiempos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllPasatiempos(empresaId);
   }
 
   @Get('pasatiempos/:id')
   @ApiOperation({ summary: 'Obtener pasatiempo' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findPasatiempo(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findPasatiempo(id);
+  findPasatiempo(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findPasatiempo(id, empresaId);
   }
 
   @Post('pasatiempos')
@@ -382,10 +376,11 @@ export class ParametrosController {
   @ApiResponse({ status: 200, description: 'Actualizado' })
   updatePasatiempo(
     @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: UpdateSimpleParamDto,
     @CurrentUser() user: any,
   ) {
-    return this.service.updatePasatiempo(id, dto, user.usuario);
+    return this.service.updatePasatiempo(id, empresaId, dto, user.usuario);
   }
 
   @Get('zonas')
@@ -568,168 +563,6 @@ export class ParametrosController {
     return this.service.updateZonaVtaCob(id, empresaId, dto, user.usuario);
   }
 
-  @Get('param-bco')
-  @ApiOperation({ summary: 'Obtener parámetros bancarios' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamBco(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamBco(empresaId);
-  }
-
-  @Put('param-bco')
-  @ApiOperation({ summary: 'Guardar parámetros bancarios' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamBco(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamBco(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-con')
-  @ApiOperation({ summary: 'Obtener parámetros de contabilidad' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCon(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCon(empresaId);
-  }
-
-  @Put('param-con')
-  @ApiOperation({ summary: 'Guardar parámetros de contabilidad' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCon(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamConDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCon(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-cxc')
-  @ApiOperation({ summary: 'Obtener parámetros de CxC' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCxc(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCxc(empresaId);
-  }
-
-  @Put('param-cxc')
-  @ApiOperation({ summary: 'Guardar parámetros de CxC' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCxc(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamCxcDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCxc(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-cxp')
-  @ApiOperation({ summary: 'Obtener parámetros de CxP' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCxp(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCxp(empresaId);
-  }
-
-  @Put('param-cxp')
-  @ApiOperation({ summary: 'Guardar parámetros de CxP' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCxp(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamCxpDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCxp(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-fac')
-  @ApiOperation({ summary: 'Obtener parámetros de facturación' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamFac(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamFac(empresaId);
-  }
-
-  @Put('param-fac')
-  @ApiOperation({ summary: 'Guardar parámetros de facturación' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamFac(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamFacDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamFac(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-inv')
-  @ApiOperation({ summary: 'Obtener parámetros de inventario' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamInv(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamInv(empresaId);
-  }
-
-  @Put('param-inv')
-  @ApiOperation({ summary: 'Guardar parámetros de inventario' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamInv(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamInvDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamInv(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pap')
-  @ApiOperation({ summary: 'Obtener parámetros de papelería' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPap(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPap(empresaId);
-  }
-
-  @Put('param-pap')
-  @ApiOperation({ summary: 'Guardar parámetros de papelería' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPap(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPap(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pla')
-  @ApiOperation({ summary: 'Obtener parámetros de planilla' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPla(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPla(empresaId);
-  }
-
-  @Put('param-pla')
-  @ApiOperation({ summary: 'Guardar parámetros de planilla' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPla(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamPlaDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPla(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pres')
-  @ApiOperation({ summary: 'Obtener parámetros de presupuesto' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPres(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPres(empresaId);
-  }
-
-  @Put('param-pres')
-  @ApiOperation({ summary: 'Guardar parámetros de presupuesto' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPres(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamPresDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPres(empresaId, dto, user.usuario);
-  }
-
   @Get('precios-vta')
   @ApiOperation({ summary: 'Listar precios de venta' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -745,5 +578,94 @@ export class ParametrosController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findPreciosVta(id, empresaId);
+  }
+
+  // =============================================
+  // PARÁMETROS UNIFICADOS (ttipoparametros)
+  // =============================================
+
+  @Get('parametros')
+  @ApiOperation({ summary: 'Listar parámetros unificados por empresa y opcionalmente por módulo' })
+  findAllParametros(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.service.findAllParametros(empresaId, moduloId ? Number(moduloId) : undefined);
+  }
+
+  @Get('parametros/objeto')
+  @ApiOperation({ summary: 'Obtener parámetros como objeto { field: valor }' })
+  getParametrosComoObjeto(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+  ) {
+    return this.service.getParametrosComoObjeto(empresaId, moduloId);
+  }
+
+  @Get('parametros/valor')
+  @ApiOperation({ summary: 'Obtener valor de un parámetro específico' })
+  async getValor(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Query('field') field: string,
+    @Query('default') defaultValue?: string,
+  ) {
+    const valor = await this.service.getValor(empresaId, moduloId, field, defaultValue);
+    return { field, valor };
+  }
+
+  @Get('parametros/:id')
+  @ApiOperation({ summary: 'Obtener parámetro por ID' })
+  findParametroById(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findParametroById(id);
+  }
+
+  @Put('parametros/upsert')
+  @ApiOperation({ summary: 'Upsert un parámetro individual' })
+  upsertParametro(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { field: string; valor: string; tipo?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.upsertParametroModulo(
+      empresaId, moduloId, body.field, body.valor, body.tipo || 'STRING', user.usuario,
+    );
+  }
+
+  @Put('parametros/lote')
+  @ApiOperation({ summary: 'Upsert múltiples parámetros de un módulo' })
+  upsertParametrosLote(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { parametros: { field: string; valor: string; tipo?: string; sn_activo?: string }[] },
+    @CurrentUser() user: any,
+  ) {
+    const items = body.parametros.map(p => ({
+      ...p,
+      tipo: p.tipo || 'STRING',
+      sn_activo: p.sn_activo || 'S',
+    }));
+    return this.service.upsertParametrosLote(empresaId, moduloId, items, user.usuario);
+  }
+
+  @Put('parametros/:id/incrementar')
+  @ApiOperation({ summary: 'Incrementar valor numérico de un parámetro' })
+  incrementarParametro(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { field: string; incremento?: number },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.incrementarValor(
+      empresaId, moduloId, body.field, user.usuario, body.incremento || 1,
+    );
+  }
+
+  @Put('parametros/:id')
+  @ApiOperation({ summary: 'Eliminar (desactivar) un parámetro' })
+  deleteParametro(@Param('id', ParseIntPipe) id: number) {
+    return this.service.deleteParametro(id);
   }
 }

@@ -13,7 +13,7 @@ import { CxcMovimiento } from './entities/cxcmovimiento.entity';
 import { CxcHistoro } from './entities/cxchisto.entity';
 import { CxcSalFav } from './entities/cxcsalfav.entity';
 import { TcctDiasCobro } from './entities/tcctdiascobro.entity';
-import { TtipoParamCxc } from '../parametros/entities/param-cxc.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
@@ -40,7 +40,7 @@ export class CxcService {
     @InjectRepository(CxcPrestamo) private readonly prestamoRepo: Repository<CxcPrestamo>,
     @InjectRepository(CxcPrestamoPP) private readonly prestamoPPRepo: Repository<CxcPrestamoPP>,
     @InjectRepository(CxcPariente) private readonly parienteRepo: Repository<CxcPariente>,
-    @InjectRepository(TtipoParamCxc) private readonly paramCxcRepo: Repository<TtipoParamCxc>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -133,12 +133,18 @@ export class CxcService {
   }
 
   async createCliente(dto: CreateCxcClienteDto, currentUser: string) {
-    let params: TtipoParamCxc | null = null;
-    try {
-      params = await this.paramCxcRepo.findOne({ where: { empresaId: dto.empresaId } });
-    } catch (_) {}
+    // Leer parámetros de CxC de la tabla unificada ttipoparametros (moduloId=4)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 4, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
 
-    const nro = (params?.nrocliente ?? 0) + 1;
+    const nroclienteActual = await getParam('nrocliente', 0);
+    const nro = Number(nroclienteActual) + 1;
     const nrocliente = dto.nrocliente || String(nro).padStart(6, '0');
 
     const payload: any = {
@@ -148,19 +154,23 @@ export class CxcService {
       razonsocial: dto.razonsocial || `${dto.nombres} ${dto.apellidos}`,
       fecharegistro: dto.fecharegistro || new Date().toISOString(),
       fechanacimiento: dto.fechanacimiento || new Date().toISOString(),
-      interes: dto.interes ?? params?.interes ?? 0,
-      moratorio: dto.moratorio ?? params?.mora ?? 0,
-      diasplazo: dto.diasplazo ?? params?.diasPlazo ?? 0,
-      limiteCredito: dto.limiteCredito ?? params?.limitecredito ?? 0,
+      interes: dto.interes ?? await getParam('interes', 0),
+      moratorio: dto.moratorio ?? await getParam('mora', 0),
+      diasplazo: dto.diasplazo ?? await getParam('diasPlazo', 0),
+      limiteCredito: dto.limiteCredito ?? await getParam('limitecredito', 0),
     };
 
     const saved = await this.createEntity(this.clienteRepo, payload, currentUser);
 
-    if (params) {
-      try {
-        await this.paramCxcRepo.update({ empresaId: dto.empresaId }, { nrocliente: nro });
-      } catch (_) {}
-    }
+    // Incrementar contador en tabla unificada
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 4 AND field = :field', { eid: dto.empresaId, field: 'nrocliente' })
+        .execute();
+    } catch (_) {}
 
     return saved;
   }

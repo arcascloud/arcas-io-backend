@@ -6,9 +6,10 @@ import { TusuariosModule } from './entities/usuarios-module.entity';
 import { TusuarioMnuItem } from './entities/usuarios-mnuitem.entity';
 import { TusuariosScripts } from './entities/usuarios-scripts.entity';
 import { UsuarioModAuth } from './entities/usuario-modauth.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './dto/usuario.dto';
 import { CreateUsuariosModuleDto, UpdateUsuariosModuleDto } from './dto/usuarios-module.dto';
-import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto } from './dto/usuarios-mnuitem.dto';
+import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto } from './dto/usuarios-mnuitem.dto';
 import { CreateUsuariosScriptsDto, UpdateUsuariosScriptsDto } from './dto/usuarios-scripts.dto';
 import { CreateUsuarioModAuthDto, UpdateUsuarioModAuthDto } from './dto/usuario-modauth.dto';
 
@@ -36,6 +37,8 @@ export class UsersService {
     private readonly scriptsRepo: Repository<TusuariosScripts>,
     @InjectRepository(UsuarioModAuth)
     private readonly authRepo: Repository<UsuarioModAuth>,
+    @InjectRepository(Tmodulos)
+    private readonly modulosRepo: Repository<Tmodulos>,
   ) {}
 
   // ===== Generic helpers =====
@@ -166,8 +169,34 @@ export class UsersService {
 
   // ===== UsuarioMnuItem =====
 
-  async findAllMnuItems(empresaId: number) {
-    return this.mnuRepo.find({ where: { empresaId }, order: { usuario: 'ASC' } });
+  async findAllMnuItems(empresaId: number, usuario?: string) {
+    const qb = this.mnuRepo.createQueryBuilder('m')
+      .leftJoin(Tmodulos, 'mod', 'mod.moduloId = m.moduloId AND mod.empresaId = m.empresaId')
+      .select([
+        'm.tusuariomnuitemsId AS tusuariomnuitemsId',
+        'm.empresaId AS empresaId',
+        'm.moduloId AS moduloId',
+        'm.usuario AS usuario',
+        'm.parent AS parent',
+        'm.parentId AS parentId',
+        'm.levelId AS levelId',
+        'm.nameParent AS nameParent',
+        'm.nameItem AS nameItem',
+        'm.labelItem AS labelItem',
+        'm.iconItem AS iconItem',
+        'm.routerLink AS routerLink',
+        'm.sn_activo AS sn_activo',
+        'm.zorden AS zordenItem',
+      ])
+      .addSelect('COALESCE(mod.zorden, 0)', 'zordenMod')
+      .where('m.empresaId = :empresaId', { empresaId })
+      .orderBy('m.levelId', 'ASC');
+
+    if (usuario) {
+      qb.andWhere('m.usuario = :usuario', { usuario });
+    }
+
+    return qb.getRawMany();
   }
 
   async findMnuItem(tusuariomnuitemsId: number, empresaId: number) {
@@ -184,6 +213,56 @@ export class UsersService {
 
   async removeMnuItem(tusuariomnuitemsId: number, empresaId: number) {
     return this.softDelete(this.mnuRepo, 'tusuariomnuitemsId', tusuariomnuitemsId, empresaId, 'UsuarioMnuItem');
+  }
+
+  /**
+   * Bulk import menu items from CSV data.
+   * Maps csvId → generated tusuariomnuitemsId for parent relationships.
+   */
+  async bulkCreateMnuItems(dto: BulkCreateMnuItemsDto, currentUser: string) {
+    // 1. Delete existing menu items for this user+empresa
+    await this.mnuRepo
+      .createQueryBuilder()
+      .delete()
+      .where('empresaId = :empresaId AND usuario = :usuario', {
+        empresaId: dto.empresaId,
+        usuario: dto.usuario,
+      })
+      .execute();
+
+    // 2. Sort items by levelId (parents first)
+    const sorted = [...dto.items].sort((a, b) => a.levelId - b.levelId || a.csvId - b.csvId);
+
+    // 3. Insert sequentially, mapping csvId → generated ID
+    const idMap = new Map<number, number>(); // csvId → DB ID
+    const created: TusuarioMnuItem[] = [];
+
+    for (const item of sorted) {
+      const parentCsvId = item.parentId === item.csvId ? 0 : item.parentId;
+      const parentDbId = idMap.get(parentCsvId) ?? 0;
+
+      const entity = this.mnuRepo.create({
+        empresaId: dto.empresaId,
+        moduloId: dto.moduloId,
+        usuario: dto.usuario,
+        parent: parentDbId,
+        parentId: item.parentId,
+        levelId: item.levelId,
+        nameParent: item.nameParent,
+        nameItem: item.nameItem,
+        labelItem: item.labelItem,
+        iconItem: item.iconItem ?? '',
+        routerLink: item.routerLink ?? '',
+        sn_activo: 'S',
+        usuarioCreated: currentUser,
+      });
+
+      const saved = await this.mnuRepo.save(entity);
+      idMap.set(item.csvId, saved.tusuariomnuitemsId);
+      created.push(saved);
+    }
+
+    return { count: created.length, items: created };
   }
 
   // ===== UsuariosScripts =====

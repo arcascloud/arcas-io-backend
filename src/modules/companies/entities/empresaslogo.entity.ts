@@ -1,12 +1,22 @@
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('ttipoparambco')
-export class TtipoParamBco {
+@Entity('tempresaslogo')
+export class TempresasLogo {
   @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
+  @PrimaryGeneratedColumn({ name: 'tempresaslogoId' })
+  tempresaslogoId: number;
+
+  @ApiProperty()
+  @Column({ type: 'longtext' })
+  img: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_activo: string;
+
+  @ApiProperty()
+  @Column()
   empresaId: number;
 
   @ApiProperty()

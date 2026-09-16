@@ -2,8 +2,8 @@ import { IsString, IsNotEmpty, IsEnum, IsOptional, IsNumber } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateEmpresaDetDto {
-  @ApiProperty({ enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'] })
-  @IsEnum(['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'])
+  @ApiProperty({ enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'] })
+  @IsEnum(['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'])
   @IsNotEmpty()
   tipo: string;
 

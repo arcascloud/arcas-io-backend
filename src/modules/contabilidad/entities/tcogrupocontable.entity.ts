@@ -16,6 +16,10 @@ export class Tcogrupocontable {
   sn_activo: string;
 
   @ApiProperty()
+  @Column({ type: 'int' })
+  empresaId: number;
+
+  @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
 

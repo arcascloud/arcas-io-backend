@@ -2,6 +2,10 @@ import { IsString, IsOptional, IsNumber, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePlPlaMaeDto {
+  @ApiProperty({ required: false, description: 'Número de planilla (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroplanilla?: string;
+
   @ApiProperty({ description: 'Período de la planilla' })
   @IsNumber()
   periodo: number;

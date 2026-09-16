@@ -12,6 +12,7 @@ import { TplPuestos } from './entities/tplpuestos.entity';
 import { TplProfesiones } from './entities/tplprofesiones.entity';
 import { TplDeducciones } from './entities/tpldeducciones.entity';
 import { TplIngresos } from './entities/tplingresos.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { PlanillaService } from './planilla.service';
 import { PlanillaController } from './planilla.controller';
 
@@ -30,6 +31,7 @@ import { PlanillaController } from './planilla.controller';
       TplProfesiones,
       TplDeducciones,
       TplIngresos,
+      TipoParametro,
     ]),
   ],
   controllers: [PlanillaController],

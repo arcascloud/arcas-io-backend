@@ -6,7 +6,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { UsersService } from './users.service';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './dto/usuario.dto';
 import { CreateUsuariosModuleDto, UpdateUsuariosModuleDto } from './dto/usuarios-module.dto';
-import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto } from './dto/usuarios-mnuitem.dto';
+import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto } from './dto/usuarios-mnuitem.dto';
 import { CreateUsuariosScriptsDto, UpdateUsuariosScriptsDto } from './dto/usuarios-scripts.dto';
 import { CreateUsuarioModAuthDto, UpdateUsuarioModAuthDto } from './dto/usuario-modauth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -19,7 +19,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class UsersController {
   constructor(private readonly service: UsersService) {}
 
-  // ===== Usuarios =====
+  // ===== Usuarios (rutas con :usuario al final, después de las estáticas) =====
 
   @Get()
   @ApiOperation({ summary: 'Listar usuarios' })
@@ -28,34 +28,11 @@ export class UsersController {
     return this.service.findAll(empresaId);
   }
 
-  @Get(':usuario')
-  @ApiOperation({ summary: 'Obtener usuario por ID' })
-  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
-  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  findOne(
-    @Param('usuario') usuario: string,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.findOne(usuario, empresaId);
-  }
-
   @Post()
   @ApiOperation({ summary: 'Crear usuario' })
   @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
   create(@Body() dto: CreateUsuarioDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.usuario);
-  }
-
-  @Put(':usuario')
-  @ApiOperation({ summary: 'Actualizar usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
-  update(
-    @Param('usuario') usuario: string,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateUsuarioDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.update(usuario, empresaId, dto, user.usuario);
   }
 
   // ===== UsuariosModule =====
@@ -112,8 +89,11 @@ export class UsersController {
   @Get('menu-items')
   @ApiOperation({ summary: 'Listar items de menú de usuario' })
   @ApiResponse({ status: 200, description: 'Lista de items de menú obtenida exitosamente' })
-  findAllMnuItems(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllMnuItems(empresaId);
+  findAllMnuItems(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('usuario') usuario?: string,
+  ) {
+    return this.service.findAllMnuItems(empresaId, usuario);
   }
 
   @Get('menu-items/:id')
@@ -125,6 +105,13 @@ export class UsersController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findMnuItem(id, empresaId);
+  }
+
+  @Post('menu-items/bulk')
+  @ApiOperation({ summary: 'Importar items de menú masivamente desde CSV' })
+  @ApiResponse({ status: 201, description: 'Items importados exitosamente' })
+  bulkCreateMnuItems(@Body() dto: BulkCreateMnuItemsDto, @CurrentUser() user: any) {
+    return this.service.bulkCreateMnuItems(dto, user.usuario);
   }
 
   @Post('menu-items')
@@ -252,5 +239,30 @@ export class UsersController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.removeModAuth(id, empresaId);
+  }
+
+  // ===== Rutas parametrizadas de :usuario SIEMPRE al final =====
+
+  @Get(':usuario')
+  @ApiOperation({ summary: 'Obtener usuario por ID' })
+  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  findOne(
+    @Param('usuario') usuario: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findOne(usuario, empresaId);
+  }
+
+  @Put(':usuario')
+  @ApiOperation({ summary: 'Actualizar usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
+  update(
+    @Param('usuario') usuario: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateUsuarioDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.update(usuario, empresaId, dto, user.usuario);
   }
 }

@@ -10,6 +10,10 @@ export class PlPlaMae {
   planillaId: number;
 
   @ApiProperty()
+  @Column({ type: 'varchar', length: 20, default: '' })
+  nroplanilla: string;
+
+  @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   fecharegistro: Date;
 
