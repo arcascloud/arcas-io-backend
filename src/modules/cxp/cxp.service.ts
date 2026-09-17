@@ -17,6 +17,7 @@ import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
 import { Tmodulos } from '../modules/entities/modulo.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class CxpService {
@@ -36,6 +37,7 @@ export class CxpService {
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -81,9 +83,10 @@ export class CxpService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -96,9 +99,10 @@ export class CxpService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -209,6 +213,40 @@ export class CxpService {
 
   async findAllCompras(empresaId: number) {
     return this.findAllByEmpresa(this.compraMaeRepo, empresaId);
+  }
+
+  async findComprasPendientesPago(empresaId: number) {
+    return this.compraMaeRepo.createQueryBuilder('c')
+      .innerJoin('proveedor', 'p', 'p.proveedorId = c.proveedorId')
+      .leftJoin(
+        qb => {
+          return qb
+            .select('m.nroreferencia', 'compraId')
+            .addSelect('COALESCE(SUM(m.importe), 0)', 'totalPagado')
+            .from('cxpmovimientos', 'm')
+            .where('m.tipomov = :tipomov', { tipomov: 'C' })
+            .andWhere('m.empresaId = :empresaId', { empresaId })
+            .groupBy('m.nroreferencia');
+        },
+        'pagos',
+        'pagos.compraId = c.compraId'
+      )
+      .select([
+        'c.compraId AS compraId',
+        'c.nroreferencia AS nroreferencia',
+        'c.total AS total',
+        'c.proveedorId AS proveedorId',
+        'p.nroproveedor AS codproveedor',
+        `COALESCE(p.razonsocial, CONCAT(p.nombres, ' ', p.apellidos)) AS proveedorNombre`,
+        'COALESCE(pagos.totalPagado, 0) AS totalPagado',
+        '(c.total - COALESCE(pagos.totalPagado, 0)) AS saldo',
+      ])
+      .where('c.empresaId = :empresaId', { empresaId })
+      .andWhere('c.sn_pagada = :sn_pagada', { sn_pagada: 'N' })
+      .andWhere('c.sn_procesada = :sn_procesada', { sn_procesada: 'S' })
+      .andWhere('c.sn_anulada = :sn_anulada', { sn_anulada: 'N' })
+      .orderBy('c.compraId', 'ASC')
+      .getRawMany();
   }
 
   async findCompra(compraId: number, empresaId: number) {
@@ -366,9 +404,10 @@ export class CxpService {
     if (compra.sn_anulada === 'S') {
       throw new BadRequestException('La compra ya está anulada');
     }
+    const now = await this.fechaSistema.getFecha(empresaId);
     compra.sn_anulada = 'S';
     compra.usuarioUpdated = currentUser;
-    compra.fechaUpdated = new Date();
+    compra.fechaUpdated = now;
     await this.compraMaeRepo.save(compra);
 
     const detalles = await this.compraDetRepo.find({
@@ -408,9 +447,9 @@ export class CxpService {
       });
       for (const mov of movimientos) {
         mov.sn_doc_anulado = 'S';
-        mov.fec_anulacion = new Date();
+        mov.fec_anulacion = now;
         mov.usuarioUpdated = currentUser;
-        mov.fechaUpdated = new Date();
+        mov.fechaUpdated = now;
         await this.movimientoRepo.save(mov);
       }
     } catch (error) {

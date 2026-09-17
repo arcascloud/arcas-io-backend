@@ -7,7 +7,7 @@ import { Tcoplantillapdadet } from './entities/tcoplantillapdadet.entity';
 import { Cosaldoscta } from './entities/cosaldoscta.entity';
 import { Cocierrectable } from './entities/cocierrectable.entity';
 import { Tcorepliquidez } from './entities/tcorepliquidez.entity';
-import { Cofactordecambios } from './entities/cofactordecambios.entity';
+import { Ttipofactordecambios } from './entities/ttipofactordecambios.entity';
 import { Tcoplantillabalancesmae } from './entities/tcoplantillabalancesmae.entity';
 import { Tcoplantillabalancesdet } from './entities/tcoplantillabalancesdet.entity';
 import { Tcorepdiarios } from './entities/tcorepdiarios.entity';
@@ -33,7 +33,7 @@ import { ContabilidadController } from './contabilidad.controller';
       Cosaldoscta,
       Cocierrectable,
       Tcorepliquidez,
-      Cofactordecambios,
+      Ttipofactordecambios,
       Tcoplantillabalancesmae,
       Tcoplantillabalancesdet,
       Tcorepdiarios,

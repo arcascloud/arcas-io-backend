@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { TtipoMoneda } from './entities/moneda.entity';
 import { TtipoPais } from './entities/pais.entity';
 import { TtipoDeptoPais } from './entities/depto-pais.entity';
@@ -44,6 +45,7 @@ export class ParametrosService {
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @InjectRepository(PlPlEmpleados) private readonly empleadoRepo: Repository<PlPlEmpleados>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   findAllTiposDocFiscal(empresaId: number) {
@@ -97,7 +99,7 @@ export class ParametrosService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -112,7 +114,7 @@ export class ParametrosService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -270,7 +272,7 @@ export class ParametrosService {
       existing.valor = valor;
       existing.tipo = tipo;
       existing.usuarioUpdate = currentUser;
-      existing.fechaUpdate = new Date();
+      existing.fechaUpdate = await this.fechaSistema.getFecha(empresaId);
       return this.tipoParametroRepo.save(existing);
     }
     const entity = this.tipoParametroRepo.create({
@@ -302,7 +304,7 @@ export class ParametrosService {
   async deleteParametro(id: number) {
     const found = await this.findParametroById(id);
     found.sn_activo = 'N';
-    found.fechaUpdate = new Date();
+    found.fechaUpdate = await this.fechaSistema.getFecha(found.empresaId);
     return this.tipoParametroRepo.save(found);
   }
 

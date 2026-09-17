@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TInvReqMae } from './entities/invreqmae.entity';
 import { TInvReqDet } from './entities/invreqdet.entity';
 import { Tproducto } from './entities/producto.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class RequisicionInventarioService {
@@ -11,6 +12,7 @@ export class RequisicionInventarioService {
     @InjectRepository(TInvReqMae) private readonly maeRepo: Repository<TInvReqMae>,
     @InjectRepository(TInvReqDet) private readonly detRepo: Repository<TInvReqDet>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -49,7 +51,7 @@ export class RequisicionInventarioService {
     if (dto.fechaEntrega) {
       dto.fechaEntrega = new Date(dto.fechaEntrega).toISOString().slice(0, 10);
     }
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -100,7 +102,7 @@ export class RequisicionInventarioService {
   async updateDet(invreqdetid: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { invreqdetid, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -121,14 +123,14 @@ export class RequisicionInventarioService {
       await this.detRepo.update(det.invreqdetid, {
         sn_estado: 'A',
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
     }
 
     await this.maeRepo.update(invreqmaeid, {
       sn_estado: 'A',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Requisición aprobada' };
@@ -142,7 +144,7 @@ export class RequisicionInventarioService {
       sn_anulado: 'S',
       sn_estado: 'X',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Requisición anulada' };

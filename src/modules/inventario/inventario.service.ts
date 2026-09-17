@@ -24,6 +24,7 @@ import { CreateProductoDto, UpdateProductoDto } from './dto/producto.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
 import { KardexService, KardexEntradaDto, KardexSalidaDto } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class InventarioService {
@@ -48,6 +49,7 @@ export class InventarioService {
     @InjectRepository(TproductoDet) private readonly prodDetRepo: Repository<TproductoDet>,
     @InjectRepository(TproductoImg) private readonly prodImgRepo: Repository<TproductoImg>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -94,7 +96,7 @@ export class InventarioService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -109,7 +111,7 @@ export class InventarioService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }

@@ -17,6 +17,7 @@ import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import {
   CreateCxcClienteDto, UpdateCxcClienteDto,
   CreateCxcMovimientoDto, UpdateCxcMovimientoDto,
@@ -42,6 +43,7 @@ export class CxcService {
     @InjectRepository(CxcPariente) private readonly parienteRepo: Repository<CxcPariente>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -86,9 +88,10 @@ export class CxcService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -101,9 +104,10 @@ export class CxcService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -146,14 +150,15 @@ export class CxcService {
     const nroclienteActual = await getParam('nrocliente', 0);
     const nro = Number(nroclienteActual) + 1;
     const nrocliente = dto.nrocliente || String(nro).padStart(6, '0');
+    const now = await this.fechaSistema.getFecha(dto.empresaId);
 
     const payload: any = {
       ...dto,
       nrocliente,
       dni: dto.dni || '0000000000000',
       razonsocial: dto.razonsocial || `${dto.nombres} ${dto.apellidos}`,
-      fecharegistro: dto.fecharegistro || new Date().toISOString(),
-      fechanacimiento: dto.fechanacimiento || new Date().toISOString(),
+      fecharegistro: dto.fecharegistro || now.toISOString(),
+      fechanacimiento: dto.fechanacimiento || now.toISOString(),
       interes: dto.interes ?? await getParam('interes', 0),
       moratorio: dto.moratorio ?? await getParam('mora', 0),
       diasplazo: dto.diasplazo ?? await getParam('diasPlazo', 0),
@@ -321,9 +326,10 @@ export class CxcService {
 
   private async generarMovimientoDesdeCaja(caja: CxccajaMae, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(caja.clienteId, caja.empresaId);
+    const now = await this.fechaSistema.getFecha(caja.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: caja.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 4,
@@ -344,9 +350,10 @@ export class CxcService {
 
   private async generarMovimientoDesdeCajaDet(cajaDet: CxccajaDet, cajaMae: CxccajaMae, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(cajaDet.clienteId, cajaDet.empresaId);
+    const now = await this.fechaSistema.getFecha(cajaDet.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: cajaDet.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 4,
@@ -573,9 +580,10 @@ export class CxcService {
 
   async generarMovimientoDesdeFactura(factura: any, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(factura.clienteId, factura.empresaId);
+    const now = await this.fechaSistema.getFecha(factura.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: factura.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 3,
@@ -599,15 +607,16 @@ export class CxcService {
   }
 
   async anularMovimientoFactura(facturaId: number, nrofactura: number, empresaId: number, currentUser: string): Promise<void> {
+    const now = await this.fechaSistema.getFecha(empresaId);
     const movimientos = await this.movimientoRepo.find({
       where: { nroreferencia: nrofactura.toString(), moduloId: 3, empresaId } as FindOptionsWhere<CxcMovimiento>,
     });
 
     for (const mov of movimientos) {
       mov.sn_doc_anulado = 'S';
-      mov.fec_anulacion = new Date();
+      mov.fec_anulacion = now;
       mov.usuarioUpdated = currentUser;
-      mov.fechaUpdated = new Date();
+      mov.fechaUpdated = now;
       await this.movimientoRepo.save(mov);
     }
 
@@ -615,15 +624,16 @@ export class CxcService {
   }
 
   async anularCajaPorFactura(facturaId: number, nrofactura: number, empresaId: number, currentUser: string): Promise<void> {
+    const now = await this.fechaSistema.getFecha(empresaId);
     const cajas = await this.cajaMaeRepo.find({
       where: { nrodocumento: nrofactura.toString(), moduloId: 4, empresaId } as FindOptionsWhere<CxccajaMae>,
     });
 
     for (const caja of cajas) {
       caja.sn_anulado = 'S';
-      caja.fec_anulacion = new Date();
+      caja.fec_anulacion = now;
       caja.usuarioUpdated = currentUser;
-      caja.fechaUpdated = new Date();
+      caja.fechaUpdated = now;
       await this.cajaMaeRepo.save(caja);
 
       const detalles = await this.cajaDetRepo.find({
@@ -632,9 +642,9 @@ export class CxcService {
 
       for (const det of detalles) {
         det.sn_anulado = 'S';
-        det.fec_anulacion = new Date();
+        det.fec_anulacion = now;
         det.usuarioUpdated = currentUser;
-        det.fechaUpdated = new Date();
+        det.fechaUpdated = now;
         await this.cajaDetRepo.save(det);
       }
 
@@ -644,9 +654,9 @@ export class CxcService {
 
       for (const mov of movsCaja) {
         mov.sn_doc_anulado = 'S';
-        mov.fec_anulacion = new Date();
+        mov.fec_anulacion = now;
         mov.usuarioUpdated = currentUser;
-        mov.fechaUpdated = new Date();
+        mov.fechaUpdated = now;
         await this.movimientoRepo.save(mov);
       }
     }
@@ -655,7 +665,7 @@ export class CxcService {
   }
 
   async getAntiguedadSaldos(empresaId: number) {
-    const hoy = new Date();
+    const hoy = await this.fechaSistema.getFecha(empresaId);
     const clientes = await this.clienteRepo.find({ where: { empresaId } as FindOptionsWhere<CxcCliente> });
     const movimientos = await this.movimientoRepo.find({ where: { empresaId } as FindOptionsWhere<CxcMovimiento> });
 

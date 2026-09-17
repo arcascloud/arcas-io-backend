@@ -5,6 +5,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TinvKardex } from './entities/kardex.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { Tproducto } from './entities/producto.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 export interface KardexEntradaDto {
   bodegaId: number;
@@ -49,6 +50,7 @@ export class KardexService {
     @InjectRepository(Tproducto)
     private readonly productoRepo: Repository<Tproducto>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async registrarEntrada(dto: KardexEntradaDto): Promise<TinvKardex> {
@@ -61,7 +63,7 @@ export class KardexService {
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
-      FechaIngreso: dto.FechaIngreso || new Date(),
+      FechaIngreso: dto.FechaIngreso || await this.fechaSistema.getFecha(dto.empresaId),
       factordecambio: dto.factordecambio || 1,
       cantidad: dto.cantidad,
       existencia: saldoActual,
@@ -103,7 +105,7 @@ export class KardexService {
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
-      FechaIngreso: new Date(),
+      FechaIngreso: await this.fechaSistema.getFecha(dto.empresaId),
       factordecambio: dto.factordecambio || 1,
       cantidad: dto.cantidad,
       existencia: saldoActual,
@@ -176,7 +178,7 @@ export class KardexService {
         existencia: nuevaExistencia,
         costounitario: costoUnitario,
         usuarioUpdated,
-        fechaUpdated: new Date() as any,
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId) as any,
       })
       .where('bodegaId = :bodegaId AND productoId = :productoId AND empresaId = :empresaId', {
         bodegaId,

@@ -1,8 +1,8 @@
 import { Entity, PrimaryColumn, Column } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('cofactordecambios')
-export class Cofactordecambios {
+@Entity('ttipofactordecambios')
+export class Ttipofactordecambios {
   @ApiProperty()
   @PrimaryColumn({ name: 'factordecambioId' })
   factordecambioId: number;

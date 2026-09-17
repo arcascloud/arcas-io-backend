@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tempresas } from './entities/empresa.entity';
 import { TempresasDet } from './entities/empresasdet.entity';
 import { TempresasLogo } from './entities/empresaslogo.entity';
@@ -28,6 +29,7 @@ export class CompaniesService {
     private readonly corrRepo: Repository<TPosCorrelativos>,
     @InjectRepository(Tsucursal)
     private readonly sucRepo: Repository<Tsucursal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll() {
@@ -53,7 +55,7 @@ export class CompaniesService {
     const entity = await this.findOne(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }
@@ -84,7 +86,7 @@ export class CompaniesService {
     const entity = await this.findOneDet(empresasdetId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.detRepo.save(entity);
   }
@@ -125,7 +127,7 @@ export class CompaniesService {
     const entity = await this.findOneCorr(poscorrelativosId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.corrRepo.save(entity);
   }
@@ -208,7 +210,7 @@ export class CompaniesService {
     if (!found) throw new NotFoundException(`Sucursal ${idsucursal} no encontrada`);
     Object.assign(found, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(found.empresaId),
     });
     return this.sucRepo.save(found);
   }
@@ -225,7 +227,7 @@ export class CompaniesService {
     for (const logo of existing) {
       logo.sn_activo = 'N';
       logo.usuarioUpdated = currentUser;
-      logo.fechaUpdated = new Date();
+      logo.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
       await this.logoRepo.save(logo);
     }
     const entity = this.logoRepo.create({
@@ -242,7 +244,7 @@ export class CompaniesService {
     if (!entity) throw new NotFoundException(`Logo ${tempresaslogoId} no encontrado`);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(entity.empresaId),
     });
     return this.logoRepo.save(entity);
   }
@@ -274,7 +276,7 @@ export class CompaniesService {
     if (!entity) throw new NotFoundException(`Impresora ${timpresorasId} no encontrada`);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(entity.empresaId),
     });
     return this.impRepo.save(entity);
   }

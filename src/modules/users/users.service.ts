@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tusuarios } from './entities/usuario.entity';
 import { TusuariosModule } from './entities/usuarios-module.entity';
 import { TusuarioMnuItem } from './entities/usuarios-mnuitem.entity';
@@ -39,6 +40,7 @@ export class UsersService {
     private readonly authRepo: Repository<UsuarioModAuth>,
     @InjectRepository(Tmodulos)
     private readonly modulosRepo: Repository<Tmodulos>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   // ===== Generic helpers =====
@@ -87,7 +89,7 @@ export class UsersService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -102,7 +104,7 @@ export class UsersService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -140,7 +142,7 @@ export class UsersService {
     const entity = await this.findOne(usuario, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }

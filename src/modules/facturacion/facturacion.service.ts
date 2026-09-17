@@ -34,6 +34,7 @@ import { TImpresora } from '../companies/entities/impresoras.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { getTransporter, getMailFrom } from '../../config/mail';
 
 @Injectable()
@@ -65,6 +66,7 @@ export class FacturacionService {
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -116,9 +118,10 @@ export class FacturacionService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -131,9 +134,10 @@ export class FacturacionService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -338,7 +342,7 @@ export class FacturacionService {
       const siguiente = nroActual + 1;
       corr.nrofactura = siguiente;
       corr.usuarioUpdated = currentUser;
-      corr.fechaUpdated = new Date();
+      corr.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
       await this.correlativosRepo.save(corr);
 
       console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}`);
@@ -360,7 +364,7 @@ export class FacturacionService {
 
     tipoDocFAC.nrocorrelativo = siguiente;
     tipoDocFAC.usuarioUpdated = currentUser;
-    tipoDocFAC.fechaUpdated = new Date();
+    tipoDocFAC.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.tipoDocFiscalRepo.save(tipoDocFAC);
 
     console.log(`[asignarCorrelativo] FAC (sin CAI): empresaId=${empresaId}, nrocorrelativo=${siguiente}`);
@@ -451,7 +455,7 @@ export class FacturacionService {
 
       facturaOriginal.sn_anulada = 'S';
       facturaOriginal.usuarioUpdated = currentUser;
-      facturaOriginal.fechaUpdated = new Date();
+      facturaOriginal.fechaUpdated = await this.fechaSistema.getFecha(facturaOriginal.empresaId);
       await this.facMaeRepo.save(facturaOriginal);
 
       try {
@@ -689,7 +693,7 @@ export class FacturacionService {
     carrito.Nombrecliente = dto.nombrecliente;
     carrito.direccion = dto.direccion || '';
     carrito.usuarioUpdated = currentUser;
-    carrito.fechaUpdated = new Date();
+    carrito.fechaUpdated = await this.fechaSistema.getFecha(carrito.empresaId);
     await this.cotMaeRepo.save(carrito);
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
@@ -902,7 +906,7 @@ export class FacturacionService {
     pedido.sn_facturado = 'S';
     pedido.facturaId = factura.facturaId;
     pedido.usuarioUpdated = currentUser;
-    pedido.fechaUpdated = new Date();
+    pedido.fechaUpdated = await this.fechaSistema.getFecha(pedido.empresaId);
     await this.pedMaeRepo.save(pedido);
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });

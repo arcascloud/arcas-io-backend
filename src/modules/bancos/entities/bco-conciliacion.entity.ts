@@ -25,6 +25,22 @@ export class TbcoConciliacion {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_conciliado: string;
 
+  @ApiProperty({ required: false, description: 'Fecha desde del estado de cuenta' })
+  @Column({ type: 'datetime', nullable: true })
+  fechaDesde: Date;
+
+  @ApiProperty({ required: false, description: 'Fecha hasta del estado de cuenta' })
+  @Column({ type: 'datetime', nullable: true })
+  fechaHasta: Date;
+
+  @ApiProperty({ required: false, description: 'Saldo inicial del estado de cuenta' })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  saldoInicial: number;
+
+  @ApiProperty({ required: false, description: 'Saldo final del estado de cuenta' })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  saldoFinal: number;
+
   @ApiProperty()
   @Column()
   Idsucursal: number;

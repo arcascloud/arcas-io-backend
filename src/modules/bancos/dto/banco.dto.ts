@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray, ValidateNested } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateBancoDto {
   @ApiProperty({ description: 'Nombre del banco' })
@@ -67,4 +68,247 @@ export class UpdateBcoCtaDto {
   @ApiProperty({ required: false, description: 'ID de la sucursal' })
   @IsNumber() @IsOptional()
   Idsucursal?: number;
+}
+
+// ── Movimientos bancarios ──────────────────────────────────
+
+export class CreateBcoMovimientoDto {
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'ID de la cuenta bancaria' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del módulo origen' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], description: 'Tipo de movimiento' })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'])
+  tipomov: string;
+
+  @ApiProperty({ enum: ['D', 'C'], description: 'Débito o crédito' })
+  @IsEnum(['D', 'C'])
+  dc_debitocredito: string;
+
+  @ApiProperty({ required: false, description: 'Número de referencia' })
+  @IsString() @IsOptional()
+  nroreferencia?: string;
+
+  @ApiProperty({ required: false, description: 'Factor de cambio' })
+  @IsNumber() @IsOptional()
+  factordecambio?: number;
+
+  @ApiProperty({ description: 'Importe del movimiento' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ required: false, description: 'Concepto del movimiento' })
+  @IsString() @IsOptional()
+  concepto?: string;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateBcoMovimientoDto {
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], required: false })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO']) @IsOptional()
+  tipomov?: string;
+
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  dc_debitocredito?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  nroreferencia?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  factordecambio?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  importe?: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  concepto?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_doc_anulado?: string;
+}
+
+// ── Emisión de cheques ──────────────────────────────────────
+
+export class FacturaPendienteDto {
+  @ApiProperty({ description: 'ID de la compra (cxpcomprasmae)' })
+  @IsNumber()
+  compraId: number;
+
+  @ApiProperty({ description: 'Saldo pendiente de la factura' })
+  @IsNumber()
+  saldo: number;
+
+  @ApiProperty({ description: 'Nro. referencia de la factura (nroreferencia)' })
+  @IsOptional()
+  @IsString()
+  nroReferencia?: string;
+}
+
+export class GrupoProveedorDto {
+  @ApiProperty({ description: 'ID del proveedor' })
+  @IsNumber()
+  proveedorId: number;
+
+  @ApiProperty({ description: 'Código del proveedor' })
+  @IsString()
+  codproveedor: string;
+
+  @ApiProperty({ description: 'Razón social del proveedor (para el cheque)' })
+  @IsString()
+  beneficiario: string;
+
+  @ApiProperty({ description: 'Facturas a pagar con sus saldos' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacturaPendienteDto)
+  facturas: FacturaPendienteDto[];
+}
+
+export class EmitirChequeDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria origen' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'Grupos de proveedores — 1 cheque por grupo' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GrupoProveedorDto)
+  grupos: GrupoProveedorDto[];
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+// ── Cheque a particular / empleado ──────────────────────────
+
+export class EmitirChequeParticularDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria origen' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'Nombre del beneficiario (persona particular/empleado)' })
+  @IsString()
+  beneficiario: string;
+
+  @ApiProperty({ description: 'Concepto / motivo del pago' })
+  @IsString()
+  concepto: string;
+
+  @ApiProperty({ description: 'Importe del cheque' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+// ── Conciliación Bancaria ──────────────────────────────────
+
+export class CreateConciliacionDetDto {
+  @ApiProperty({ description: 'Fecha del movimiento bancario' })
+  @IsOptional()
+  fecmovbco?: Date;
+
+  @ApiProperty({ description: 'Nro. referencia' })
+  @IsString()
+  nrorefencia: string;
+
+  @ApiProperty({ description: 'Concepto/descripción' })
+  @IsString()
+  concepto: string;
+
+  @ApiProperty({ description: 'Importe' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ enum: ['D', 'C'], description: 'Naturaleza (Débito/Crédito)' })
+  @IsEnum(['D', 'C'])
+  naturaleza: string;
+
+  @ApiProperty({ required: false, description: 'Conciliado (S/N)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_conciliado?: string;
+
+  @ApiProperty({ required: false, description: 'ID del movimiento bancario coincidente' })
+  @IsNumber() @IsOptional()
+  bcomovimientosId?: number;
+}
+
+export class CreateConciliacionDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria' })
+  @IsNumber()
+  ctabcoId: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ required: false, description: 'Fecha desde del estado de cuenta' })
+  @IsOptional()
+  fechaDesde?: Date;
+
+  @ApiProperty({ required: false, description: 'Fecha hasta del estado de cuenta' })
+  @IsOptional()
+  fechaHasta?: Date;
+
+  @ApiProperty({ required: false, description: 'Saldo inicial del estado de cuenta' })
+  @IsNumber() @IsOptional()
+  saldoInicial?: number;
+
+  @ApiProperty({ required: false, description: 'Saldo final del estado de cuenta' })
+  @IsNumber() @IsOptional()
+  saldoFinal?: number;
+
+  @ApiProperty({ description: 'Detalle del estado de cuenta importado' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateConciliacionDetDto)
+  detalles: CreateConciliacionDetDto[];
+}
+
+export class UpdateConciliacionDto {
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_conciliado?: string;
+
+  @ApiProperty({ required: false })
+  @IsArray() @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateConciliacionDetDto)
+  detalles?: CreateConciliacionDetDto[];
 }

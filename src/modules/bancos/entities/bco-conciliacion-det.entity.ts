@@ -37,6 +37,14 @@ export class TbcoConciliacionDet {
   @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
   naturaleza: string;
 
+  @ApiProperty({ required: false, description: 'Conciliado: S=match, N=diferencia' })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_conciliado: string;
+
+  @ApiProperty({ required: false, description: 'ID del movimiento bancario coincidente (bcosmovimientos)' })
+  @Column({ type: 'int', nullable: true })
+  bcomovimientosId: number;
+
   @ApiProperty()
   @Column()
   Idsucursal: number;

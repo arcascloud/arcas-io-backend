@@ -6,6 +6,7 @@ import { TInvMovDet } from './entities/invmovdet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class AjusteInventarioService {
@@ -15,6 +16,7 @@ export class AjusteInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -49,7 +51,7 @@ export class AjusteInventarioService {
 
   async updateMae(invmovmaeid: number, empresaId: number, dto: any, usuario: string) {
     const mae = await this.findOneMae(invmovmaeid, empresaId);
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -105,7 +107,7 @@ export class AjusteInventarioService {
   async updateDet(invmovdetid: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { invmovdetid, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -163,7 +165,7 @@ export class AjusteInventarioService {
       await this.detRepo.update(det.invmovdetid, {
         verificador: 1,
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
 
       resultados.push({
@@ -178,7 +180,7 @@ export class AjusteInventarioService {
     await this.maeRepo.update(invmovmaeid, {
       sn_anulado: 'N',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Ajuste procesado', items: resultados };

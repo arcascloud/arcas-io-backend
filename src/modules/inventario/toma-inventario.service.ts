@@ -6,6 +6,7 @@ import { TInvFisDet } from './entities/invfisdet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class TomaInventarioService {
@@ -15,6 +16,7 @@ export class TomaInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -44,7 +46,7 @@ export class TomaInventarioService {
 
   async updateMae(invfisId: number, empresaId: number, dto: any, usuario: string) {
     const mae = await this.findOneMae(invfisId, empresaId);
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -116,7 +118,7 @@ export class TomaInventarioService {
   async updateDet(nvfisdetId: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { nvfisdetId, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -190,7 +192,7 @@ export class TomaInventarioService {
         costoTotal: Number(fisico) * Number(costoUnitario),
         sn_aplicado: 'S',
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
 
       resultados.push({
@@ -206,7 +208,7 @@ export class TomaInventarioService {
     await this.maeRepo.update(invfisId, {
       sn_anulado: 'N',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Inventario procesado', items: resultados };

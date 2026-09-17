@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tmodulos } from './entities/modulo.entity';
 import { CreateModuloDto, UpdateModuloDto } from './dto/modulo.dto';
 
@@ -9,6 +10,7 @@ export class ModulosService {
   constructor(
     @InjectRepository(Tmodulos)
     private readonly repo: Repository<Tmodulos>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll(empresaId: number) {
@@ -36,7 +38,7 @@ export class ModulosService {
     const entity = await this.findOne(moduloId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }

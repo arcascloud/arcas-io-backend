@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tcoctacontables } from './entities/tcoctacontables.entity';
 import { Tcogrupocontable } from './entities/tcogrupocontable.entity';
 import { Tcoplantillapdamae } from './entities/tcoplantillapdamae.entity';
@@ -8,7 +9,7 @@ import { Tcoplantillapdadet } from './entities/tcoplantillapdadet.entity';
 import { Cosaldoscta } from './entities/cosaldoscta.entity';
 import { Cocierrectable } from './entities/cocierrectable.entity';
 import { Tcorepliquidez } from './entities/tcorepliquidez.entity';
-import { Cofactordecambios } from './entities/cofactordecambios.entity';
+import { Ttipofactordecambios } from './entities/ttipofactordecambios.entity';
 import { Tcoplantillabalancesmae } from './entities/tcoplantillabalancesmae.entity';
 import { Tcoplantillabalancesdet } from './entities/tcoplantillabalancesdet.entity';
 import { Tcorepdiarios } from './entities/tcorepdiarios.entity';
@@ -37,7 +38,7 @@ export class ContabilidadService {
     @InjectRepository(Cosaldoscta) private readonly saldosctaRepo: Repository<Cosaldoscta>,
     @InjectRepository(Cocierrectable) private readonly cierrectableRepo: Repository<Cocierrectable>,
     @InjectRepository(Tcorepliquidez) private readonly repliquidezRepo: Repository<Tcorepliquidez>,
-    @InjectRepository(Cofactordecambios) private readonly factordecambioRepo: Repository<Cofactordecambios>,
+    @InjectRepository(Ttipofactordecambios) private readonly factordecambioRepo: Repository<Ttipofactordecambios>,
     @InjectRepository(Tcoplantillabalancesmae) private readonly plantillabalancesmaeRepo: Repository<Tcoplantillabalancesmae>,
     @InjectRepository(Tcoplantillabalancesdet) private readonly plantillabalancesdetRepo: Repository<Tcoplantillabalancesdet>,
     @InjectRepository(Tcorepdiarios) private readonly repdiariosRepo: Repository<Tcorepdiarios>,
@@ -50,6 +51,7 @@ export class ContabilidadService {
     @InjectRepository(Tconaturalezacta) private readonly naturalezactaRepo: Repository<Tconaturalezacta>,
     @InjectRepository(Tcoimpuestovecinal) private readonly impuestovecinalRepo: Repository<Tcoimpuestovecinal>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -107,7 +109,7 @@ export class ContabilidadService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -138,7 +140,7 @@ export class ContabilidadService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -300,7 +302,7 @@ export class ContabilidadService {
 
   async findAllFactordecambio(empresaId: number) {
     return this.factordecambioRepo.find({
-      where: { empresaId } as unknown as FindOptionsWhere<Cofactordecambios>,
+      where: { empresaId } as unknown as FindOptionsWhere<Ttipofactordecambios>,
       order: { fecharegistro: 'DESC' } as any,
     });
   }

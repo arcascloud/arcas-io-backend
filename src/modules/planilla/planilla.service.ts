@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { PlPlEmpleados } from './entities/plplempleados.entity';
 import { PlEtits } from './entities/pletitulaciones.entity';
 import { PlAsistencia } from './entities/pleasistencia.entity';
@@ -36,6 +37,7 @@ export class PlanillaService {
     @InjectRepository(TplDeducciones) private readonly deduccionRepo: Repository<TplDeducciones>,
     @InjectRepository(TplIngresos) private readonly ingresoRepo: Repository<TplIngresos>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -93,7 +95,7 @@ export class PlanillaService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -108,7 +110,7 @@ export class PlanillaService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }

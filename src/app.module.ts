@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { FechaSistemaModule } from './shared/fecha-sistema.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CompaniesModule } from './modules/companies/companies.module';
@@ -26,6 +27,7 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
       autoLoadEntities: true,
       synchronize: false,
     }),
+    FechaSistemaModule,
     AuthModule,
     UsersModule,
     CompaniesModule,

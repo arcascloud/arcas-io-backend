@@ -95,6 +95,13 @@ export class CxpController {
     return this.service.findCompra(id, empresaId);
   }
 
+  @Get('compras-pag')
+  @ApiOperation({ summary: 'Facturas pendientes de pago' })
+  @ApiResponse({ status: 200, description: 'Lista de facturas pendientes de pago' })
+  findComprasPendientesPago(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findComprasPendientesPago(empresaId);
+  }
+
   @Get('compras-det')
   @ApiOperation({ summary: 'Listar detalle de compras' })
   @ApiResponse({ status: 200, description: 'Lista de detalle de compras obtenida exitosamente' })

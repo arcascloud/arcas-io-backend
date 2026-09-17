@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tsucursal } from './entities/sucursal.entity';
 import { CreateSucursalDto, UpdateSucursalDto } from './dto/sucursal.dto';
 
@@ -9,6 +10,7 @@ export class SucursalesService {
   constructor(
     @InjectRepository(Tsucursal)
     private readonly repo: Repository<Tsucursal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll(empresaId: number) {
@@ -36,7 +38,7 @@ export class SucursalesService {
     const entity = await this.findOne(idsucursal, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }

@@ -6,6 +6,7 @@ import { TInvTrasladoDet } from './entities/invtrasladodet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class TrasladoInventarioService {
@@ -15,6 +16,7 @@ export class TrasladoInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -65,7 +67,7 @@ export class TrasladoInventarioService {
       bodegaDestinoId: dto.bodegaDestinoId,
       observaciones: dto.observaciones,
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.maeRepo.save(mae);
   }
@@ -170,7 +172,7 @@ export class TrasladoInventarioService {
 
     mae.sn_procesado = 'S';
     mae.usuarioUpdated = usuario;
-    mae.fechaUpdated = new Date();
+    mae.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.maeRepo.save(mae);
 
     return { message: 'Traslado procesado correctamente' };
@@ -183,7 +185,7 @@ export class TrasladoInventarioService {
 
     mae.sn_anulado = 'S';
     mae.usuarioUpdated = usuario;
-    mae.fechaUpdated = new Date();
+    mae.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.maeRepo.save(mae);
 
     return { message: 'Traslado anulado' };

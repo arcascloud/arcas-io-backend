@@ -6,6 +6,10 @@ import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
+import { TbcoMovimiento } from './entities/bco-movimiento.entity';
+import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
+import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { BancosService } from './bancos.service';
 import { BancosController } from './bancos.controller';
 
@@ -18,6 +22,10 @@ import { BancosController } from './bancos.controller';
       TbcoConciliacionDet,
       TbcoDireccion,
       TbcoTelefono,
+      TbcoMovimiento,
+      TCxpCompraMae,
+      TCxpMovimiento,
+      TipoParametro,
     ]),
   ],
   controllers: [BancosController],
