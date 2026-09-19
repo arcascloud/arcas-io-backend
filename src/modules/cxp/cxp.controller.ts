@@ -156,7 +156,7 @@ export class CxpController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
     @CurrentUser() user: any,
   ) {
-    return this.service.procesarCompra(id, empresaId, user.usuario);
+    return this.service.procesarCompra(id, empresaId, user.usuario, user.idsucursal);
   }
 
   @Get('movimientos')

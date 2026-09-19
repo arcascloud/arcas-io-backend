@@ -30,6 +30,7 @@ import { Posfacmov } from '../facturacion/entities/posfacmov.entity';
 import { TinvExistencia } from '../inventario/entities/existencia.entity';
 import { CxcMovimiento } from '../cxc/entities/cxcmovimiento.entity';
 import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
+import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TbcoMovimiento } from '../bancos/entities/bco-movimiento.entity';
 import { ContabilidadService } from './contabilidad.service';
@@ -69,6 +70,7 @@ import { ContabilidadController } from './contabilidad.controller';
       TinvExistencia,
       CxcMovimiento,
       TCxpMovimiento,
+      TCxpCompraMae,
       Tproducto,
       TbcoMovimiento,
     ]),

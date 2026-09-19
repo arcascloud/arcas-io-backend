@@ -305,7 +305,7 @@ export class CxpService {
     await this.compraMaeRepo.save(compra);
   }
 
-  async procesarCompra(compraId: number, empresaId: number, currentUser: string) {
+  async procesarCompra(compraId: number, empresaId: number, currentUser: string, idsucursal?: number) {
     const compra = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
 
     if (compra.sn_anulada === 'S') {
@@ -329,7 +329,7 @@ export class CxpService {
     }
 
     try {
-      await this.crearMovimientoCxP(compra, currentUser);
+      await this.crearMovimientoCxP(compra, currentUser, idsucursal);
     } catch (error) {
       console.error('Error creando movimiento CxP compra:', error);
       throw error;
@@ -370,10 +370,15 @@ export class CxpService {
     }
   }
 
-  private async crearMovimientoCxP(compra: TCxpCompraMae, currentUser: string): Promise<void> {
+  private async crearMovimientoCxP(compra: TCxpCompraMae, currentUser: string, idsucursal?: number): Promise<void> {
     const proveedor = await this.findOneById(
       this.proveedorRepo, 'proveedorId', compra.proveedorId, compra.empresaId, 'Proveedor',
     );
+
+    const nombreProveedor = proveedor.razonsocial || `${proveedor.nombres} ${proveedor.apellidos}`;
+    const tipoCompraLabel: Record<string, string> = { FCO: 'Factura de contado', FCC: 'Factura al crédito', ORC: 'Orden de compra' };
+    const tipoLabel = tipoCompraLabel[compra.TipoCompra] || compra.TipoCompra;
+    const ref = compra.nroreferencia || compra.compraId.toString();
 
     const saved = await this.createEntity(this.movimientoRepo, {
       nrocuentabco: '',
@@ -382,9 +387,10 @@ export class CxpService {
       proveedorId: compra.proveedorId,
       codproveedor: proveedor.nroproveedor,
       tipomov: 'D',
-      nroreferencia: compra.compraId.toString(),
-      concepto: `Compra #${compra.compraId}`,
-      descripcion2: proveedor.razonsocial || `${proveedor.nombres} ${proveedor.apellidos}`,
+      nroreferencia: ref,
+      nromovimiento: Number(ref) || compra.compraId,
+      concepto: `Compra realizada a ${nombreProveedor} según ${tipoLabel} - ${ref}`,
+      descripcion2: nombreProveedor,
       importe: compra.total,
       sn_chq: 'N',
       sn_chq_anulado: 'N',
@@ -392,6 +398,7 @@ export class CxpService {
       sn_contabilizado: 'N',
       sn_doc_anulado: 'N',
       empresaId: compra.empresaId,
+      Idsucursal: idsucursal || 1,
     }, currentUser);
 
     // Emitir evento para contabilización automática
@@ -399,6 +406,8 @@ export class CxpService {
       movimiento: saved,
       origen: 'compra',
       TipoCompra: compra.TipoCompra || 'FCO',
+      compraId: compra.compraId,
+      empresaId: compra.empresaId,
     });
   }
 

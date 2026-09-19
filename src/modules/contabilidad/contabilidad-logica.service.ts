@@ -21,6 +21,7 @@ import { Posfacmov } from '../facturacion/entities/posfacmov.entity';
 import { TinvExistencia } from '../inventario/entities/existencia.entity';
 import { CxcMovimiento } from '../cxc/entities/cxcmovimiento.entity';
 import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
+import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
 import { TCoTipoDocumentoFiscal } from './entities/tcotipodocumentofiscal.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TbcoMovimiento } from '../bancos/entities/bco-movimiento.entity';
@@ -52,6 +53,7 @@ export class ContabilidadLogicaService {
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     @InjectRepository(CxcMovimiento) private readonly cxcMovimientoRepo: Repository<CxcMovimiento>,
     @InjectRepository(TCxpMovimiento) private readonly cxpMovimientoRepo: Repository<TCxpMovimiento>,
+    @InjectRepository(TCxpCompraMae) private readonly cxpCompraMaeRepo: Repository<TCxpCompraMae>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TbcoMovimiento) private readonly bcoMovimientoRepo: Repository<TbcoMovimiento>,
@@ -1555,7 +1557,7 @@ export class ContabilidadLogicaService {
    */
   @OnEvent('cxp.movimiento.creado')
   async handleCxPMovimientoCreado(payload: any) {
-    const { movimiento, origen, TipoCompra } = payload;
+    const { movimiento, origen, TipoCompra, compraId, empresaId } = payload;
     this.logger.log(`[CxP Event] Movimiento creado: movId=${movimiento?.bcomovId}, tipo=${movimiento?.tipomov}, importe=${movimiento?.importe}, origen=${origen}, TipoCompra=${TipoCompra}`);
 
     if (Number(movimiento.importe) <= 0) {
@@ -1601,6 +1603,23 @@ export class ContabilidadLogicaService {
         plantillaId,
       );
       this.logger.log(`[CxP Event] contabilizarCxP resultado: ${resultado} (PDA ${plantillaId})`);
+
+      // Actualizar compra con sn_contabilizada y partidaId
+      if (resultado && compraId && empresaId) {
+        const now = await this.fechaSistema.getFecha(empresaId);
+        await this.cxpCompraMaeRepo.createQueryBuilder()
+          .update(TCxpCompraMae)
+          .set({
+            sn_contabilizada: 'S',
+            partidaId: resultado,
+            usuarioUpdated: movimiento.usuarioCreated,
+            fechaUpdated: now,
+          } as any)
+          .where('compraId = :id', { id: compraId })
+          .andWhere('empresaId = :empresaId', { empresaId })
+          .execute();
+        this.logger.log(`[CxP Event] Compra ${compraId} marcada como contabilizada (partida ${resultado})`);
+      }
     } catch (error) {
       this.logger.error(`[CxP Event] Error en handleCxPMovimientoCreado: ${error.message}`, error.stack);
     }

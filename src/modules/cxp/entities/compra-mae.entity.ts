@@ -69,8 +69,8 @@ export class TCxpCompraMae {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_contabilizada: string;
 
-  @ApiProperty()
-  @Column()
+  @ApiProperty({ required: false })
+  @Column({ type: 'int', nullable: true })
   partidaId: number;
 
   @ApiProperty()
