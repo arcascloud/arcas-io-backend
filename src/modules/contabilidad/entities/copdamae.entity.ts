@@ -4,8 +4,8 @@ import { ApiProperty } from '@nestjs/swagger';
 @Entity('copdamae')
 export class Copdamae {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'copdamaeId' })
-  copdamaeId: number;
+  @PrimaryGeneratedColumn({ name: 'partidaId' })
+  partidaId: number;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
@@ -40,7 +40,7 @@ export class Copdamae {
   nroreferencia: string;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 70 })
+  @Column({ type: 'varchar', length: 2000 })
   descripcion: string;
 
   @ApiProperty()

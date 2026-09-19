@@ -115,6 +115,10 @@ export class TPosFacMae {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_contabilizada: string;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  partidaId: number;   // FK a copdamae — partida contable generada
+
   @ApiProperty()
   @Column()
   empresaId: number;

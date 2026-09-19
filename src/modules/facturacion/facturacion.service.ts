@@ -28,6 +28,7 @@ import {
 } from './dto/facturacion.dto';
 import { CxcService } from '../cxc/cxc.service';
 import { KardexService } from '../inventario/kardex.service';
+import { ContabilidadLogicaService } from '../contabilidad/contabilidad-logica.service';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
 import { TImpresora } from '../companies/entities/impresoras.entity';
@@ -65,6 +66,7 @@ export class FacturacionService {
     @InjectRepository(TproductoImg) private readonly productoImgRepo: Repository<TproductoImg>,
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
+    @Inject(forwardRef(() => ContabilidadLogicaService)) private readonly contabilidadService: ContabilidadLogicaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly fechaSistema: FechaSistemaService,
   ) {}
@@ -207,6 +209,16 @@ export class FacturacionService {
     const telefono = empresaDet.find((d) => d.tipo === 'TELEFONO')?.descripcion || null;
     const direccion = empresaDet.find((d) => d.tipo === 'DIRECCION')?.descripcion || null;
 
+    // Buscar correlativo CAI para esta factura/sucursal
+    const corr = await this.correlativosRepo.findOne({
+      where: { empresaId, Idsucursal: factura.Idsucursal || 0 } as unknown as FindOptionsWhere<TPosCorrelativos>,
+      order: { poscorrelativosId: 'DESC' },
+    });
+
+    // CAI desde tempresasdet (tipo='CAI')
+    const caiDet = empresaDet.find((d) => d.tipo === 'CAI');
+    const caiCodigo = caiDet?.descripcion || null;
+
     return {
       factura,
       detalles,
@@ -219,12 +231,24 @@ export class FacturacionService {
         mensajeFactura: empresa?.msjfactura || '',
         mensajeDevolucion: empresa?.msjdevfactura || '',
       },
+      correlativo: corr ? {
+        cai: caiCodigo || '',
+        rangoDesde: corr.rangoDesde || '',
+        rangoHasta: corr.rangoHasta || '',
+      } : (caiCodigo ? {
+        cai: caiCodigo,
+        rangoDesde: '',
+        rangoHasta: '',
+      } : null),
     };
   }
 
   async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
+    let caiInfo: { rangoDesde?: string; rangoHasta?: string; disponible?: number; alerta?: string } | undefined;
     if (!dto.nrofactura) {
-      dto.nrofactura = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
+      const result = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
+      dto.nrofactura = result.nrofactura;
+      caiInfo = { rangoDesde: result.rangoDesde, rangoHasta: result.rangoHasta, disponible: result.disponible, alerta: result.alerta };
     }
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
 
@@ -236,9 +260,12 @@ export class FacturacionService {
       }
     }
 
+    // Integración contable automática (se ejecuta después del kardex)
+    // Se llama desde procesarKardexFactura porque necesita que el inventario esté procesado
+
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
 
-    return factura;
+    return { ...factura, ...caiInfo };
   }
 
   async procesarKardexFactura(facturaId: number, currentUser: string): Promise<{ procesados: number; errores: string[] }> {
@@ -276,6 +303,48 @@ export class FacturacionService {
       }
     }
 
+    // Integración contable automática post-kardex
+    // Se ejecuta después de procesar kardex porque necesita que el inventario esté actualizado
+    if (errores.length === 0) {
+      try {
+        const factura = await this.facMaeRepo.findOne({
+          where: { facturaId } as FindOptionsWhere<TPosFacMae>,
+        });
+        if (factura) {
+          await this.contabilidadService.contabilizarFactura(
+            factura,
+            Number(factura.empresaId),
+            Number(factura.Idsucursal) || 0,
+            currentUser,
+          );
+
+          // Después de contabilizar, vincular movimientos CxC con la partida de la factura
+          if (factura.tipofactura === 'C') {
+            try {
+              const refreshFactura = await this.facMaeRepo.findOne({
+                where: { facturaId } as FindOptionsWhere<TPosFacMae>,
+              });
+              if (refreshFactura?.partidaId) {
+                await this.cxcService.actualizarPartidaMovimientos(
+                  refreshFactura.nrofactura.toString(),
+                  refreshFactura.partidaId,
+                  Number(refreshFactura.empresaId),
+                  currentUser,
+                );
+                console.log(`[procesarKardex] Movimientos CxC vinculados a partida ${refreshFactura.partidaId}`);
+              }
+            } catch (e) {
+              console.error(`[procesarKardex] Error vinculando CxC con partida: ${e.message}`);
+            }
+          }
+        }
+      } catch (error: any) {
+        const msg = `Error integración contable: ${error.message || error}`;
+        console.error(`[procesarKardex] ${msg}`);
+        // No agregamos a errores para no bloquear — la contabilización es complementaria
+      }
+    }
+
     console.log(`[procesarKardex] finalizado: procesados=${procesados}, errores=${errores.length}`);
     return { procesados, errores };
   }
@@ -291,21 +360,29 @@ export class FacturacionService {
   }
 
   /**
-   * Asigna el número de factura siguiente.
-   * - Si existe correlativo (CAI) en poscorrelativos para la sucursal → usa nrofactura del CAI
-   * - Si NO existe correlativo → usa nrocorrelativo de tcotipodocumentofiscal (FAC)
-   * - Si modo es manual o no hay impresora → retorna 0 (frontend envía el número)
+   * Asigna el número de factura siguiente y retorna info del CAI.
+   * - Valida rango: bloquea si siguiente > hasta, alerta si quedan ≤30
+   * - Si NO hay correlativo → usa nrocorrelativo de tcotipodocumentofiscal (FAC)
+   * - Si modo manual → retorna { nrofactura: 0 }
    */
-  private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<number> {
-    // 1. Buscar impresora de la sucursal para determinar modo
-    const imp = await this.impRepo.findOne({
-      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TImpresora>,
+  private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<{
+    nrofactura: number;
+    rangoDesde?: string;
+    rangoHasta?: string;
+    disponible?: number;
+    alerta?: string;
+  }> {
+    // 1. Leer modo_correlativo desde ttipoparametros (moduloId=3: facturación)
+    const paramModo = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId: 3, field: 'modo_correlativo', sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
     });
 
-    // 2. Si modo manual ('M') o no hay impresora → no auto-asignar
-    if (!imp || imp.modo_correlativo === 'M') {
-      console.log(`[asignarCorrelativo] Modo manual o sin impresora. empresaId=${empresaId}, sucursal=${idsucursal}`);
-      return 0; // 0 indica que el frontend debe enviar el nrofactura
+    const modo = paramModo?.valor || 'A'; // Default: automático
+
+    // 2. Si modo manual ('M') → no auto-asignar
+    if (modo === 'M') {
+      console.log(`[asignarCorrelativo] Modo manual (ttipoparametros). empresaId=${empresaId}`);
+      return { nrofactura: 0 };
     }
 
     // 3. Buscar correlativo (CAI) en poscorrelativos para esta empresa/sucursal
@@ -318,35 +395,42 @@ export class FacturacionService {
     if (corr) {
       const nroActual = Number(corr.nrofactura) || 0;
       const hasta = this.extractRangoNumero(corr.rangoHasta);
-      const desde = this.extractRangoNumero(corr.rangoDesde);
-      const total = hasta - desde + 1;
 
-      // Validar que no se agote el rango
-      if (total > 0 && nroActual >= total) {
+      // Siguiente número
+      const siguiente = nroActual + 1;
+
+      // Validar: si el siguiente número supera el rango → BLOQUEAR
+      if (siguiente > hasta) {
         throw new BadRequestException(
-          `Rango de facturación agotado para esta sucursal. Último número: ${nroActual}. Renueve el CAI ante la SAT.`
+          `Rango de facturación agotado. Último número: ${nroActual}. Rango autorizado: ${corr.rangoDesde} al ${corr.rangoHasta}. Renueve el CAI ante la SAT.`
         );
       }
 
-      // Alerta si quedan poco (80%+)
-      if (total > 0) {
-        const porcentaje = (nroActual / total) * 100;
-        if (porcentaje >= 90) {
-          console.warn(`[asignarCorrelativo] ⚠️ CRÍTICO: Rango al ${porcentaje.toFixed(1)}%. Quedan ${total - nroActual} facturas.`);
-        } else if (porcentaje >= 80) {
-          console.warn(`[asignarCorrelativo] ⚠️ ALERTA: Rango al ${porcentaje.toFixed(1)}%. Quedan ${total - nroActual} facturas.`);
-        }
+      // Calcular disponibles
+      const disponible = hasta - siguiente + 1;
+
+      // Alerta si quedan ≤30 facturas
+      let alerta: string | undefined;
+      if (disponible <= 30) {
+        alerta = `La autorización de facturación está próxima a caducar. Quedan solo ${disponible} factura(s) disponibles. Renueve el CAI ante la SAT.`;
+        console.warn(`[asignarCorrelativo] ${alerta}`);
       }
 
       // Incrementar y guardar
-      const siguiente = nroActual + 1;
       corr.nrofactura = siguiente;
       corr.usuarioUpdated = currentUser;
       corr.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
       await this.correlativosRepo.save(corr);
 
-      console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}`);
-      return siguiente;
+      console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}, disponible=${disponible}`);
+
+      return {
+        nrofactura: siguiente,
+        rangoDesde: corr.rangoDesde,
+        rangoHasta: corr.rangoHasta,
+        disponible,
+        alerta,
+      };
     }
 
     // 5. NO hay correlativo (CAI) → usar nrocorrelativo de tcotipodocumentofiscal (FAC)
@@ -356,7 +440,7 @@ export class FacturacionService {
 
     if (!tipoDocFAC) {
       console.warn(`[asignarCorrelativo] No hay correlativo CAI ni tipo doc fiscal FAC para empresaId=${empresaId}`);
-      return 1;
+      return { nrofactura: 1 };
     }
 
     const nroCorrelativo = Number(tipoDocFAC.nrocorrelativo) || 0;
@@ -368,7 +452,7 @@ export class FacturacionService {
     await this.tipoDocFiscalRepo.save(tipoDocFAC);
 
     console.log(`[asignarCorrelativo] FAC (sin CAI): empresaId=${empresaId}, nrocorrelativo=${siguiente}`);
-    return siguiente;
+    return { nrofactura: siguiente };
   }
 
   async updateFactura(facturaId: number, empresaId: number, dto: UpdatePosFacMaeDto, currentUser: string) {
@@ -417,10 +501,6 @@ export class FacturacionService {
 
     if (facturaOriginal.sn_anulada === 'S') {
       throw new BadRequestException('La factura ya esta anulada');
-    }
-
-    if (facturaOriginal.sn_contabilizada === 'S') {
-      throw new BadRequestException('La factura esta contabilizada y no se puede anular');
     }
 
     if (facturaOriginal.tipofactura === 'C') {
@@ -474,6 +554,17 @@ export class FacturacionService {
         await this.cxcService.anularCajaPorFactura(facturaOriginal.facturaId, facturaOriginal.nrofactura, facturaOriginal.empresaId, currentUser);
       } catch (error) {
         console.error('Error anulando Caja por Factura:', error);
+      }
+
+      // Descontabilizar si estaba contabilizada
+      try {
+        await this.contabilidadService.descontabilizarFactura(
+          facturaOriginal,
+          Number(facturaOriginal.empresaId),
+          currentUser,
+        );
+      } catch (error) {
+        console.error('Error descontabilizando factura:', error);
       }
     }
 
@@ -1217,17 +1308,25 @@ export class FacturacionService {
     const pagosBlock = pagos.length > 0 ? '<hr style="border:1px solid #e2e8f0"><h4>Pagos</h4>' + pagosHtml : '';
     const msjFac = emp.mensajeFactura || '';
 
+    // Info CAI
+    const corr = ticket.correlativo;
+    const nroFactFmt = corr?.rangoDesde
+      ? (() => { const p = corr.rangoDesde.split('-'); return p.length > 1 ? p.slice(0, -1).join('-') + '-' + String(nroFact).padStart(8, '0') : String(nroFact).padStart(8, '0'); })()
+      : String(nroFact);
+
     return '<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">'
       + '<h2 style="color:#10b981;margin-bottom:5px">' + nombre + '</h2>'
       + (rtn ? '<p style="color:#64748b;margin:0">RTN: ' + rtn + '</p>' : '')
       + (dirEmp ? '<p style="color:#64748b;margin:0">' + dirEmp + '</p>' : '')
       + (tel ? '<p style="color:#64748b;margin:0">Tel: ' + tel + '</p>' : '')
       + '<hr style="border:1px solid #e2e8f0">'
-      + '<h3 style="margin:10px 0">Factura #' + nroFact + '</h3>'
+      + '<h3 style="margin:10px 0">Factura #' + nroFactFmt + '</h3>'
       + '<p><strong>Cliente:</strong> ' + cliente + '</p>'
       + '<p><strong>Direccion:</strong> ' + dirCli + '</p>'
       + '<p><strong>Fecha:</strong> ' + fecha + '</p>'
       + '<p><strong>Tipo:</strong> ' + tipo + ' | <strong>Estado:</strong> ' + (f.sn_pagada === 'S' ? 'Pagada' : 'Pendiente') + '</p>'
+      + (corr ? '<p style="font-size:0.85em;color:#64748b"><strong>Rango Autorizado:</strong> del ' + corr.rangoDesde + ' al ' + corr.rangoHasta + '</p>'
+              + '<p style="font-size:0.85em;color:#64748b"><strong>CAI:</strong> ' + corr.cai + '</p>' : '')
       + '<table style="width:100%;border-collapse:collapse;margin:15px 0">'
       + '<thead><tr style="background:#10b981;color:white">'
       + '<th style="padding:8px;border:1px solid #10b981">#</th>'

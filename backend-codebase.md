@@ -1,5 +1,5 @@
-# ERP Arcas - Código Fuente Completo
-> Generado automáticamente el 10/9/2026, 10:20:21 a. m.
+# ERP backend - Código Fuente Completo
+> Generado automáticamente el 17/9/2026, 11:21:15 p. m.
 
 ---
 
@@ -140,6 +140,7 @@ MAIL_FROM=
 ```typescript
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { FechaSistemaModule } from './shared/fecha-sistema.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CompaniesModule } from './modules/companies/companies.module';
@@ -166,6 +167,7 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
       autoLoadEntities: true,
       synchronize: false,
     }),
+    FechaSistemaModule,
     AuthModule,
     UsersModule,
     CompaniesModule,
@@ -540,12 +542,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
 ```typescript
 import {
-  Controller, Get, Post, Put, Body, Param, Query,
-  UseGuards, ParseIntPipe,
+  Controller, Get, Post, Delete, Put, Body, Param, Query,
+  UseGuards, ParseIntPipe, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { BancosService } from './bancos.service';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto } from './dto/banco.dto';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -655,11 +658,180 @@ export class BancosController {
     return this.service.findAllDirecciones(empresaId);
   }
 
+  @Post('direcciones')
+  @ApiOperation({ summary: 'Crear dirección de banco' })
+  @ApiResponse({ status: 201, description: 'Dirección creada exitosamente' })
+  createDireccion(@Body() dto: any, @CurrentUser() user: any) {
+    return this.service.createDireccion(dto, user.usuario);
+  }
+
+  @Put('direcciones/:id')
+  @ApiOperation({ summary: 'Actualizar dirección de banco' })
+  @ApiResponse({ status: 200, description: 'Dirección actualizada exitosamente' })
+  updateDireccion(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateDireccion(id, empresaId, dto, user.usuario);
+  }
+
   @Get('telefonos')
   @ApiOperation({ summary: 'Listar teléfonos de bancos' })
   @ApiResponse({ status: 200, description: 'Lista de teléfonos de bancos obtenida exitosamente' })
   findAllTelefonos(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllTelefonos(empresaId);
+  }
+
+  @Post('telefonos')
+  @ApiOperation({ summary: 'Crear teléfono de banco' })
+  @ApiResponse({ status: 201, description: 'Teléfono creado exitosamente' })
+  createTelefono(@Body() dto: any, @CurrentUser() user: any) {
+    return this.service.createTelefono(dto, user.usuario);
+  }
+
+  @Put('telefonos/:id')
+  @ApiOperation({ summary: 'Actualizar teléfono de banco' })
+  @ApiResponse({ status: 200, description: 'Teléfono actualizado exitosamente' })
+  updateTelefono(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateTelefono(id, empresaId, dto, user.usuario);
+  }
+
+  // ── Movimientos bancarios ──────────────────────────────────
+
+  @Get('movimientos')
+  @ApiOperation({ summary: 'Listar movimientos bancarios' })
+  @ApiResponse({ status: 200, description: 'Lista de movimientos obtenida exitosamente' })
+  findAllMovimientos(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('bcoctasId') bcoctasId?: string,
+  ) {
+    return this.service.findAllMovimientos(empresaId, bcoctasId ? Number(bcoctasId) : undefined);
+  }
+
+  @Get('cheques')
+  @ApiOperation({ summary: 'Listar cheques emitidos' })
+  @ApiResponse({ status: 200, description: 'Lista de cheques emitidos' })
+  findCheques(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('bcoctasId') bcoctasId?: string,
+  ) {
+    return this.service.findCheques(empresaId, bcoctasId ? Number(bcoctasId) : undefined);
+  }
+
+  @Get('movimientos/:id')
+  @ApiOperation({ summary: 'Obtener movimiento por ID' })
+  @ApiResponse({ status: 200, description: 'Movimiento encontrado' })
+  findMovimiento(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findMovimiento(id, empresaId);
+  }
+
+  @Post('movimientos')
+  @ApiOperation({ summary: 'Crear movimiento bancario' })
+  @ApiResponse({ status: 201, description: 'Movimiento creado exitosamente' })
+  createMovimiento(@Body() dto: CreateBcoMovimientoDto, @CurrentUser() user: any) {
+    return this.service.createMovimiento(dto, user.usuario);
+  }
+
+  @Put('movimientos/:id')
+  @ApiOperation({ summary: 'Actualizar movimiento bancario' })
+  @ApiResponse({ status: 200, description: 'Movimiento actualizado exitosamente' })
+  updateMovimiento(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateBcoMovimientoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateMovimiento(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('movimientos/:id/anular')
+  @ApiOperation({ summary: 'Anular movimiento bancario (con lógica CxP si es cheque)' })
+  @ApiResponse({ status: 200, description: 'Movimiento anulado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Error al anular' })
+  anularMovimiento(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.anularMovimiento(id, empresaId, user.usuario);
+  }
+
+  // ── Emisión de cheques ──────────────────────────────────
+
+  @Post('cheques/emitir')
+  @ApiOperation({ summary: 'Emitir cheques de pago a proveedores' })
+  @ApiResponse({ status: 201, description: 'Cheques emitidos exitosamente' })
+  @ApiResponse({ status: 400, description: 'Error al emitir cheques' })
+  emitirCheques(@Body() dto: EmitirChequeDto, @CurrentUser() user: any) {
+    return this.service.emitirCheques(dto, user.usuario);
+  }
+
+  @Post('cheques/emitir-particular')
+  @ApiOperation({ summary: 'Emitir cheque a particular / empleado' })
+  @ApiResponse({ status: 201, description: 'Cheque emitido exitosamente' })
+  @ApiResponse({ status: 400, description: 'Error al emitir cheque' })
+  emitirChequeParticular(@Body() dto: EmitirChequeParticularDto, @CurrentUser() user: any) {
+    return this.service.emitirChequeParticular(dto, user.usuario);
+  }
+
+  // ── Conciliación Bancaria ──
+
+  @Post('conciliaciones')
+  @ApiOperation({ summary: 'Guardar conciliación bancaria (maestro + detalle)' })
+  @ApiResponse({ status: 201, description: 'Conciliación guardada exitosamente' })
+  createConciliacion(@Body() dto: CreateConciliacionDto, @CurrentUser() user: any) {
+    return this.service.guardarConciliacion(dto, user.usuario || user.sub);
+  }
+
+  @Get('conciliaciones/:id/completa')
+  @ApiOperation({ summary: 'Obtener conciliación con detalles enriquecidos' })
+  @ApiResponse({ status: 200, description: 'Conciliación encontrada' })
+  @ApiResponse({ status: 404, description: 'Conciliación no encontrada' })
+  findConciliacionCompleta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findConciliacionCompleta(id, empresaId);
+  }
+
+  @Delete('conciliaciones/:id')
+  @ApiOperation({ summary: 'Eliminar conciliación bancaria' })
+  @ApiResponse({ status: 200, description: 'Conciliación eliminada' })
+  deleteConciliacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.deleteConciliacion(id, empresaId, user.usuario || user.sub);
+  }
+
+  @Post('conciliaciones/parsear-csv')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Parsear CSV del estado de cuenta bancario' })
+  @ApiResponse({ status: 200, description: 'CSV parseado exitosamente' })
+  parsearCsv(@UploadedFile() file: any) {
+    const content = file.buffer.toString('utf-8');
+    return this.service.parsearCsvConciliacion(content);
+  }
+
+  @Post('conciliaciones/matching')
+  @ApiOperation({ summary: 'Realizar matching entre CSV y movimientos bancarios' })
+  @ApiResponse({ status: 200, description: 'Matching completado' })
+  realizarMatching(
+    @Body() body: { bcoctasId: number; empresaId: number; lineasCsv: any[] },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.realizarMatching(body.bcoctasId, body.empresaId, body.lineasCsv, user.usuario || user.sub);
   }
 }
 
@@ -678,6 +850,10 @@ import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
+import { TbcoMovimiento } from './entities/bco-movimiento.entity';
+import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
+import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { BancosService } from './bancos.service';
 import { BancosController } from './bancos.controller';
 
@@ -690,6 +866,10 @@ import { BancosController } from './bancos.controller';
       TbcoConciliacionDet,
       TbcoDireccion,
       TbcoTelefono,
+      TbcoMovimiento,
+      TCxpCompraMae,
+      TCxpMovimiento,
+      TipoParametro,
     ]),
   ],
   controllers: [BancosController],
@@ -705,16 +885,21 @@ export class BancosModule {}
 ## 📄 src\modules\bancos\bancos.service.ts
 
 ```typescript
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, DataSource } from 'typeorm';
 import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto } from './dto/banco.dto';
+import { TbcoMovimiento } from './entities/bco-movimiento.entity';
+import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
+import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
 
 @Injectable()
 export class BancosService {
@@ -725,6 +910,12 @@ export class BancosService {
     @InjectRepository(TbcoConciliacionDet) private readonly bcoConciliacionDetRepo: Repository<TbcoConciliacionDet>,
     @InjectRepository(TbcoDireccion) private readonly bcoDireccionRepo: Repository<TbcoDireccion>,
     @InjectRepository(TbcoTelefono) private readonly bcoTelefonoRepo: Repository<TbcoTelefono>,
+    @InjectRepository(TbcoMovimiento) private readonly bcoMovimientoRepo: Repository<TbcoMovimiento>,
+    @InjectRepository(TCxpCompraMae) private readonly compraMaeRepo: Repository<TCxpCompraMae>,
+    @InjectRepository(TCxpMovimiento) private readonly cxpMovimientoRepo: Repository<TCxpMovimiento>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    private readonly fechaSistema: FechaSistemaService,
+    private readonly dataSource: DataSource,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -768,9 +959,10 @@ export class BancosService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -783,9 +975,10 @@ export class BancosService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -896,6 +1089,589 @@ export class BancosService {
   async updateTelefono(bancotelefonoId: number, empresaId: number, dto: any, currentUser: string) {
     return this.updateEntity(this.bcoTelefonoRepo, 'bancotelefonoId', bancotelefonoId, empresaId, dto, currentUser, 'Telefono Banco');
   }
+
+  // ── Movimientos bancarios ──────────────────────────────────
+
+  async findAllMovimientos(empresaId: number, bcoctasId?: number) {
+    const where: any = { empresaId };
+    if (bcoctasId) where.bcoctasId = bcoctasId;
+    return this.bcoMovimientoRepo.find({
+      where,
+      order: { fecharegistro: 'DESC' } as any,
+    });
+  }
+
+  async findCheques(empresaId: number, bcoctasId?: number) {
+    const qb = this.bcoMovimientoRepo.createQueryBuilder('m')
+      .innerJoin('bcosctas', 'ct', 'ct.bcoctasId = m.bcoctasId')
+      .innerJoin('bcos', 'b', 'b.bancoId = ct.bancoId')
+      .select([
+        'm.bcomovimientosId AS bcomovimientosId',
+        'm.fecharegistro AS fecharegistro',
+        'm.nrochq AS nrochq',
+        'm.importe AS importe',
+        'm.concepto AS concepto',
+        'm.sn_doc_anulado AS sn_doc_anulado',
+        'm.bcoctasId AS bcoctasId',
+        'ct.nrocuenta AS nrocuenta',
+        'b.descripcion AS bancoNombre',
+      ])
+      .where('m.empresaId = :empresaId', { empresaId })
+      .andWhere('m.nrochq IS NOT NULL')
+      .andWhere('m.nrochq != :empty', { empty: '' })
+      .andWhere('m.tipomov = :tipomov', { tipomov: 'PAGO' })
+      .orderBy('m.fecharegistro', 'DESC');
+
+    if (bcoctasId) {
+      qb.andWhere('m.bcoctasId = :bcoctasId', { bcoctasId });
+    }
+
+    return qb.getRawMany();
+  }
+
+  async findMovimiento(bcomovimientosId: number, empresaId: number) {
+    return this.findOneById(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, 'Movimiento Bancario');
+  }
+
+  async createMovimiento(dto: CreateBcoMovimientoDto, currentUser: string) {
+    return this.createEntity(this.bcoMovimientoRepo, dto, currentUser);
+  }
+
+  async updateMovimiento(bcomovimientosId: number, empresaId: number, dto: UpdateBcoMovimientoDto, currentUser: string) {
+    return this.updateEntity(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, dto, currentUser, 'Movimiento Bancario');
+  }
+
+  // ── Anulación de movimiento bancario ──────────────────────
+
+  async anularMovimiento(bcomovimientosId: number, empresaId: number, currentUser: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Buscar el movimiento bancario
+      const movBanco = await queryRunner.manager.findOne(TbcoMovimiento, {
+        where: { bcomovimientosId, empresaId } as any,
+      });
+
+      if (!movBanco) {
+        throw new BadRequestException('Movimiento bancario no encontrado');
+      }
+
+      if ((movBanco as any).sn_doc_anulado === 'S') {
+        throw new BadRequestException('El movimiento ya está anulado');
+      }
+
+      const now = await this.fechaSistema.getFecha(empresaId);
+      const esCheque = !!(movBanco as any).nrochq && (movBanco as any).nrochq !== '';
+
+      // 2. Anular bcosmovimientos
+      await queryRunner.manager.update(
+        TbcoMovimiento,
+        { bcomovimientosId, empresaId } as any,
+        { sn_doc_anulado: 'S', fec_anulacion: now } as any,
+      );
+
+      if (esCheque) {
+        const nrochq = (movBanco as any).nrochq;
+
+        // 3a. Anular cxpmovimientos vinculados al cheque
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(TCxpMovimiento)
+          .set({
+            sn_chq_anulado: 'S',
+            sn_chq: 'N',
+            nrochq: null,
+            sn_doc_anulado: 'S',
+            fec_anulacion: now,
+          } as any)
+          .where('nrochq = :nrochq', { nrochq })
+          .andWhere('empresaId = :empresaId', { empresaId })
+          .execute();
+
+        // 3b. Verificar si alguna compra queda sin pagar
+        const movimientosCxP = await queryRunner.manager.find(TCxpMovimiento, {
+          where: { nrochq, empresaId } as any,
+        });
+
+        const compraIds = [...new Set(movimientosCxP.map(m => m.nroreferencia).filter(Boolean))];
+
+        for (const compraIdStr of compraIds) {
+          const compraId = Number(compraIdStr);
+          if (!compraId) continue;
+
+          // Sumar pagos válidos (no anulados) para esta compra
+          const totalPagado = await queryRunner.manager
+            .createQueryBuilder(TCxpMovimiento, 'm')
+            .select('COALESCE(SUM(m.importe), 0)', 'total')
+            .where('m.nroreferencia = :compraId', { compraId: String(compraId) })
+            .andWhere('m.empresaId = :empresaId', { empresaId })
+            .andWhere('m.tipomov = :tipomov', { tipomov: 'C' })
+            .andWhere('m.sn_doc_anulado != :anulado', { anulado: 'S' })
+            .getRawOne();
+
+          const compra = await queryRunner.manager.findOne(TCxpCompraMae, {
+            where: { compraId, empresaId } as any,
+          });
+
+          if (compra) {
+            const saldoTotal = Number(totalPagado?.total || 0);
+            const totalCompra = Number((compra as any).total || 0);
+            const pagada = saldoTotal >= totalCompra;
+
+            await queryRunner.manager.update(
+              TCxpCompraMae,
+              { compraId, empresaId } as any,
+              { sn_pagada: pagada ? 'S' : 'N', usuarioUpdated: currentUser, fechaUpdated: now } as any,
+            );
+          }
+        }
+      } else {
+        // 3c. Movimiento no es cheque — solo anular cxpmovimientos vinculados por nroreferencia
+        const nroref = (movBanco as any).nroreferencia;
+        if (nroref) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .update(TCxpMovimiento)
+            .set({
+              sn_doc_anulado: 'S',
+              fec_anulacion: now,
+            } as any)
+            .where('nroreferencia = :nroref', { nroref })
+            .andWhere('empresaId = :empresaId', { empresaId })
+            .execute();
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        mensaje: esCheque
+          ? `Cheque #${(movBanco as any).nrochq} anulado — CxP y compra actualizados`
+          : 'Movimiento bancario anulado',
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException(`Error al anular: ${error.message}`);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async removeMovimiento(bcomovimientosId: number, empresaId: number) {
+    return this.softDelete(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, 'Movimiento Bancario');
+  }
+
+  // ── Emisión de cheques ──────────────────────────────────────
+
+  async emitirCheques(dto: EmitirChequeDto, currentUser: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const chequesEmitidos: any[] = [];
+      const now = await this.fechaSistema.getFecha(dto.empresaId);
+
+      // Obtener parámetro nrochq (una sola vez)
+      let parametroNroChq = await this.tipoParametroRepo.findOne({
+        where: { empresaId: dto.empresaId, field: 'nrochq' } as any,
+      });
+
+      if (!parametroNroChq) {
+        const nuevo = this.tipoParametroRepo.create({
+          empresaId: dto.empresaId,
+          field: 'nrochq',
+          tipo: 'NUMBER',
+          valor: '0',
+          moduloId: 6,
+          Idsucursal: 0,
+          usuarioCreated: currentUser,
+        } as any);
+        parametroNroChq = (await queryRunner.manager.save(nuevo)) as unknown as TipoParametro;
+      }
+
+      let nroChqActual = Number(parametroNroChq.valor) || 0;
+
+      // ── Un cheque por cada proveedor ──
+      for (const grupo of dto.grupos) {
+        nroChqActual++;
+        const nroChq = String(nroChqActual).padStart(10, '0');
+
+        const nrosFacturas = grupo.facturas.map(f => f.nroReferencia || String(f.compraId)).join(', ');
+        const conceptoBanco = `Pago a favor de ${grupo.beneficiario}, facturas: ${nrosFacturas}`;
+        const conceptoCxP = `Chq ${nroChq} - ${nrosFacturas}`;
+        const totalCheque = grupo.facturas.reduce((sum, f) => sum + (f.saldo || 0), 0);
+
+        // 1. Movimiento bancario consolidado (1 solo por proveedor)
+        const movBanco = queryRunner.manager.create(TbcoMovimiento, {
+          bancoId: dto.bancoId,
+          bcoctasId: dto.bcoctasId,
+          moduloId: 2,
+          tipomov: 'PAGO',
+          dc_debitocredito: 'D',
+          importe: totalCheque,
+          nroreferencia: nroChq,
+          nrochq: nroChq,
+          factordecambio: 1,
+          concepto: conceptoBanco,
+          empresaId: dto.empresaId,
+          usuarioCreated: currentUser,
+        });
+        await queryRunner.manager.save(movBanco);
+
+        // 2. Movimientos CxP — 1 por cada factura del grupo
+        for (const factura of grupo.facturas) {
+          const movCxP = queryRunner.manager.create(TCxpMovimiento, {
+            bcoctasId: dto.bcoctasId,
+            moduloId: 2,
+            documentoId: 1,
+            proveedorId: grupo.proveedorId,
+            codproveedor: grupo.codproveedor,
+            tipomov: 'C',
+            nroreferencia: factura.compraId.toString(),
+            descripcion1: conceptoCxP,
+            descripcion2: grupo.beneficiario,
+            importe: factura.saldo,
+            nrochq: nroChq,
+            sn_chq: 'S',
+            empresaId: dto.empresaId,
+            usuarioCreated: currentUser,
+          });
+          await queryRunner.manager.save(movCxP);
+
+          // 3. Verificar si la factura quedó completamente pagada
+          const totalPagado = await queryRunner.manager
+            .createQueryBuilder(TCxpMovimiento, 'm')
+            .select('COALESCE(SUM(m.importe), 0)', 'total')
+            .where('m.nroreferencia = :compraId', { compraId: String(factura.compraId) })
+            .andWhere('m.empresaId = :empresaId', { empresaId: dto.empresaId })
+            .andWhere('m.tipomov = :tipomov', { tipomov: 'C' })
+            .getRawOne();
+
+          const compra = await queryRunner.manager.findOne(TCxpCompraMae, {
+            where: { compraId: factura.compraId, empresaId: dto.empresaId } as any,
+          });
+
+          const saldoTotal = Number(totalPagado?.total || 0);
+          const totalCompra = Number(compra?.total || 0);
+          const pagada = saldoTotal >= totalCompra;
+
+          await queryRunner.manager.update(
+            TCxpCompraMae,
+            { compraId: factura.compraId, empresaId: dto.empresaId } as any,
+            { sn_pagada: pagada ? 'S' : 'N', usuarioUpdated: currentUser, fechaUpdated: now } as any,
+          );
+        }
+
+        chequesEmitidos.push({
+          nrochq: nroChq,
+          proveedor: grupo.beneficiario,
+          importe: totalCheque,
+          concepto: conceptoBanco,
+          facturas: grupo.facturas.map(f => ({
+            compraId: f.compraId,
+            nroReferencia: f.nroReferencia || String(f.compraId),
+            saldo: f.saldo,
+          })),
+        });
+      }
+
+      // 4. Actualizar número de cheque en parámetros
+      await queryRunner.manager.update(
+        TipoParametro,
+        { ttipoparametrosId: parametroNroChq.ttipoparametrosId } as any,
+        { valor: String(nroChqActual), usuarioUpdate: currentUser, fechaUpdate: now } as any,
+      );
+
+      await queryRunner.commitTransaction();
+
+      const totalGeneral = chequesEmitidos.reduce((sum, c) => sum + c.importe, 0);
+      return {
+        mensaje: `${chequesEmitidos.length} cheque(s) emitido(s) — L ${totalGeneral.toFixed(2)}`,
+        cheques: chequesEmitidos,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException(`Error al emitir cheques: ${error.message}`);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // ── Cheque a particular / empleado ──────────────────────────
+
+  async emitirChequeParticular(dto: EmitirChequeParticularDto, currentUser: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const now = await this.fechaSistema.getFecha(dto.empresaId);
+
+      // Obtener parámetro nrochq
+      let parametroNroChq = await this.tipoParametroRepo.findOne({
+        where: { empresaId: dto.empresaId, field: 'nrochq' } as any,
+      });
+
+      if (!parametroNroChq) {
+        const nuevo = this.tipoParametroRepo.create({
+          empresaId: dto.empresaId,
+          field: 'nrochq',
+          tipo: 'NUMBER',
+          valor: '0',
+          moduloId: 6,
+          Idsucursal: 0,
+          usuarioCreated: currentUser,
+        } as any);
+        parametroNroChq = (await queryRunner.manager.save(nuevo)) as unknown as TipoParametro;
+      }
+
+      const nroChqActual = Number(parametroNroChq.valor) + 1;
+      const nroChq = String(nroChqActual).padStart(10, '0');
+
+      // 1. Crear movimiento bancario (RETIRO - DÉBITO)
+      const movBanco = queryRunner.manager.create(TbcoMovimiento, {
+        bancoId: dto.bancoId,
+        bcoctasId: dto.bcoctasId,
+        moduloId: 2,
+        tipomov: 'PAGO',
+        dc_debitocredito: 'D',
+        importe: dto.importe,
+        nroreferencia: nroChq,
+        nrochq: nroChq,
+        factordecambio: 1,
+        concepto: `Pago a ${dto.beneficiario} — ${dto.concepto}`,
+        empresaId: dto.empresaId,
+        usuarioCreated: currentUser,
+      });
+      await queryRunner.manager.save(movBanco);
+
+      // 2. Actualizar nrochq
+      await queryRunner.manager.update(
+        TipoParametro,
+        { ttipoparametrosId: parametroNroChq.ttipoparametrosId } as any,
+        { valor: String(nroChqActual), usuarioUpdate: currentUser, fechaUpdate: now } as any,
+      );
+
+      await queryRunner.commitTransaction();
+
+      return {
+        mensaje: `Cheque ${nroChq} emitido — ${dto.beneficiario} — L ${dto.importe.toFixed(2)}`,
+        cheque: {
+          nrochq: nroChq,
+          proveedor: dto.beneficiario,
+          importe: dto.importe,
+          concepto: `Pago a ${dto.beneficiario} — ${dto.concepto}`,
+        },
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException(`Error al emitir cheque: ${error.message}`);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // ── Conciliación Bancaria ────────────────────────────────
+
+  /**
+   * Parsea CSV del estado de cuenta bancario.
+   * Formato: Fecha,Concepto,Referencia,Debito,Credito
+   */
+  parsearCsvConciliacion(csvContent: string): any[] {
+    const lineas = csvContent.split(/\r?\n/).filter(l => l.trim());
+    const resultados: any[] = [];
+
+    for (let i = 0; i < lineas.length; i++) {
+      const linea = lineas[i].trim();
+      if (i === 0 && !(/^\d{2}[\/\-]\d{2}[\/\-]\d{2,4}/).test(linea.split(',')[0].trim())) {
+        continue;
+      }
+
+      const partes = linea.split(',').map(p => p.trim().replace(/"/g, ''));
+      if (partes.length < 5) continue;
+
+      const [fecha, concepto, referencia, debito, credito] = partes;
+
+      const impDebito = Number(debito) || 0;
+      const impCredito = Number(credito) || 0;
+      const importe = impDebito > 0 ? impDebito : impCredito;
+      const naturaleza = impDebito > 0 ? 'D' : 'C';
+
+      let fechaMov: Date | null = null;
+      const matchFecha = fecha.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (matchFecha) {
+        const [, dia, mes, anio] = matchFecha;
+        const year = anio.length === 2 ? `20${anio}` : anio;
+        fechaMov = new Date(Number(year), Number(mes) - 1, Number(dia));
+      }
+
+      resultados.push({
+        fecmovbco: fechaMov,
+        concepto: concepto || '',
+        nrorefencia: referencia || '',
+        importe,
+        naturaleza,
+      });
+    }
+
+    return resultados;
+  }
+
+  /**
+   * Matching entre líneas del CSV y movimientos bancarios.
+   * Criterio: importe + referencia + naturaleza.
+   */
+  async realizarMatching(
+    bcoctasId: number,
+    empresaId: number,
+    lineasCsv: any[],
+    currentUser: string,
+  ) {
+    const movimientos = await this.bcoMovimientoRepo.find({
+      where: {
+        bcoctasId,
+        empresaId,
+        sn_doc_anulado: 'N',
+      } as any,
+    });
+
+    const detalles: any[] = [];
+    let totalConciliado = 0;
+    let totalDiferencia = 0;
+    let conciliados = 0;
+    let diferencias = 0;
+
+    for (const linea of lineasCsv) {
+      const referencia = (linea.nrorefencia || '').trim();
+      const importe = Number(linea.importe) || 0;
+
+      const movMatch = movimientos.find(m => {
+        const movRef = (m.nroreferencia || '').trim();
+        const movImporte = Number(m.importe) || 0;
+        return movRef === referencia && movImporte === importe && m.dc_debitocredito === linea.naturaleza;
+      });
+
+      const snConciliado = movMatch ? 'S' : 'N';
+      const bcomovimientosId = movMatch?.bcomovimientosId || null;
+
+      if (movMatch) {
+        totalConciliado += importe;
+        conciliados++;
+      } else {
+        totalDiferencia += importe;
+        diferencias++;
+      }
+
+      detalles.push({
+        fecmovbco: linea.fecmovbco,
+        nrorefencia: referencia,
+        concepto: linea.concepto,
+        importe,
+        naturaleza: linea.naturaleza,
+        sn_conciliado: snConciliado,
+        bcomovimientosId,
+        empresaId,
+        Idsucursal: 0,
+        usuarioCreated: currentUser,
+      });
+    }
+
+    return {
+      detalles,
+      resumen: {
+        totalRegistros: lineasCsv.length,
+        conciliados,
+        diferencias,
+        totalConciliado,
+        totalDiferencia,
+        totalEstadoCuenta: lineasCsv.reduce((s, l) => s + (Number(l.importe) || 0), 0),
+      },
+    };
+  }
+
+  /**
+   * Guarda conciliación: crea bcosccmae + bcosccdet
+   */
+  async guardarConciliacion(dto: CreateConciliacionDto, currentUser: string) {
+    const now = await this.fechaSistema.getFecha(dto.empresaId);
+
+    const mae = this.bcoConciliacionRepo.create({
+      ctabcoId: dto.ctabcoId,
+      importe: dto.detalles.reduce((s, d) => s + (Number(d.importe) || 0), 0),
+      sn_conciliado: 'S',
+      fechaDesde: dto.fechaDesde,
+      fechaHasta: dto.fechaHasta,
+      saldoInicial: dto.saldoInicial || 0,
+      saldoFinal: dto.saldoFinal || 0,
+      empresaId: dto.empresaId,
+      Idsucursal: dto.Idsucursal || 0,
+      usuarioCreated: currentUser,
+    } as any);
+    const savedMae = await this.bcoConciliacionRepo.save(mae) as unknown as TbcoConciliacion;
+
+    const detallesGuardados: any[] = [];
+    for (const det of dto.detalles) {
+      const detEntity = this.bcoConciliacionDetRepo.create({
+        bcoconcilacionId: (savedMae as any).bcoconcilacionId,
+        fecmovbco: det.fecmovbco,
+        nrorefencia: det.nrorefencia,
+        concepto: det.concepto,
+        importe: det.importe,
+        naturaleza: det.naturaleza,
+        sn_conciliado: det.sn_conciliado || 'N',
+        bcomovimientosId: det.bcomovimientosId || null,
+        empresaId: dto.empresaId,
+        Idsucursal: dto.Idsucursal || 0,
+        usuarioCreated: currentUser,
+      } as any);
+      const savedDet = await this.bcoConciliacionDetRepo.save(detEntity);
+      detallesGuardados.push(savedDet);
+    }
+
+    return {
+      bcoconcilacionId: (savedMae as any).bcoconcilacionId,
+      detalles: detallesGuardados,
+    };
+  }
+
+  /**
+   * Obtiene conciliación completa con detalles enriquecidos
+   */
+  async findConciliacionCompleta(bcoconcilacionId: number, empresaId: number) {
+    const mae = await this.findOneById(
+      this.bcoConciliacionRepo, 'bcoconcilacionId', bcoconcilacionId, empresaId, 'Conciliación',
+    );
+
+    const detalles = await this.bcoConciliacionDetRepo.find({
+      where: { bcoconcilacionId, empresaId } as any,
+    });
+
+    const detallesEnriquecidos = await Promise.all(
+      detalles.map(async (det) => {
+        let movimiento: any = null;
+        if (det.bcomovimientosId) {
+          movimiento = await this.bcoMovimientoRepo.findOne({
+            where: { bcomovimientosId: det.bcomovimientosId } as any,
+          });
+        }
+        return { ...det, movimiento };
+      }),
+    );
+
+    return { ...mae, detalles: detallesEnriquecidos };
+  }
+
+  /**
+   * Elimina conciliación y sus detalles
+   */
+  async deleteConciliacion(bcoconcilacionId: number, empresaId: number, currentUser: string) {
+    await this.bcoConciliacionDetRepo.delete({ bcoconcilacionId, empresaId } as any);
+    await this.bcoConciliacionRepo.delete({ bcoconcilacionId, empresaId } as any);
+    return { message: 'Conciliación eliminada' };
+  }
 }
 
 ```
@@ -905,8 +1681,9 @@ export class BancosService {
 ## 📄 src\modules\bancos\dto\banco.dto.ts
 
 ```typescript
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray, ValidateNested } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateBancoDto {
   @ApiProperty({ description: 'Nombre del banco' })
@@ -974,6 +1751,249 @@ export class UpdateBcoCtaDto {
   @ApiProperty({ required: false, description: 'ID de la sucursal' })
   @IsNumber() @IsOptional()
   Idsucursal?: number;
+}
+
+// ── Movimientos bancarios ──────────────────────────────────
+
+export class CreateBcoMovimientoDto {
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'ID de la cuenta bancaria' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del módulo origen' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], description: 'Tipo de movimiento' })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'])
+  tipomov: string;
+
+  @ApiProperty({ enum: ['D', 'C'], description: 'Débito o crédito' })
+  @IsEnum(['D', 'C'])
+  dc_debitocredito: string;
+
+  @ApiProperty({ required: false, description: 'Número de referencia' })
+  @IsString() @IsOptional()
+  nroreferencia?: string;
+
+  @ApiProperty({ required: false, description: 'Factor de cambio' })
+  @IsNumber() @IsOptional()
+  factordecambio?: number;
+
+  @ApiProperty({ description: 'Importe del movimiento' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ required: false, description: 'Concepto del movimiento' })
+  @IsString() @IsOptional()
+  concepto?: string;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateBcoMovimientoDto {
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], required: false })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO']) @IsOptional()
+  tipomov?: string;
+
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  dc_debitocredito?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  nroreferencia?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  factordecambio?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  importe?: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  concepto?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_doc_anulado?: string;
+}
+
+// ── Emisión de cheques ──────────────────────────────────────
+
+export class FacturaPendienteDto {
+  @ApiProperty({ description: 'ID de la compra (cxpcomprasmae)' })
+  @IsNumber()
+  compraId: number;
+
+  @ApiProperty({ description: 'Saldo pendiente de la factura' })
+  @IsNumber()
+  saldo: number;
+
+  @ApiProperty({ description: 'Nro. referencia de la factura (nroreferencia)' })
+  @IsOptional()
+  @IsString()
+  nroReferencia?: string;
+}
+
+export class GrupoProveedorDto {
+  @ApiProperty({ description: 'ID del proveedor' })
+  @IsNumber()
+  proveedorId: number;
+
+  @ApiProperty({ description: 'Código del proveedor' })
+  @IsString()
+  codproveedor: string;
+
+  @ApiProperty({ description: 'Razón social del proveedor (para el cheque)' })
+  @IsString()
+  beneficiario: string;
+
+  @ApiProperty({ description: 'Facturas a pagar con sus saldos' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacturaPendienteDto)
+  facturas: FacturaPendienteDto[];
+}
+
+export class EmitirChequeDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria origen' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'Grupos de proveedores — 1 cheque por grupo' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GrupoProveedorDto)
+  grupos: GrupoProveedorDto[];
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+// ── Cheque a particular / empleado ──────────────────────────
+
+export class EmitirChequeParticularDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria origen' })
+  @IsNumber()
+  bcoctasId: number;
+
+  @ApiProperty({ description: 'ID del banco' })
+  @IsNumber()
+  bancoId: number;
+
+  @ApiProperty({ description: 'Nombre del beneficiario (persona particular/empleado)' })
+  @IsString()
+  beneficiario: string;
+
+  @ApiProperty({ description: 'Concepto / motivo del pago' })
+  @IsString()
+  concepto: string;
+
+  @ApiProperty({ description: 'Importe del cheque' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+// ── Conciliación Bancaria ──────────────────────────────────
+
+export class CreateConciliacionDetDto {
+  @ApiProperty({ description: 'Fecha del movimiento bancario' })
+  @IsOptional()
+  fecmovbco?: Date;
+
+  @ApiProperty({ description: 'Nro. referencia' })
+  @IsString()
+  nrorefencia: string;
+
+  @ApiProperty({ description: 'Concepto/descripción' })
+  @IsString()
+  concepto: string;
+
+  @ApiProperty({ description: 'Importe' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ enum: ['D', 'C'], description: 'Naturaleza (Débito/Crédito)' })
+  @IsEnum(['D', 'C'])
+  naturaleza: string;
+
+  @ApiProperty({ required: false, description: 'Conciliado (S/N)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_conciliado?: string;
+
+  @ApiProperty({ required: false, description: 'ID del movimiento bancario coincidente' })
+  @IsNumber() @IsOptional()
+  bcomovimientosId?: number;
+}
+
+export class CreateConciliacionDto {
+  @ApiProperty({ description: 'ID de la cuenta bancaria' })
+  @IsNumber()
+  ctabcoId: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ required: false, description: 'Fecha desde del estado de cuenta' })
+  @IsOptional()
+  fechaDesde?: Date;
+
+  @ApiProperty({ required: false, description: 'Fecha hasta del estado de cuenta' })
+  @IsOptional()
+  fechaHasta?: Date;
+
+  @ApiProperty({ required: false, description: 'Saldo inicial del estado de cuenta' })
+  @IsNumber() @IsOptional()
+  saldoInicial?: number;
+
+  @ApiProperty({ required: false, description: 'Saldo final del estado de cuenta' })
+  @IsNumber() @IsOptional()
+  saldoFinal?: number;
+
+  @ApiProperty({ description: 'Detalle del estado de cuenta importado' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateConciliacionDetDto)
+  detalles: CreateConciliacionDetDto[];
+}
+
+export class UpdateConciliacionDto {
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_conciliado?: string;
+
+  @ApiProperty({ required: false })
+  @IsArray() @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateConciliacionDetDto)
+  detalles?: CreateConciliacionDetDto[];
 }
 
 ```
@@ -1069,6 +2089,14 @@ export class TbcoConciliacionDet {
   @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
   naturaleza: string;
 
+  @ApiProperty({ required: false, description: 'Conciliado: S=match, N=diferencia' })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_conciliado: string;
+
+  @ApiProperty({ required: false, description: 'ID del movimiento bancario coincidente (bcosmovimientos)' })
+  @Column({ type: 'int', nullable: true })
+  bcomovimientosId: number;
+
   @ApiProperty()
   @Column()
   Idsucursal: number;
@@ -1123,6 +2151,22 @@ export class TbcoConciliacion {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_conciliado: string;
+
+  @ApiProperty({ required: false, description: 'Fecha desde del estado de cuenta' })
+  @Column({ type: 'datetime', nullable: true })
+  fechaDesde: Date;
+
+  @ApiProperty({ required: false, description: 'Fecha hasta del estado de cuenta' })
+  @Column({ type: 'datetime', nullable: true })
+  fechaHasta: Date;
+
+  @ApiProperty({ required: false, description: 'Saldo inicial del estado de cuenta' })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  saldoInicial: number;
+
+  @ApiProperty({ required: false, description: 'Saldo final del estado de cuenta' })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  saldoFinal: number;
 
   @ApiProperty()
   @Column()
@@ -1251,6 +2295,81 @@ export class TbcoDireccion {
 
 ---
 
+## 📄 src\modules\bancos\entities\bco-movimiento.entity.ts
+
+```typescript
+import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity('bcosmovimientos')
+export class TbcoMovimiento {
+  @PrimaryGeneratedColumn()
+  bcomovimientosId: number;
+
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  fecharegistro: Date;
+
+  @Column()
+  bancoId: number;
+
+  @Column()
+  bcoctasId: number;
+
+  @Column()
+  moduloId: number;
+
+  @Column({ type: 'enum', enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], default: 'DEPOSITO' })
+  tipomov: string;
+
+  @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
+  dc_debitocredito: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  nroreferencia: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  nrochq: string;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  factordecambio: number;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  importe: number;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  concepto: string;
+
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_cotabilizada: string;
+
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_doc_anulado: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  fec_anulacion: Date;
+
+  @Column({ nullable: true })
+  partidaId: number;
+
+  @Column({ nullable: true })
+  Idsucursal: number;
+
+  @Column()
+  empresaId: number;
+
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdated: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
 ## 📄 src\modules\bancos\entities\bco-telefono.entity.ts
 
 ```typescript
@@ -1309,10 +2428,13 @@ export class TbcoTelefono {
   Controller, Get, Post, Put, Delete, Body, Param, Query,
   UseGuards, ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CompaniesService } from './companies.service';
 import { CreateEmpresaDto, UpdateEmpresaDto } from './dto/empresa.dto';
 import { CreateEmpresaDetDto, UpdateEmpresaDetDto } from './dto/empresasdet.dto';
+import { CreateCorrelativoDto, UpdateCorrelativoDto } from './dto/correlativos.dto';
+import { CreateEmpresaLogoDto, UpdateEmpresaLogoDto } from './dto/empresaslogo.dto';
+import { CreateImpresoraDto, UpdateImpresoraDto } from './dto/impresoras.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -1323,19 +2445,145 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class CompaniesController {
   constructor(private readonly service: CompaniesService) {}
 
+  // ============================================================
+  //  RUTAS ESTÁTICAS PRIMERO (antes de :id)
+  // ============================================================
+
+  // ===== Empresas =====
+
   @Get()
   @ApiOperation({ summary: 'Listar empresas' })
-  @ApiResponse({ status: 200, description: 'Lista de empresas obtenida exitosamente' })
   findAll() {
     return this.service.findAll();
   }
 
+  @Post()
+  @ApiOperation({ summary: 'Crear empresa' })
+  create(@Body() dto: CreateEmpresaDto, @CurrentUser() user: any) {
+    return this.service.create(dto, user.usuario);
+  }
+
+  // ===== EmpresaDet =====
+
   @Get('det')
   @ApiOperation({ summary: 'Listar datos de empresa (RTN, tel, dir, etc)' })
-  @ApiResponse({ status: 200, description: 'Datos de empresa obtenidos' })
   findAllDet(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllDet(empresaId);
   }
+
+  @Post('det')
+  @ApiOperation({ summary: 'Crear dato de empresa' })
+  createDet(
+    @Body() dto: CreateEmpresaDetDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.createDet(dto.empresaId!, dto, user.usuario);
+  }
+
+  // ===== Correlativos (CAI) =====
+
+  @Get('correlativos')
+  @ApiOperation({ summary: 'Listar correlativos de una empresa' })
+  findAllCorr(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCorr(empresaId);
+  }
+
+  @Get('correlativos/siguiente-nro')
+  @ApiOperation({ summary: 'Obtener siguiente numero de factura' })
+  findNextNroFactura(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('idsucursal', ParseIntPipe) idsucursal: number,
+  ) {
+    return this.service.findNextNroFactura(empresaId, idsucursal);
+  }
+
+  @Get('correlativos/estado')
+  @ApiOperation({ summary: 'Estado del rango de correlativos (disponibles, alertas)' })
+  findEstadoCorrelativo(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findEstadoCorrelativo(empresaId);
+  }
+
+  @Post('correlativos')
+  @ApiOperation({ summary: 'Crear correlativo' })
+  createCorr(
+    @Body() dto: CreateCorrelativoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.createCorr(dto.empresaId!, dto, user.usuario);
+  }
+
+  // ===== Sucursales =====
+
+  @Get('sucursales')
+  @ApiOperation({ summary: 'Listar sucursales de una empresa' })
+  findAllSucursales(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllSucursales(empresaId);
+  }
+
+  @Post('sucursales')
+  @ApiOperation({ summary: 'Crear sucursal' })
+  createSucursal(
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.createSucursal(dto.empresaId, dto, user.usuario);
+  }
+
+  // ===== Logo =====
+
+  @Get('logo')
+  @ApiOperation({ summary: 'Obtener logo de la empresa' })
+  findLogo(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findLogo(empresaId);
+  }
+
+  @Post('logo')
+  @ApiOperation({ summary: 'Crear/subir logo de la empresa' })
+  createLogo(
+    @Body() dto: CreateEmpresaLogoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.createLogo(dto.empresaId, dto, user.usuario);
+  }
+
+  // ===== Impresoras =====
+
+  @Get('impresoras')
+  @ApiOperation({ summary: 'Listar impresoras de una empresa' })
+  findAllImpresoras(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllImpresoras(empresaId);
+  }
+
+  @Post('impresoras')
+  @ApiOperation({ summary: 'Crear impresora' })
+  createImpresora(
+    @Body() dto: CreateImpresoraDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.createImpresora(dto.empresaId, dto, user.usuario);
+  }
+
+  // ============================================================
+  //  RUTAS CON PARÁMETRO :id DESPUÉS
+  // ============================================================
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener empresa por ID' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findOne(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Actualizar empresa' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateEmpresaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.update(id, dto, user.usuario);
+  }
+
+  // ===== EmpresaDet (con parámetro) =====
 
   @Get('det/:id')
   @ApiOperation({ summary: 'Obtener dato de empresa por ID' })
@@ -1346,46 +2594,8 @@ export class CompaniesController {
     return this.service.findOneDet(id, empresaId);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Obtener empresa por ID' })
-  @ApiResponse({ status: 200, description: 'Empresa encontrada' })
-  @ApiResponse({ status: 404, description: 'Empresa no encontrada' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
-  }
-
-  @Post()
-  @ApiOperation({ summary: 'Crear empresa' })
-  @ApiResponse({ status: 201, description: 'Empresa creada exitosamente' })
-  create(@Body() dto: CreateEmpresaDto, @CurrentUser() user: any) {
-    return this.service.create(dto, user.usuario);
-  }
-
-  @Post('det')
-  @ApiOperation({ summary: 'Crear dato de empresa' })
-  @ApiResponse({ status: 201, description: 'Dato de empresa creado' })
-  createDet(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: CreateEmpresaDetDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.createDet(empresaId, dto, user.usuario);
-  }
-
-  @Put(':id')
-  @ApiOperation({ summary: 'Actualizar empresa' })
-  @ApiResponse({ status: 200, description: 'Empresa actualizada exitosamente' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateEmpresaDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.update(id, dto, user.usuario);
-  }
-
   @Put('det/:id')
   @ApiOperation({ summary: 'Actualizar dato de empresa' })
-  @ApiResponse({ status: 200, description: 'Dato de empresa actualizado' })
   updateDet(
     @Param('id', ParseIntPipe) id: number,
     @Query('empresaId', ParseIntPipe) empresaId: number,
@@ -1395,9 +2605,94 @@ export class CompaniesController {
     return this.service.updateDet(id, empresaId, dto, user.usuario);
   }
 
+  @Delete('det/:id')
+  @ApiOperation({ summary: 'Eliminar dato de empresa' })
+  removeDet(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeDet(id, empresaId);
+  }
 
+  // ===== Correlativos (con parámetro) =====
+
+  @Get('correlativos/:id')
+  @ApiOperation({ summary: 'Obtener correlativo por ID' })
+  findOneCorr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findOneCorr(id, empresaId);
+  }
+
+  @Put('correlativos/:id')
+  @ApiOperation({ summary: 'Actualizar correlativo' })
+  updateCorr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCorrelativoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCorr(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('correlativos/:id')
+  @ApiOperation({ summary: 'Eliminar correlativo' })
+  removeCorr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCorr(id, empresaId);
+  }
+
+  // ===== Sucursales (con parámetro) =====
+
+  @Put('sucursales/:id')
+  @ApiOperation({ summary: 'Actualizar sucursal' })
+  updateSucursal(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateSucursal(id, dto, user.usuario);
+  }
+
+  // ===== Logo (con parámetro) =====
+
+  @Put('logo/:id')
+  @ApiOperation({ summary: 'Actualizar logo' })
+  updateLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateEmpresaLogoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateLogo(id, dto, user.usuario);
+  }
+
+  @Delete('logo/:id')
+  @ApiOperation({ summary: 'Eliminar logo' })
+  removeLogo(@Param('id', ParseIntPipe) id: number) {
+    return this.service.removeLogo(id);
+  }
+
+  // ===== Impresoras (con parámetro) =====
+
+  @Put('impresoras/:id')
+  @ApiOperation({ summary: 'Actualizar impresora' })
+  updateImpresora(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateImpresoraDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateImpresora(id, dto, user.usuario);
+  }
+
+  @Delete('impresoras/:id')
+  @ApiOperation({ summary: 'Eliminar impresora' })
+  removeImpresora(@Param('id', ParseIntPipe) id: number) {
+    return this.service.removeImpresora(id);
+  }
 }
-
 
 ```
 
@@ -1410,11 +2705,15 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Tempresas } from './entities/empresa.entity';
 import { TempresasDet } from './entities/empresasdet.entity';
+import { TempresasLogo } from './entities/empresaslogo.entity';
+import { TImpresora } from './entities/impresoras.entity';
+import { TPosCorrelativos } from '../facturacion/entities/poscorrelativos.entity';
+import { Tsucursal } from '../sucursales/entities/sucursal.entity';
 import { CompaniesService } from './companies.service';
 import { CompaniesController } from './companies.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Tempresas, TempresasDet])],
+  imports: [TypeOrmModule.forFeature([Tempresas, TempresasDet, TempresasLogo, TImpresora, TPosCorrelativos, Tsucursal])],
   controllers: [CompaniesController],
   providers: [CompaniesService],
   exports: [CompaniesService],
@@ -1431,10 +2730,18 @@ export class CompaniesModule {}
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tempresas } from './entities/empresa.entity';
 import { TempresasDet } from './entities/empresasdet.entity';
+import { TempresasLogo } from './entities/empresaslogo.entity';
+import { TImpresora } from './entities/impresoras.entity';
+import { TPosCorrelativos } from '../facturacion/entities/poscorrelativos.entity';
+import { Tsucursal } from '../sucursales/entities/sucursal.entity';
 import { CreateEmpresaDto, UpdateEmpresaDto } from './dto/empresa.dto';
 import { CreateEmpresaDetDto, UpdateEmpresaDetDto } from './dto/empresasdet.dto';
+import { CreateCorrelativoDto, UpdateCorrelativoDto } from './dto/correlativos.dto';
+import { CreateEmpresaLogoDto, UpdateEmpresaLogoDto } from './dto/empresaslogo.dto';
+import { CreateImpresoraDto, UpdateImpresoraDto } from './dto/impresoras.dto';
 
 @Injectable()
 export class CompaniesService {
@@ -1443,6 +2750,15 @@ export class CompaniesService {
     private readonly repo: Repository<Tempresas>,
     @InjectRepository(TempresasDet)
     private readonly detRepo: Repository<TempresasDet>,
+    @InjectRepository(TempresasLogo)
+    private readonly logoRepo: Repository<TempresasLogo>,
+    @InjectRepository(TImpresora)
+    private readonly impRepo: Repository<TImpresora>,
+    @InjectRepository(TPosCorrelativos)
+    private readonly corrRepo: Repository<TPosCorrelativos>,
+    @InjectRepository(Tsucursal)
+    private readonly sucRepo: Repository<Tsucursal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll() {
@@ -1468,7 +2784,7 @@ export class CompaniesService {
     const entity = await this.findOne(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }
@@ -1499,7 +2815,7 @@ export class CompaniesService {
     const entity = await this.findOneDet(empresasdetId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.detRepo.save(entity);
   }
@@ -1509,6 +2825,266 @@ export class CompaniesService {
     await this.detRepo.remove(entity);
     return { deleted: true };
   }
+
+  // ===== Correlativos (CAI) =====
+
+  async findAllCorr(empresaId: number) {
+    return this.corrRepo.find({
+      where: { empresaId },
+      order: { poscorrelativosId: 'ASC' },
+    });
+  }
+
+  async findOneCorr(poscorrelativosId: number, empresaId: number) {
+    const found = await this.corrRepo.findOne({
+      where: { poscorrelativosId, empresaId },
+    });
+    if (!found) throw new NotFoundException(`Correlativo ${poscorrelativosId} no encontrado`);
+    return found;
+  }
+
+  async createCorr(empresaId: number, dto: CreateCorrelativoDto, currentUser: string) {
+    const entity = this.corrRepo.create({
+      ...dto,
+      empresaId,
+      usuarioCreated: currentUser,
+    });
+    return this.corrRepo.save(entity);
+  }
+
+  async updateCorr(poscorrelativosId: number, empresaId: number, dto: UpdateCorrelativoDto, currentUser: string) {
+    const entity = await this.findOneCorr(poscorrelativosId, empresaId);
+    Object.assign(entity, dto, {
+      usuarioUpdated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
+    });
+    return this.corrRepo.save(entity);
+  }
+
+  async removeCorr(poscorrelativosId: number, empresaId: number) {
+    const entity = await this.findOneCorr(poscorrelativosId, empresaId);
+    await this.corrRepo.remove(entity);
+    return { deleted: true };
+  }
+
+  async findNextNroFactura(empresaId: number, idsucursal: number) {
+    const corr = await this.corrRepo.findOne({
+      where: { empresaId, Idsucursal: idsucursal },
+      order: { poscorrelativosId: 'DESC' },
+    });
+    return { nrofactura: corr ? corr.nrofactura + 1 : 1 };
+  }
+
+  /**
+   * Extrae el número secuencial del rango formateado.
+   * Ej: '000-001-01-00120001' → 120001
+   */
+  private extractRangoNumero(rango: string): number {
+    const partes = rango.split('-');
+    const ultimo = partes[partes.length - 1];
+    return parseInt(ultimo, 10) || 0;
+  }
+
+  async findEstadoCorrelativo(empresaId: number) {
+    const corr = await this.corrRepo.find({ where: { empresaId } });
+    return corr.map(c => {
+      const desde = this.extractRangoNumero(c.rangoDesde);
+      const hasta = this.extractRangoNumero(c.rangoHasta);
+      const usados = Number(c.nrofactura) || 0;
+      const total = hasta - desde + 1;
+      const disponible = Math.max(0, total - usados);
+      const porcentaje = total > 0 ? Math.min(100, (usados / total) * 100) : 0;
+
+      let estado: 'OK' | 'ALERTA' | 'CRITICO' | 'AGOTADO' = 'OK';
+      if (usados >= total) estado = 'AGOTADO';
+      else if (porcentaje >= 90) estado = 'CRITICO';
+      else if (porcentaje >= 80) estado = 'ALERTA';
+
+      return {
+        poscorrelativosId: c.poscorrelativosId,
+        Idsucursal: c.Idsucursal,
+        rangoDesde: c.rangoDesde,
+        rangoHasta: c.rangoHasta,
+        nrofactura: usados,
+        fechaLimite: c.fechaLimite,
+        total,
+        usados,
+        disponible,
+        porcentaje: Math.round(porcentaje),
+        estado,
+      };
+    });
+  }
+
+  // ===== Sucursales =====
+
+  async findAllSucursales(empresaId: number) {
+    return this.sucRepo.find({
+      where: { empresaId },
+      order: { idsucursal: 'ASC' },
+    });
+  }
+
+  async createSucursal(empresaId: number, dto: Partial<Tsucursal>, currentUser: string) {
+    const entity = this.sucRepo.create({
+      ...dto,
+      empresaId,
+      usuarioCreated: currentUser,
+    });
+    return this.sucRepo.save(entity);
+  }
+
+  async updateSucursal(idsucursal: number, dto: Partial<Tsucursal>, currentUser: string) {
+    const found = await this.sucRepo.findOne({ where: { idsucursal } });
+    if (!found) throw new NotFoundException(`Sucursal ${idsucursal} no encontrada`);
+    Object.assign(found, dto, {
+      usuarioUpdated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(found.empresaId),
+    });
+    return this.sucRepo.save(found);
+  }
+
+  // ===== Logo =====
+
+  async findLogo(empresaId: number) {
+    return this.logoRepo.findOne({ where: { empresaId }, order: { tempresaslogoId: 'DESC' } });
+  }
+
+  async createLogo(empresaId: number, dto: CreateEmpresaLogoDto, currentUser: string) {
+    // Desactivar logos anteriores de la misma empresa
+    const existing = await this.logoRepo.find({ where: { empresaId } });
+    for (const logo of existing) {
+      logo.sn_activo = 'N';
+      logo.usuarioUpdated = currentUser;
+      logo.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+      await this.logoRepo.save(logo);
+    }
+    const entity = this.logoRepo.create({
+      ...dto,
+      empresaId,
+      sn_activo: dto.sn_activo || 'S',
+      usuarioCreated: currentUser,
+    });
+    return this.logoRepo.save(entity);
+  }
+
+  async updateLogo(tempresaslogoId: number, dto: UpdateEmpresaLogoDto, currentUser: string) {
+    const entity = await this.logoRepo.findOne({ where: { tempresaslogoId } });
+    if (!entity) throw new NotFoundException(`Logo ${tempresaslogoId} no encontrado`);
+    Object.assign(entity, dto, {
+      usuarioUpdated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(entity.empresaId),
+    });
+    return this.logoRepo.save(entity);
+  }
+
+  async removeLogo(tempresaslogoId: number) {
+    const entity = await this.logoRepo.findOne({ where: { tempresaslogoId } });
+    if (!entity) throw new NotFoundException(`Logo ${tempresaslogoId} no encontrado`);
+    await this.logoRepo.remove(entity);
+    return { deleted: true };
+  }
+
+  // ===== Impresoras =====
+
+  async findAllImpresoras(empresaId: number) {
+    return this.impRepo.find({ where: { empresaId }, order: { timpresorasId: 'ASC' } });
+  }
+
+  async createImpresora(empresaId: number, dto: CreateImpresoraDto, currentUser: string) {
+    const entity = this.impRepo.create({
+      ...dto,
+      empresaId,
+      usuarioCreated: currentUser,
+    });
+    return this.impRepo.save(entity);
+  }
+
+  async updateImpresora(timpresorasId: number, dto: UpdateImpresoraDto, currentUser: string) {
+    const entity = await this.impRepo.findOne({ where: { timpresorasId } });
+    if (!entity) throw new NotFoundException(`Impresora ${timpresorasId} no encontrada`);
+    Object.assign(entity, dto, {
+      usuarioUpdated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(entity.empresaId),
+    });
+    return this.impRepo.save(entity);
+  }
+
+  async removeImpresora(timpresorasId: number) {
+    const entity = await this.impRepo.findOne({ where: { timpresorasId } });
+    if (!entity) throw new NotFoundException(`Impresora ${timpresorasId} no encontrada`);
+    await this.impRepo.remove(entity);
+    return { deleted: true };
+  }
+}
+
+```
+
+---
+
+## 📄 src\modules\companies\dto\correlativos.dto.ts
+
+```typescript
+import { IsNumber, IsString, IsNotEmpty, IsOptional, IsDateString, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateCorrelativoDto {
+  @ApiProperty({ description: 'ID de la sucursal' })
+  @IsNumber()
+  @IsNotEmpty()
+  Idsucursal: number;
+
+  @ApiProperty({ description: 'Rango desde (nro factura inicio)' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(1)
+  rangoDesde: string;
+
+  @ApiProperty({ description: 'Rango hasta (nro factura fin)' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(1)
+  rangoHasta: string;
+
+  @ApiProperty({ description: 'Numero de factura actual' })
+  @IsNumber()
+  @IsNotEmpty()
+  nrofactura: number;
+
+  @ApiProperty({ description: 'Fecha limite de vigencia del CAI' })
+  @IsNotEmpty()
+  fechaLimite: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  empresaId?: number;
+}
+
+export class UpdateCorrelativoDto {
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  rangoDesde?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  rangoHasta?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  nrofactura?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  fechaLimite?: string;
 }
 
 ```
@@ -1564,8 +3140,8 @@ import { IsString, IsNotEmpty, IsEnum, IsOptional, IsNumber } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateEmpresaDetDto {
-  @ApiProperty({ enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'] })
-  @IsEnum(['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'])
+  @ApiProperty({ enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'] })
+  @IsEnum(['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'])
   @IsNotEmpty()
   tipo: string;
 
@@ -1584,6 +3160,106 @@ export class CreateEmpresaDetDto {
 }
 
 export class UpdateEmpresaDetDto extends CreateEmpresaDetDto {}
+
+```
+
+---
+
+## 📄 src\modules\companies\dto\empresaslogo.dto.ts
+
+```typescript
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateEmpresaLogoDto {
+  @ApiProperty({ description: 'Imagen en base64 (data:image/...)' })
+  @IsString() @IsNotEmpty()
+  img: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber() @IsNotEmpty()
+  empresaId: number;
+}
+
+export class UpdateEmpresaLogoDto {
+  @ApiProperty({ required: false, description: 'Imagen en base64 (data:image/...)' })
+  @IsString() @IsOptional()
+  img?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+```
+
+---
+
+## 📄 src\modules\companies\dto\impresoras.dto.ts
+
+```typescript
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateImpresoraDto {
+  @ApiProperty({ required: false, description: 'Nombre/Descripción de la impresora' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ enum: ['TICKET', 'CARTA'], required: false, description: 'Formato de impresión' })
+  @IsEnum(['TICKET', 'CARTA']) @IsOptional()
+  formato?: string;
+
+  @ApiProperty({ required: false, description: 'Driver de la impresora' })
+  @IsString() @IsOptional()
+  driver?: string;
+
+  @ApiProperty({ required: false, description: 'Puerto de conexión' })
+  @IsString() @IsOptional()
+  puerto?: string;
+
+  @ApiProperty({ enum: ['A', 'M'], required: false, description: 'Modo correlativo: A=Automático, M=Manual' })
+  @IsEnum(['A', 'M']) @IsOptional()
+  modo_correlativo?: string;
+
+  @ApiProperty({ description: 'ID de la sucursal' })
+  @IsNumber() @IsNotEmpty()
+  Idsucursal: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber() @IsNotEmpty()
+  empresaId: number;
+}
+
+export class UpdateImpresoraDto {
+  @ApiProperty({ required: false, description: 'Nombre/Descripción de la impresora' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ enum: ['TICKET', 'CARTA'], required: false, description: 'Formato de impresión' })
+  @IsEnum(['TICKET', 'CARTA']) @IsOptional()
+  formato?: string;
+
+  @ApiProperty({ required: false, description: 'Driver de la impresora' })
+  @IsString() @IsOptional()
+  driver?: string;
+
+  @ApiProperty({ required: false, description: 'Puerto de conexión' })
+  @IsString() @IsOptional()
+  puerto?: string;
+
+  @ApiProperty({ enum: ['A', 'M'], required: false, description: 'Modo correlativo: A=Automático, M=Manual' })
+  @IsEnum(['A', 'M']) @IsOptional()
+  modo_correlativo?: string;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+}
 
 ```
 
@@ -1664,7 +3340,7 @@ export class TempresasDet {
   empresasdetId: number;
 
   @ApiProperty()
-  @Column({ type: 'enum', enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL'] })
+  @Column({ type: 'enum', enum: ['TELEFONO', 'DIRECCION', 'CORREO', 'RUC', 'RTN', 'WEBSITE', 'REDESOCIAL', 'CAI'] })
   tipo: string;
 
   @ApiProperty()
@@ -1696,19 +3372,1435 @@ export class TempresasDet {
 
 ---
 
+## 📄 src\modules\companies\entities\empresaslogo.entity.ts
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('tempresaslogo')
+export class TempresasLogo {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'tempresaslogoId' })
+  tempresaslogoId: number;
+
+  @ApiProperty()
+  @Column({ type: 'longtext' })
+  img: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_activo: string;
+
+  @ApiProperty()
+  @Column()
+  empresaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
+## 📄 src\modules\companies\entities\impresoras.entity.ts
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('timpresoras')
+export class TImpresora {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'timpresorasId' })
+  timpresorasId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 250, nullable: true })
+  descripcion: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['TICKET', 'CARTA'], default: 'TICKET' })
+  formato: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  driver: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  puerto: string;
+
+  @ApiProperty({ enum: ['A', 'M'], description: 'Modo correlativo: A=Automático, M=Manual' })
+  @Column({ type: 'enum', enum: ['A', 'M'], default: 'A' })
+  modo_correlativo: string;
+
+  @ApiProperty()
+  @Column()
+  Idsucursal: number;
+
+  @ApiProperty()
+  @Column()
+  empresaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
+## 📄 src\modules\contabilidad\contabilidad-logica.service.ts
+
+```typescript
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
+import { OnEvent } from '@nestjs/event-emitter';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
+import { Copdamae } from './entities/copdamae.entity';
+import { Copdadet } from './entities/copdadet.entity';
+import { Comovcta } from './entities/comovcta.entity';
+import { Cosaldoscta } from './entities/cosaldoscta.entity';
+import { Tcoctacontables } from './entities/tcoctacontables.entity';
+import { Coperiodoctable } from './entities/coperiodoctable.entity';
+import { Cocierrectable } from './entities/cocierrectable.entity';
+import { Tcoplantillapdamae } from './entities/tcoplantillapdamae.entity';
+import { Tcoplantillapdadet } from './entities/tcoplantillapdadet.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { TPosFacMae } from '../facturacion/entities/posfacmae.entity';
+import { TPosFacDet } from '../facturacion/entities/posfacdet.entity';
+import { TPosFacCaja } from '../facturacion/entities/posfaccaja.entity';
+import { Posfacmov } from '../facturacion/entities/posfacmov.entity';
+import { TinvExistencia } from '../inventario/entities/existencia.entity';
+import { CxcMovimiento } from '../cxc/entities/cxcmovimiento.entity';
+import { Tproducto } from '../inventario/entities/producto.entity';
+import { ContabilizarPartidaDto, CierreContableDto, ReporteContableDto } from './dto/contabilidad.dto';
+
+/**
+ * Servicio de Lógica de Negocio Contable
+ * Maneja: contabilización, cierre de períodos, generación de movimientos y reportes
+ */
+@Injectable()
+export class ContabilidadLogicaService {
+  private readonly logger = new Logger(ContabilidadLogicaService.name);
+
+  constructor(
+    @InjectRepository(Copdamae) private readonly copdamaeRepo: Repository<Copdamae>,
+    @InjectRepository(Copdadet) private readonly copdadetRepo: Repository<Copdadet>,
+    @InjectRepository(Comovcta) private readonly movctaRepo: Repository<Comovcta>,
+    @InjectRepository(Cosaldoscta) private readonly saldosctaRepo: Repository<Cosaldoscta>,
+    @InjectRepository(Tcoctacontables) private readonly ctacontablesRepo: Repository<Tcoctacontables>,
+    @InjectRepository(Coperiodoctable) private readonly periodoctableRepo: Repository<Coperiodoctable>,
+    @InjectRepository(Cocierrectable) private readonly cierrectableRepo: Repository<Cocierrectable>,
+    @InjectRepository(Tcoplantillapdamae) private readonly plantillaMaeRepo: Repository<Tcoplantillapdamae>,
+    @InjectRepository(Tcoplantillapdadet) private readonly plantillaDetRepo: Repository<Tcoplantillapdadet>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    @InjectRepository(TPosFacMae) private readonly facMaeRepo: Repository<TPosFacMae>,
+    @InjectRepository(TPosFacDet) private readonly facDetRepo: Repository<TPosFacDet>,
+    @InjectRepository(TPosFacCaja) private readonly facCajaRepo: Repository<TPosFacCaja>,
+    @InjectRepository(Posfacmov) private readonly posfacmovRepo: Repository<Posfacmov>,
+    @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
+    @InjectRepository(CxcMovimiento) private readonly cxcMovimientoRepo: Repository<CxcMovimiento>,
+    @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
+    private readonly fechaSistema: FechaSistemaService,
+  ) {}
+
+  // ==================== CONTABILIZACIÓN ====================
+
+  /**
+   * Contabiliza una partida: crea copdamae + copdadet + actualiza comovcta + cosaldoscta
+   * Valida que la partida esté cuadrada (débitos = créditos)
+   */
+  async contabilizarPartida(dto: ContabilizarPartidaDto, currentUser: string): Promise<Copdamae> {
+    // 1. Validar que la partida esté cuadrada
+    this.validarPartidaCuadrada(dto.lineas);
+
+    // 2. Verificar que el período esté abierto
+    await this.verificarPeriodoAbierto(dto.empresaId, dto.anio, dto.periodo);
+
+    // 3. Verificar que las cuentas contables existan y sean operables
+    await this.verificarCuentasContables(dto.lineas, dto.empresaId);
+
+    // 4. Generar número de partida
+    const nropartida = await this.generarNroPartida(dto.empresaId, dto.anio, dto.periodo);
+
+    // 5. Crear copdamae (maestro)
+    const fecha = await this.fechaSistema.getFecha(dto.empresaId);
+    const copdamae = this.copdamaeRepo.create({
+      empresaId: dto.empresaId,
+      Idsucursal: dto.Idsucursal,
+      periodo: dto.periodo,
+      anio: dto.anio,
+      moduloId: dto.moduloId,
+      documentoId: dto.documentoId,
+      fechadocumento: dto.fechadocumento ? new Date(dto.fechadocumento) : fecha,
+      factordecambio: dto.factordecambio ?? 0,
+      nroreferencia: dto.nroreferencia,
+      descripcion: dto.descripcion,
+      nropartida,
+      sn_activo: 'S',
+      usuarioCreated: currentUser,
+    });
+    const savedMae = await this.copdamaeRepo.save(copdamae);
+
+    // 6. Crear copdadet (detalles)
+    let nrofila = 1;
+    for (const linea of dto.lineas) {
+      const det = this.copdadetRepo.create({
+        empresaId: dto.empresaId,
+        Idsucursal: dto.Idsucursal,
+        partidaId: savedMae.partidaId,
+        periodo: dto.periodo,
+        anio: dto.anio,
+        nropartida,
+        moduloId: dto.moduloId,
+        nrofila: nrofila++,
+        ctacontable: linea.ctacontable,
+        descripcion: linea.descripcion ?? dto.descripcion,
+        debito: linea.debito,
+        credito: linea.credito,
+        factordecambio: dto.factordecambio ?? 0,
+        sn_activo: 'S',
+        usuarioCreated: currentUser,
+      });
+      await this.copdadetRepo.save(det);
+    }
+
+    // 7. Actualizar movimientos contables (comovcta)
+    await this.actualizarMovimientosContables(dto.lineas, dto.empresaId, nropartida, dto.periodo, dto.anio, currentUser);
+
+    // 8. Actualizar saldos de cuentas (cosaldoscta)
+    await this.actualizarSaldosCuentas(dto.lineas, dto.empresaId, dto.periodo, dto.anio, currentUser);
+
+    this.logger.log(`Partida ${nropartida} contabilizada por ${currentUser} - Empresa ${dto.empresaId}`);
+    return savedMae;
+  }
+
+  /**
+   * Valida que débitos = créditos en la partida
+   */
+  private validarPartidaCuadrada(lineas: { debito: number; credito: number }[]): void {
+    if (!lineas || lineas.length < 2) {
+      throw new BadRequestException('La partida debe tener al menos 2 líneas');
+    }
+
+    const totalDebito = lineas.reduce((sum, l) => sum + (Number(l.debito) || 0), 0);
+    const totalCredito = lineas.reduce((sum, l) => sum + (Number(l.credito) || 0), 0);
+
+    // Redondeo a 2 decimales para evitar errores de punto flotante
+    const redondear = (n: number) => Math.round(n * 100) / 100;
+
+    if (redondear(totalDebito) !== redondear(totalCredito)) {
+      throw new BadRequestException(
+        `La partida no está cuadrada. Débitos: ${totalDebito.toFixed(2)}, Créditos: ${totalCredito.toFixed(2)}, Diferencia: ${Math.abs(totalDebito - totalCredito).toFixed(2)}`
+      );
+    }
+
+    if (redondear(totalDebito) === 0) {
+      throw new BadRequestException('La partida no puede tener todos los montos en cero');
+    }
+  }
+
+  /**
+   * Verifica que el período contable esté abierto
+   */
+  private async verificarPeriodoAbierto(empresaId: number, anio: number, periodo: number): Promise<void> {
+    const periodoEntity = await this.periodoctableRepo.findOne({
+      where: {
+        nroanio: anio,
+        nromes: periodo,
+        empresaId,
+      } as unknown as FindOptionsWhere<Coperiodoctable>,
+    });
+
+    if (!periodoEntity) {
+      throw new BadRequestException(`No existe el período ${periodo}/${anio} para esta empresa`);
+    }
+
+    if (periodoEntity.sn_abierto !== 'S') {
+      throw new BadRequestException(`El período ${periodo}/${anio} está cerrado. No se pueden registrar movimientos.`);
+    }
+  }
+
+  /**
+   * Verifica que todas las cuentas contables de la partida existan y sean operables
+   */
+  private async verificarCuentasContables(
+    lineas: { ctacontable: string }[],
+    empresaId: number,
+  ): Promise<void> {
+    const cuentasUnicas = [...new Set(lineas.map(l => l.ctacontable))];
+
+    for (const cta of cuentasUnicas) {
+      const cuenta = await this.ctacontablesRepo.findOne({
+        where: {
+          ctacontable: cta,
+          empresaId,
+          sn_activo: 'S',
+        } as unknown as FindOptionsWhere<Tcoctacontables>,
+      });
+
+      if (!cuenta) {
+        throw new BadRequestException(`La cuenta contable ${cta} no existe o no está activa`);
+      }
+
+      if (cuenta.sn_operable !== 'S') {
+        throw new BadRequestException(`La cuenta contable ${cta} no es operable (no permite movimientos)`);
+      }
+    }
+  }
+
+  /**
+   * Genera el siguiente número de partida para el período
+   */
+  private async generarNroPartida(empresaId: number, anio: number, periodo: number): Promise<number> {
+    const resultado = await this.copdamaeRepo
+      .createQueryBuilder('mae')
+      .select('MAX(mae.nropartida)', 'maxPartida')
+      .where('mae.empresaId = :empresaId', { empresaId })
+      .andWhere('mae.anio = :anio', { anio })
+      .andWhere('mae.periodo = :periodo', { periodo })
+      .getRawOne();
+
+    return (resultado?.maxPartida ?? 0) + 1;
+  }
+
+  /**
+   * Actualiza la tabla de movimientos contables (comovcta)
+   * Acumula débitos y créditos por cuenta, período y año
+   */
+  private async actualizarMovimientosContables(
+    lineas: { ctacontable: string; debito: number; credito: number }[],
+    empresaId: number,
+    nropartida: number,
+    periodo: number,
+    anio: number,
+    currentUser: string,
+  ): Promise<void> {
+    for (const linea of lineas) {
+      const montoDebito = Number(linea.debito) || 0;
+      const montoCredito = Number(linea.credito) || 0;
+
+      if (montoDebito === 0 && montoCredito === 0) continue;
+
+      // Buscar movimiento existente para esta cuenta/período/año
+      let mov = await this.movctaRepo.findOne({
+        where: {
+          ctacontable: linea.ctacontable,
+          empresaId,
+          anio,
+          periodo,
+        } as unknown as FindOptionsWhere<Comovcta>,
+      });
+
+      if (mov) {
+        // Acumular
+        mov.debe = Number(mov.debe) + montoDebito;
+        mov.haber = Number(mov.haber) + montoCredito;
+        mov.saldo = Number(mov.debe) - Number(mov.haber);
+        mov.ultnropda = nropartida;
+        mov.fecultmov = new Date();
+        await this.movctaRepo.save(mov);
+      } else {
+        // Crear nuevo
+        mov = this.movctaRepo.create({
+          empresaId,
+          monedaId: 1, // Lempiras por defecto
+          ctacontable: linea.ctacontable,
+          anio,
+          periodo,
+          sacum: 0,
+          debe: montoDebito,
+          haber: montoCredito,
+          saldo: montoDebito - montoCredito,
+          ultnropda: nropartida,
+          fecultmov: new Date(),
+          usuarioCreated: currentUser,
+        });
+        await this.movctaRepo.save(mov);
+      }
+    }
+  }
+
+  /**
+   * Actualiza la tabla de saldos mensuales (cosaldoscta)
+   * Actualiza el saldo del mes correspondiente
+   */
+  private async actualizarSaldosCuentas(
+    lineas: { ctacontable: string; debito: number; credito: number }[],
+    empresaId: number,
+    periodo: number,
+    anio: number,
+    currentUser: string,
+  ): Promise<void> {
+    const meses = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ];
+    const mesColumna = meses[periodo - 1];
+
+    for (const linea of lineas) {
+      const montoDebito = Number(linea.debito) || 0;
+      const montoCredito = Number(linea.credito) || 0;
+      const montoNeto = montoDebito - montoCredito;
+
+      if (montoNeto === 0) continue;
+
+      // Buscar saldo existente
+      let saldo = await this.saldosctaRepo.findOne({
+        where: {
+          ctacontable: linea.ctacontable,
+          empresaId,
+          anio,
+        } as unknown as FindOptionsWhere<Cosaldoscta>,
+      });
+
+      if (saldo) {
+        // Acumular en el mes correspondiente
+        const valorActual = Number(saldo[mesColumna]) || 0;
+        (saldo as any)[mesColumna] = valorActual + montoNeto;
+        await this.saldosctaRepo.save(saldo);
+      } else {
+        // Crear nuevo registro de saldo
+        const nuevoSaldo: any = {
+          ctacontable: linea.ctacontable,
+          empresaId,
+          anio,
+          saldoanterior: 0,
+          usuarioCreated: currentUser,
+        };
+        // Inicializar todos los meses en 0
+        for (const mes of meses) {
+          nuevoSaldo[mes] = 0;
+        }
+        nuevoSaldo[mesColumna] = montoNeto;
+
+        const nuevoSaldoEntity = this.saldosctaRepo.create(nuevoSaldo);
+        await this.saldosctaRepo.save(nuevoSaldoEntity);
+      }
+    }
+  }
+
+  // ==================== CIERRE CONTABLE ====================
+
+  /**
+   * Realiza el cierre de un período contable
+   * 1. Valida que no existan partidas abiertas
+   * 2. Marca el período como cerrado
+   * 3. Registra el cierre
+   */
+  async realizarCierre(dto: CierreContableDto, currentUser: string): Promise<any> {
+    // 1. Verificar que el período exista y esté abierto
+    const periodo = await this.periodoctableRepo.findOne({
+      where: {
+        nroanio: dto.anio,
+        nromes: dto.periodo,
+        empresaId: dto.empresaId,
+      } as unknown as FindOptionsWhere<Coperiodoctable>,
+    });
+
+    if (!periodo) {
+      throw new BadRequestException(`No existe el período ${dto.periodo}/${dto.anio}`);
+    }
+
+    if (periodo.sn_abierto !== 'S') {
+      throw new BadRequestException(`El período ${dto.periodo}/${dto.anio} ya está cerrado`);
+    }
+
+    // 2. Verificar que no existan partidas sin contabilizar del período
+    // (Por ahora solo validamos que el período esté abierto)
+
+    // 3. Cerrar el período
+    periodo.sn_abierto = 'N';
+    periodo.usuarioUpdated = currentUser;
+    await this.periodoctableRepo.save(periodo);
+
+    // 4. Registrar el cierre
+    const fecha = await this.fechaSistema.getFecha(dto.empresaId);
+    const cierre = this.cierrectableRepo.create({
+      empresaId: dto.empresaId,
+      periodo: dto.periodo,
+      anio: dto.anio,
+      fechacierre: fecha,
+      observacion: dto.observacion ?? `Cierre período ${dto.periodo}/${dto.anio}`,
+      sn_activo: 'S',
+      usuarioCreated: currentUser,
+    });
+    const savedCierre = await this.cierrectableRepo.save(cierre);
+
+    this.logger.log(`Cierre ${dto.periodo}/${dto.anio} realizado por ${currentUser} - Empresa ${dto.empresaId}`);
+    return savedCierre;
+  }
+
+  // ==================== REPORTES ====================
+
+  /**
+   * Genera Balance de Comprobación
+   * Lista todas las cuentas con movimiento en el período, mostrando débitos, créditos y saldos
+   */
+  async generarBalanceComprobacion(dto: ReporteContableDto): Promise<any[]> {
+    // Obtener todos los movimientos del período
+    const movimientos = await this.movctaRepo.find({
+      where: {
+        empresaId: dto.empresaId,
+        anio: dto.anio,
+        periodo: dto.periodo,
+      } as unknown as FindOptionsWhere<Comovcta>,
+    });
+
+    // Agrupar por cuenta
+    const mapaCuentas = new Map<string, { debe: number; haber: number; saldo: number }>();
+
+    for (const mov of movimientos) {
+      const clave = mov.ctacontable;
+      const actual = mapaCuentas.get(clave) || { debe: 0, haber: 0, saldo: 0 };
+      actual.debe += Number(mov.debe) || 0;
+      actual.haber += Number(mov.haber) || 0;
+      actual.saldo = actual.debe - actual.haber;
+      mapaCuentas.set(clave, actual);
+    }
+
+    // Enriquecer con descripción de cuenta
+    const resultado: any[] = [];
+    for (const [ctacontable, datos] of mapaCuentas) {
+      const cuenta = await this.ctacontablesRepo.findOne({
+        where: { ctacontable, empresaId: dto.empresaId } as unknown as FindOptionsWhere<Tcoctacontables>,
+      });
+
+      resultado.push({
+        ctacontable,
+        descripcion: cuenta?.descripcion ?? '',
+        saldoAnterior: 0,
+        debeMes: datos.debe,
+        haberMes: datos.haber,
+        saldoDeudor: datos.saldo > 0 ? datos.saldo : 0,
+        saldoAcreedor: datos.saldo < 0 ? Math.abs(datos.saldo) : 0,
+      });
+    }
+
+    return resultado.sort((a, b) => a.ctacontable.localeCompare(b.ctacontable));
+  }
+
+  /**
+   * Genera Libro Diario
+   * Lista todas las partidas contables del período con sus detalles
+   */
+  async generarLibroDiario(dto: ReporteContableDto): Promise<any[]> {
+    const partidas = await this.copdamaeRepo.find({
+      where: {
+        empresaId: dto.empresaId,
+        anio: dto.anio,
+        periodo: dto.periodo,
+        sn_activo: 'S',
+      } as unknown as FindOptionsWhere<Copdamae>,
+      order: { nropartida: 'ASC' } as any,
+    });
+
+    const resultado: any[] = [];
+
+    for (const mae of partidas) {
+      const detalles = await this.copdadetRepo.find({
+        where: {
+          partidaId: mae.partidaId,
+          sn_activo: 'S',
+        } as unknown as FindOptionsWhere<Copdadet>,
+        order: { nrofila: 'ASC' } as any,
+      });
+
+      resultado.push({
+        nropartida: mae.nropartida,
+        fecha: mae.fechadocumento,
+        descripcion: mae.descripcion,
+        referencia: mae.nroreferencia,
+        lineas: detalles.map(d => ({
+          ctacontable: d.ctacontable,
+          descripcion: d.descripcion,
+          debito: Number(d.debito) || 0,
+          credito: Number(d.credito) || 0,
+        })),
+      });
+    }
+
+    return resultado;
+  }
+
+  /**
+   * Genera Libro Mayor
+   * Muestra movimientos agrupados por cuenta contable
+   */
+  async generarLibroMayor(dto: ReporteContableDto): Promise<any[]> {
+    const movimientos = await this.movctaRepo.find({
+      where: {
+        empresaId: dto.empresaId,
+        anio: dto.anio,
+        periodo: dto.periodo,
+      } as unknown as FindOptionsWhere<Comovcta>,
+      order: { ctacontable: 'ASC' } as any,
+    });
+
+    const resultado: any[] = [];
+    for (const mov of movimientos) {
+      const cuenta = await this.ctacontablesRepo.findOne({
+        where: { ctacontable: mov.ctacontable, empresaId: dto.empresaId } as unknown as FindOptionsWhere<Tcoctacontables>,
+      });
+
+      resultado.push({
+        ctacontable: mov.ctacontable,
+        descripcionCta: cuenta?.descripcion ?? '',
+        anio: mov.anio,
+        periodo: mov.periodo,
+        debe: Number(mov.debe) || 0,
+        haber: Number(mov.haber) || 0,
+        saldo: Number(mov.saldo) || 0,
+        sacum: Number(mov.sacum) || 0,
+        fecultmov: mov.fecultmov,
+        ultnropda: mov.ultnropda,
+      });
+    }
+
+    return resultado;
+  }
+
+  // ==================== INTEGRACIÓN CON MÓDULOS ====================
+
+  /**
+   * Busca una factura por ID y empresaId.
+   */
+  async findFacturaById(facturaId: number, empresaId: number): Promise<TPosFacMae | null> {
+    return this.facMaeRepo.findOne({
+      where: { facturaId, empresaId } as FindOptionsWhere<TPosFacMae>,
+    });
+  }
+
+  async findMovimientoCxC(clienteMovId: number, empresaId: number): Promise<CxcMovimiento | null> {
+    return this.cxcMovimientoRepo.findOne({
+      where: { clienteMovId, empresaId } as unknown as FindOptionsWhere<CxcMovimiento>,
+    });
+  }
+
+  /**
+   * Diagnóstico: verifica por qué la contabilización no se ejecuta.
+   * Retorna un objeto con el estado de cada paso.
+   */
+  async diagnosticarContabilizacion(facturaId: number, empresaId: number): Promise<any> {
+    const diagnostico: any = { facturaId, empresaId, pasos: [] };
+
+    // 1. Buscar factura
+    const factura = await this.findFacturaById(facturaId, empresaId);
+    diagnostico.factura = factura
+      ? { tipofactura: factura.tipofactura, total: factura.total, empresaId: factura.empresaId, bodegaId: factura.bodegaId, sn_contabilizada: factura.sn_contabilizada }
+      : null;
+    diagnostico.pasos.push({ paso: 'factura', ok: !!factura });
+
+    if (!factura) return diagnostico;
+
+    // 2. Verificar parámetro
+    const param = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId: 3, field: 'sn_integrar_facturacion', sn_activo: 'S' } as any,
+    });
+    diagnostico.parametro = param ? { valor: param.valor } : null;
+    diagnostico.pasos.push({ paso: 'parametro', ok: param?.valor === 'S', valor: param?.valor });
+
+    if (param?.valor !== 'S') return diagnostico;
+
+    // 3. Buscar plantilla
+    const descBusqueda = factura.tipofactura === 'C' ? '%credito%' : '%contado%';
+    const plantillaMae = await this.plantillaMaeRepo.createQueryBuilder('mae')
+      .where('mae.moduloId = :moduloId', { moduloId: 3 })
+      .andWhere('mae.empresaId = :empresaId', { empresaId })
+      .andWhere('mae.sn_activo = :activo', { activo: 'S' })
+      .andWhere('LOWER(mae.descripcion) LIKE LOWER(:desc)', { desc: descBusqueda })
+      .getOne();
+    diagnostico.plantilla = plantillaMae
+      ? { id: plantillaMae.tcoplantillapdamaeId, descripcion: plantillaMae.descripcion }
+      : null;
+    diagnostico.pasos.push({ paso: 'plantilla', ok: !!plantillaMae, busqueda: descBusqueda });
+
+    if (!plantillaMae) return diagnostico;
+
+    // 4. Detalles plantilla
+    const plantillaDet = await this.plantillaDetRepo.find({
+      where: { tcoplantillapdamaeId: plantillaMae.tcoplantillapdamaeId, sn_activo: 'S' } as any,
+      order: { nrofila: 'ASC' },
+    });
+    diagnostico.plantillaDetalles = plantillaDet.map(d => ({
+      nrofila: d.nrofila, ctacontable: d.ctacontable, descripcion: d.descripcion, naturaleza: d.naturaleza,
+    }));
+    diagnostico.pasos.push({ paso: 'plantilla_detalles', ok: plantillaDet.length > 0, count: plantillaDet.length });
+
+    // 5. Detalles factura
+    const detalles = await this.facDetRepo.find({
+      where: { facturaId } as any,
+    });
+    diagnostico.facDetalles = detalles.map(d => ({
+      productoId: d.productoId, cantidad: d.cantidad, precioventa: d.precioventa, impuesto: d.impuesto, descuento: d.descuento,
+    }));
+    diagnostico.pasos.push({ paso: 'fac_detalles', ok: detalles.length > 0, count: detalles.length });
+
+    // 6. Costos desde existencias
+    for (const det of detalles) {
+      const exist = await this.existenciaRepo.findOne({
+        where: { bodegaId: factura.bodegaId, productoId: det.productoId, empresaId } as any,
+      });
+      diagnostico.pasos.push({
+        paso: `costo_prod_${det.productoId}`,
+        ok: !!exist && Number(exist.costounitario) > 0,
+        costounitario: exist?.costounitario,
+      });
+    }
+
+    return diagnostico;
+  }
+
+  /**
+   * Genera asiento contable automático para una factura de venta.
+   * Lee plantilla de partidas (tcoplantillapdamae/det) según tipo (contado/crédito).
+   * Calcula montos reales: subtotal, descuento, ISV, costo de venta.
+   *
+   * Estructura de partida (6 líneas):
+   *   D: Caja/CxC          → total factura (venta neta)
+   *   C: Ventas            → subtotal bruto (antes de descuento)
+   *   D: Descuento s/ventas → total descuento
+   *   C: ISV por pagar     → impuesto
+   *   D: Costo de venta    → cantidad × costo unitario
+   *   C: Mercancía         → cantidad × costo unitario
+   */
+  async contabilizarFactura(
+    factura: TPosFacMae,
+    empresaId: number,
+    Idsucursal: number,
+    currentUser: string,
+  ): Promise<void> {
+    try {
+      // 1. Verificar si la integración contable está habilitada
+      const paramKey = 'sn_integrar_facturacion';
+      const valorParam = await this.getValorParametro(empresaId, 3, paramKey);
+      if (valorParam !== 'S') {
+        this.logger.debug(`Integración contable deshabilitada (${paramKey}=${valorParam})`);
+        return;
+      }
+
+      // 2. Buscar plantilla PDA según tipo de factura
+      const descBusqueda = factura.tipofactura === 'C'
+        ? '%credito%'    // Crédito: "Partida Venta al credito"
+        : '%contado%';   // Contado: "Partida Ventas al contado"
+
+      const plantillaMae = await this.plantillaMaeRepo
+        .createQueryBuilder('mae')
+        .where('mae.moduloId = :moduloId', { moduloId: 3 })
+        .andWhere('mae.empresaId = :empresaId', { empresaId })
+        .andWhere('mae.sn_activo = :activo', { activo: 'S' })
+        .andWhere('LOWER(mae.descripcion) LIKE LOWER(:desc)', { desc: descBusqueda })
+        .getOne();
+
+      if (!plantillaMae) {
+        this.logger.warn(
+          `No se encontró plantilla PDA para factura ${factura.tipofactura === 'C' ? 'crédito' : 'contado'} `
+          + `(empresaId=${empresaId}). No se genera partida contable.`,
+        );
+        return;
+      }
+
+      // 3. Leer detalles de la factura
+      const detalles = await this.facDetRepo.find({
+        where: { facturaId: factura.facturaId } as FindOptionsWhere<TPosFacDet>,
+      });
+
+      if (!detalles || detalles.length === 0) {
+        this.logger.warn(`Factura ${factura.nrofactura} sin detalles. No se genera partida.`);
+        return;
+      }
+
+      // 4. Calcular montos desde los detalles
+      let subtotalBruto = 0;   // Suma de (precioventa × cantidad) — precio sin descuento
+      let totalDescuento = 0;  // Suma de descuentos (montos)
+      let totalImpuesto = 0;   // Suma de impuestos
+
+      for (const det of detalles) {
+        const precio = Number(det.precioventa) || 0;
+        const cant = Number(det.cantidad) || 0;
+        const desc = Number(det.descuento) || 0; // Monto de descuento (ya calculado)
+        const imp = Number(det.impuesto) || 0;
+
+        subtotalBruto += precio * cant;
+        totalDescuento += desc;
+        totalImpuesto += imp;
+      }
+
+      const ventaBruta = subtotalBruto;  // Subtotal bruto (antes de descuento)
+      // Calcular venta neta desde componentes (NO usar factura.total porque puede incluir redondeos/ajustes)
+      const ventaNeta = ventaBruta - totalDescuento + totalImpuesto;
+
+      // 5. Calcular costo de venta desde productos (cstounit)
+      let totalCostoVenta = 0;
+      for (const det of detalles) {
+        const cant = Number(det.cantidad) || 0;
+        if (cant <= 0) continue;
+
+        const producto = await this.productoRepo.findOne({
+          where: {
+            produtoId: det.productoId,
+          } as FindOptionsWhere<Tproducto>,
+        });
+
+        const costoUnit = producto ? Number(producto.cstounit) || 0 : 0;
+        totalCostoVenta += cant * costoUnit;
+      }
+
+      this.logger.log(
+        `Factura ${factura.nrofactura}: ventaBruta=${ventaBruta}, descuento=${totalDescuento}, `
+        + `impuesto=${totalImpuesto}, costoVenta=${totalCostoVenta}, total=${ventaNeta}`,
+      );
+
+      // 6. Leer detalles de la plantilla y mapear conceptos a montos
+      const plantillaDetalles = await this.plantillaDetRepo.find({
+        where: {
+          tcoplantillapdamaeId: plantillaMae.tcoplantillapdamaeId,
+          sn_activo: 'S',
+        } as FindOptionsWhere<Tcoplantillapdadet>,
+        order: { nrofila: 'ASC' },
+      });
+
+      if (!plantillaDetalles || plantillaDetalles.length === 0) {
+        this.logger.warn(`Plantilla ${plantillaMae.descripcion} sin detalles. No se genera partida.`);
+        return;
+      }
+
+      // 7. Construir líneas de la partida basadas en la plantilla
+      const lineas: { ctacontable: string; descripcion: string; debito: number; credito: number }[] = [];
+
+      for (const det of plantillaDetalles) {
+        const concepto = this.identificarConcepto(det.descripcion || '');
+        let monto = 0;
+
+        switch (concepto) {
+          case 'COBRO':
+            // Caja General (contado) o CxC (crédito) → total factura
+            monto = ventaNeta;
+            break;
+          case 'VENTA':
+            // Ventas gravadas → subtotal bruto
+            monto = ventaBruta;
+            break;
+          case 'DESCUENTO':
+            // Descuento sobre ventas → solo si hay descuento
+            monto = totalDescuento;
+            break;
+          case 'ISV':
+            // Impuesto → solo si hay impuesto (no exenta)
+            monto = totalImpuesto;
+            break;
+          case 'COSTO':
+            // Costo de venta
+            monto = totalCostoVenta;
+            break;
+          case 'MERCANCIA':
+            // Mercancía en inventario
+            monto = totalCostoVenta;
+            break;
+          default:
+            this.logger.warn(`Concepto no reconocido en plantilla: "${det.descripcion}" (ctacontable=${det.ctacontable})`);
+            continue;
+        }
+
+        // Omitir líneas con monto 0 (ej: sin descuento, factura exenta)
+        if (monto <= 0) {
+          this.logger.debug(`Línea omitida (monto=0): ${concepto} — ${det.ctacontable}`);
+          continue;
+        }
+
+        lineas.push({
+          ctacontable: det.ctacontable,
+          descripcion: `${det.descripcion} - Factura #${factura.nrofactura}`,
+          debito: det.naturaleza === 'D' ? monto : 0,
+          credito: det.naturaleza === 'C' ? monto : 0,
+        });
+      }
+
+      if (lineas.length === 0) {
+        this.logger.warn(`No se generaron líneas para factura ${factura.nrofactura}`);
+        return;
+      }
+
+      // 8. Validar cuadratura (débitos = créditos)
+      const totalDebitos = lineas.reduce((sum, l) => sum + (Number(l.debito) || 0), 0);
+      const totalCreditos = lineas.reduce((sum, l) => sum + (Number(l.credito) || 0), 0);
+      const redondear = (n: number) => Math.round(n * 100) / 100;
+
+      if (redondear(totalDebitos) !== redondear(totalCreditos)) {
+        this.logger.error(
+          `Partida NO cuadrada para factura ${factura.nrofactura}: `
+          + `Débitos=${totalDebitos}, Créditos=${totalCreditos}. No se genera partida.`,
+        );
+        return;
+      }
+
+      // 9. Crear la partida contable
+      const fecha = await this.fechaSistema.getFecha(empresaId);
+      const periodo = new Date(fecha).getMonth() + 1;
+      const anio = new Date(fecha).getFullYear();
+
+      const copdamae = await this.contabilizarPartida({
+        empresaId,
+        Idsucursal,
+        periodo,
+        anio,
+        moduloId: 2, // Facturación
+        documentoId: factura.facturaId,
+        fechadocumento: factura.fecharegistro as any,
+        nroreferencia: `FAC-${factura.nrofactura}`,
+        descripcion: `Factura #${factura.nrofactura} - ${factura.nombrecliente || 'Cliente'}`,
+        lineas,
+      }, currentUser);
+
+      // 10. Guardar referencia de la partida en la factura
+      await this.facMaeRepo.createQueryBuilder()
+        .update(TPosFacMae)
+        .set({
+          partidaId: copdamae.partidaId,
+          sn_contabilizada: 'S',
+          usuarioUpdated: currentUser,
+        } as any)
+        .where('facturaId = :id', { id: factura.facturaId })
+        .execute();
+
+      // 11. Registrar en bitácora posfacmov (partida de venta)
+      await this.posfacmovRepo.save({
+        fecharegistro: new Date(),
+        facturaId: factura.facturaId,
+        moduloId: 2, // Facturación
+        partidaId: copdamae.partidaId,
+        Idsucursal,
+        empresaId,
+        usuarioCreated: currentUser,
+      });
+
+      this.logger.log(
+        `Factura ${factura.nrofactura} contabilizada automáticamente `
+        + `(partida ${copdamae.nropartida}, ${lineas.length} líneas)`,
+      );
+    } catch (error) {
+      this.logger.error(`Error al contabilizar factura ${factura.nrofactura}: ${error.message}`);
+      // No lanzamos error para no bloquear la factura
+    }
+  }
+
+  /**
+   * Descontabiliza una factura: anula la partida contable vinculada.
+   * Se usa al anular una factura que ya estaba contabilizada.
+   */
+  async descontabilizarFactura(
+    factura: TPosFacMae,
+    empresaId: number,
+    currentUser: string,
+  ): Promise<void> {
+    try {
+      if (factura.sn_contabilizada !== 'S' || !factura.partidaId) {
+        this.logger.debug(`Factura ${factura.nrofactura} no está contabilizada. Nada que descontabilizar.`);
+        return;
+      }
+
+      // 1. Buscar la partida maestro
+      const copdamae = await this.copdamaeRepo.findOne({
+        where: {
+          partidaId: factura.partidaId,
+          empresaId,
+        } as FindOptionsWhere<Copdamae>,
+      });
+
+      if (!copdamae) {
+        this.logger.warn(`Partida ${factura.partidaId} no encontrada para factura ${factura.nrofactura}`);
+        return;
+      }
+
+      // 2. Marcar maestro como inactivo
+      await this.copdamaeRepo.createQueryBuilder()
+        .update(Copdamae)
+        .set({ sn_activo: 'N' } as any)
+        .where('partidaId = :id', { id: copdamae.partidaId })
+        .execute();
+
+      // 3. Marcar todos los detalles como inactivos
+      await this.copdadetRepo.createQueryBuilder()
+        .update(Copdadet)
+        .set({ sn_activo: 'N' } as any)
+        .where('partidaId = :id', { id: copdamae.partidaId })
+        .execute();
+
+      // 4. Revertir movimientos contables (comovcta)
+      const detallesPartida = await this.copdadetRepo.find({
+        where: { partidaId: copdamae.partidaId } as FindOptionsWhere<Copdadet>,
+      });
+
+      for (const det of detallesPartida) {
+        const mov = await this.movctaRepo.findOne({
+          where: {
+            ctacontable: det.ctacontable,
+            anio: copdamae.anio,
+            periodo: copdamae.periodo,
+            empresaId,
+          } as FindOptionsWhere<Comovcta>,
+        });
+
+        if (mov) {
+          await this.movctaRepo.createQueryBuilder()
+            .update(Comovcta)
+            .set({
+              debe: Number(mov.debe) - Number(det.debito),
+              haber: Number(mov.haber) - Number(det.credito),
+            } as any)
+            .where('movctascontablesId = :id', { id: mov.movctascontablesId })
+            .execute();
+        }
+      }
+
+      // 5. Limpiar referencia en la factura
+      await this.facMaeRepo.createQueryBuilder()
+        .update(TPosFacMae)
+        .set({
+          partidaId: null,
+          sn_contabilizada: 'N',
+          usuarioUpdated: currentUser,
+        } as any)
+        .where('facturaId = :id', { id: factura.facturaId })
+        .execute();
+
+      this.logger.log(
+        `Factura ${factura.nrofactura} descontabilizada `
+        + `(partida ${copdamae.nropartida} anulada)`,
+      );
+    } catch (error) {
+      this.logger.error(`Error al descontabilizar factura ${factura.nrofactura}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Identifica el concepto contable de una línea de plantilla por palabras clave.
+   * Las plantillas usan la descripción para indicar a qué概念o corresponde cada cuenta.
+   */
+  private identificarConcepto(descripcion: string): string {
+    const desc = descripcion.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    if (desc.includes('CAJA') || desc.includes('COBRAR') || desc.includes('CUENTAS POR COBRAR')) {
+      return 'COBRO';
+    }
+    if (desc.includes('DESCUENTO')) {
+      return 'DESCUENTO';
+    }
+    // IMPORTANTE: ISV/IMPUESTO antes que VENTAS porque "IMPUESTO SOBRE VENTAS" contiene "VENTAS"
+    if (desc.includes('IMPUESTO') || desc.includes('ISV') || desc.includes('IVA')) {
+      return 'ISV';
+    }
+    // IMPORTANTE: COSTO antes que VENTAS porque "COSTO DE VENTA" contiene "VENTA"
+    if (desc.includes('COSTO')) {
+      return 'COSTO';
+    }
+    if (desc.includes('VENTAS') || desc.includes('VENTA')) {
+      return 'VENTA';
+    }
+    if (desc.includes('MERCADERIA') || desc.includes('MERCANC') || desc.includes('INVENTARIO')) {
+      return 'MERCANCIA';
+    }
+
+    return 'DESCONOCIDO';
+  }
+
+  /**
+   * Lee un parámetro de ttipoparametros por empresa, módulo y campo.
+   * Retorna el valor como string, o defaultValue si no existe.
+   */
+  private async getValorParametro(
+    empresaId: number,
+    moduloId: number,
+    field: string,
+    defaultValue: string = 'N',
+  ): Promise<string> {
+    try {
+      const param = await this.tipoParametroRepo.findOne({
+        where: {
+          empresaId,
+          moduloId,
+          field,
+          sn_activo: 'S',
+        } as FindOptionsWhere<TipoParametro>,
+      });
+      return param ? param.valor : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  }
+
+  /**
+   * Genera asiento contable para un movimiento de CxC (abono de cliente).
+   * Lee plantilla PDA 3 ("Partida abono de clientes") y genera la partida:
+   *   D: Caja General (1110-001) → monto del abono
+   *   C: CxC Clientes (1120-001) → monto del abono
+   * Registra en bitácora posfacmov y vincula partidaId al movimiento CxC.
+   *
+   * @param movimiento Objeto CxC con: cxcmovimientoId, nroreferencia (nrofactura), importe, cliente, empresaId, Idsucursal
+   * @param facturaId ID de la factura en posfacmae (para vincular en posfacmov)
+   */
+  async contabilizarCxC(movimiento: any, empresaId: number, Idsucursal: number, currentUser: string, facturaId?: number): Promise<number | null> {
+    try {
+      // 1. Verificar si la integración CxC está habilitada
+      const paramKey = 'sn_integrar_cxc';
+      const valorParam = await this.getValorParametro(empresaId, 3, paramKey);
+      if (valorParam !== 'S') {
+        this.logger.debug(`Integración CxC deshabilitada (${paramKey}=${valorParam})`);
+        return null;
+      }
+
+      // 2. Buscar plantilla PDA para abono de clientes (descripcion LIKE '%abono%')
+      const plantillaMae = await this.plantillaMaeRepo
+        .createQueryBuilder('mae')
+        .where('mae.moduloId = :moduloId', { moduloId: 4 })
+        .andWhere('mae.empresaId = :empresaId', { empresaId })
+        .andWhere('mae.sn_activo = :activo', { activo: 'S' })
+        .andWhere('LOWER(mae.descripcion) LIKE LOWER(:desc)', { desc: '%abono%' })
+        .getOne();
+
+      if (!plantillaMae) {
+        this.logger.warn(
+          `No se encontró plantilla PDA para abono CxC (empresaId=${empresaId}). `
+          + `No se genera partida contable.`,
+        );
+        return null;
+      }
+
+      // 3. Leer detalles de la plantilla
+      const plantillaDetalles = await this.plantillaDetRepo.find({
+        where: {
+          tcoplantillapdamaeId: plantillaMae.tcoplantillapdamaeId,
+          sn_activo: 'S',
+        } as FindOptionsWhere<Tcoplantillapdadet>,
+        order: { nrofila: 'ASC' },
+      });
+
+      if (!plantillaDetalles || plantillaDetalles.length === 0) {
+        this.logger.warn(`Plantilla ${plantillaMae.descripcion} sin detalles. No se genera partida.`);
+        return null;
+      }
+
+      // 4. Construir líneas de la partida desde la plantilla
+      const movId = movimiento.clienteMovId || movimiento.cxcmovimientoId;
+      const importe = Number(movimiento.importe) || 0;
+      const nroFactura = movimiento.nroreferencia || '';
+      const nroCliente = movimiento.nrocliente || '';
+      const conceptoBase = movimiento.concepto || 'Abono';
+
+      const lineas: { ctacontable: string; descripcion: string; debito: number; credito: number }[] = [];
+
+      for (const det of plantillaDetalles) {
+        const desc = (det.descripcion || '').toUpperCase();
+
+        // Omitir líneas con monto 0
+        if (importe <= 0) continue;
+
+        lineas.push({
+          ctacontable: det.ctacontable,
+          descripcion: `${det.descripcion} - Factura #${nroFactura} - ${conceptoBase}`,
+          debito: det.naturaleza === 'D' ? importe : 0,
+          credito: det.naturaleza === 'C' ? importe : 0,
+        });
+      }
+
+      if (lineas.length === 0) {
+        this.logger.warn(`No se generaron líneas para abono CxC ref=${nroFactura}`);
+        return null;
+      }
+
+      // 5. Validar cuadratura (débitos = créditos)
+      const totalDebitos = lineas.reduce((sum, l) => sum + (Number(l.debito) || 0), 0);
+      const totalCreditos = lineas.reduce((sum, l) => sum + (Number(l.credito) || 0), 0);
+      const redondear = (n: number) => Math.round(n * 100) / 100;
+
+      if (redondear(totalDebitos) !== redondear(totalCreditos)) {
+        this.logger.error(
+          `Partida CxC NO cuadrada ref=${nroFactura}: `
+          + `Débitos=${totalDebitos}, Créditos=${totalCreditos}. No se genera partida.`,
+        );
+        return null;
+      }
+
+      // 6. Crear la partida contable
+      const fecha = await this.fechaSistema.getFecha(empresaId);
+      const periodo = new Date(fecha).getMonth() + 1;
+      const anio = new Date(fecha).getFullYear();
+
+      const copdamae = await this.contabilizarPartida({
+        empresaId,
+        Idsucursal,
+        periodo,
+        anio,
+        moduloId: 4, // CxC
+        documentoId: movId,
+        nroreferencia: `CXC-${nroFactura}`,
+        descripcion: `Abono CxC - Factura #${nroFactura} - Cliente ${nroCliente}`,
+        lineas,
+      }, currentUser);
+
+      // 7. Registrar en bitácora posfacmov (partida de abono CxC)
+      if (facturaId) {
+        await this.posfacmovRepo.save({
+          fecharegistro: new Date(),
+          facturaId,
+          moduloId: 4, // CxC
+          partidaId: copdamae.partidaId,
+          Idsucursal,
+          empresaId,
+          usuarioCreated: currentUser,
+        });
+      }
+
+      // 8. Actualizar movimiento CxC con partidaId y sn_cotabilizada
+      await this.cxcMovimientoRepo.createQueryBuilder()
+        .update(CxcMovimiento)
+        .set({
+          partidaId: copdamae.partidaId,
+          sn_cotabilizada: 'S',
+          usuarioUpdated: currentUser,
+          fechaUpdated: new Date(),
+        } as any)
+        .where('clienteMovId = :id', { id: movId })
+        .execute();
+
+      this.logger.log(
+        `Movimiento CxC ${movId} contabilizado `
+        + `(partida ${copdamae.nropartida}, ref=${nroFactura}, monto=${importe})`,
+      );
+      return copdamae.partidaId;
+    } catch (error) {
+      this.logger.error(`Error al contabilizar CxC: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Genera asiento contable para un movimiento de CxP (pago a proveedor)
+   * Débito: CxP / Crédito: Efectivo/Banco
+   */
+  async contabilizarCxP(movimiento: any, empresaId: number, Idsucursal: number, currentUser: string): Promise<void> {
+    try {
+      const lineas: { ctacontable: string; descripcion: string; debito: number; credito: number }[] = [];
+
+      // Débito: CxP
+      lineas.push({
+        ctacontable: '2110-001', // Proveedores Nacionales
+        descripcion: `Pago CxP - ${movimiento.proveedor || ''}`,
+        debito: Number(movimiento.importe) || 0,
+        credito: 0,
+      });
+
+      // Crédito: Efectivo/Banco
+      lineas.push({
+        ctacontable: '1110-001', // Caja General
+        descripcion: `Pago CxP - Ref: ${movimiento.nroreferencia}`,
+        debito: 0,
+        credito: Number(movimiento.importe) || 0,
+      });
+
+      const fecha = await this.fechaSistema.getFecha(empresaId);
+      const periodo = new Date(fecha).getMonth() + 1;
+      const anio = new Date(fecha).getFullYear();
+
+      await this.contabilizarPartida({
+        empresaId,
+        Idsucursal,
+        periodo,
+        anio,
+        moduloId: 5, // CxP
+        documentoId: movimiento.cxpmovimientoId,
+        nroreferencia: `CXP-${movimiento.cxpmovimientoId}`,
+        descripcion: `Pago CxP - ${movimiento.proveedor}`,
+        lineas,
+      }, currentUser);
+
+      this.logger.log(`Movimiento CxP ${movimiento.cxpmovimientoId} contabilizado`);
+    } catch (error) {
+      this.logger.error(`Error al contabilizar CxP ${movimiento.cxpmovimientoId}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Genera asiento contable para un movimiento bancario
+   * Débito: Banco / Crédito: Efectivo (transferencia) o viceversa
+   */
+  async contabilizarBanco(movimiento: any, empresaId: number, Idsucursal: number, currentUser: string): Promise<void> {
+    try {
+      const lineas: { ctacontable: string; descripcion: string; debito: number; credito: number }[] = [];
+
+      if (movimiento.dc_debitocredito === 'D') {
+        // Débito: Banco (entrada)
+        lineas.push({
+          ctacontable: '1120101', // Bancos
+          descripcion: `Movimiento bancario - ${movimiento.nroreferencia}`,
+          debito: movimiento.importe,
+          credito: 0,
+        });
+        // Crédito: Ingresos
+        lineas.push({
+          ctacontable: '4110101', // Ingresos
+          descripcion: `Ingreso bancario`,
+          debito: 0,
+          credito: movimiento.importe,
+        });
+      } else {
+        // Débito: Egresos
+        lineas.push({
+          ctacontable: '5110101', // Egresos
+          descripcion: `Egreso bancario - ${movimiento.nroreferencia}`,
+          debito: movimiento.importe,
+          credito: 0,
+        });
+        // Crédito: Banco (salida)
+        lineas.push({
+          ctacontable: '1120101', // Bancos
+          descripcion: `Movimiento bancario`,
+          debito: 0,
+          credito: movimiento.importe,
+        });
+      }
+
+      const fecha = await this.fechaSistema.getFecha(empresaId);
+      const periodo = new Date(fecha).getMonth() + 1;
+      const anio = new Date(fecha).getFullYear();
+
+      await this.contabilizarPartida({
+        empresaId,
+        Idsucursal,
+        periodo,
+        anio,
+        moduloId: 6, // Bancos
+        documentoId: movimiento.bcomovimientosId,
+        nroreferencia: `BCO-${movimiento.bcomovimientosId}`,
+        descripcion: `Movimiento bancario - ${movimiento.nroreferencia}`,
+        lineas,
+      }, currentUser);
+
+      this.logger.log(`Movimiento bancario ${movimiento.bcomovimientosId} contabilizado`);
+    } catch (error) {
+      this.logger.error(`Error al contabilizar banco ${movimiento.bcomovimientosId}: ${error.message}`);
+    }
+  }
+
+  // ==================== BITÁCORA POSFACMOV ====================
+
+  /**
+   * Consulta la bitácora de partidas contables vinculadas a facturas (posfacmov).
+   * Filtra por empresaId (requerido), facturaId y/o moduloId (opcionales).
+   */
+  async findPosfacmov(empresaId: number, facturaId?: number, moduloId?: number): Promise<Posfacmov[]> {
+    const where: any = { empresaId };
+    if (facturaId) where.facturaId = facturaId;
+    if (moduloId) where.moduloId = moduloId;
+    return this.posfacmovRepo.find({
+      where,
+      order: { posfacmovId: 'DESC' },
+    });
+  }
+
+  // ==================== EVENT LISTENERS ====================
+
+  /**
+   * Listener: Cuando se crea un movimiento CxC (abono de cliente desde Caja).
+   * Genera partida contable automáticamente si sn_integrar_cxc='S'.
+   * Solo procesa abonos (tipomov='C') con importe > 0.
+   */
+  @OnEvent('cxc.movimiento.creado')
+  async handleCxcMovimientoCreado(payload: any) {
+    const { movimiento, origen } = payload;
+    this.logger.log(`[CxC Event] Movimiento creado: movId=${movimiento?.clienteMovId}, tipo=${movimiento?.tipomov}, importe=${movimiento?.importe}, origen=${origen}`);
+
+    // Solo procesar abonos (tipomov='C') con importe > 0
+    if (movimiento.tipomov !== 'C') {
+      this.logger.debug(`[CxC Event] Ignorado: tipomov=${movimiento.tipomov} (no es C)`);
+      return;
+    }
+    if (Number(movimiento.importe) <= 0) {
+      this.logger.debug(`[CxC Event] Ignorado: importe=${movimiento.importe} (<= 0)`);
+      return;
+    }
+
+    try {
+      // Buscar facturaId desde posfacmae usando nroreferencia del movimiento
+      let facturaId: number | undefined;
+      if (movimiento.nroreferencia) {
+        const factura = await this.facMaeRepo.findOne({
+          where: {
+            nrofactura: Number(movimiento.nroreferencia),
+            empresaId: movimiento.empresaId,
+          } as FindOptionsWhere<TPosFacMae>,
+        });
+        if (factura) {
+          facturaId = factura.facturaId;
+          this.logger.log(`[CxC Event] Factura encontrada: facturaId=${facturaId} para nro=${movimiento.nroreferencia}`);
+        } else {
+          this.logger.debug(`[CxC Event] No se encontró factura con nrofactura=${movimiento.nroreferencia}`);
+        }
+      }
+
+      const resultado = await this.contabilizarCxC(
+        {
+          cxcmovimientoId: movimiento.clienteMovId,
+          nroreferencia: movimiento.nroreferencia,
+          importe: movimiento.importe,
+          nrocliente: movimiento.nrocliente,
+          cliente: movimiento.cliente || '',
+          concepto: movimiento.concepto || '',
+        },
+        movimiento.empresaId,
+        movimiento.Idsucursal || 0,
+        movimiento.usuarioCreated,
+        facturaId,
+      );
+      this.logger.log(`[CxC Event] contabilizarCxC resultado: ${resultado}`);
+    } catch (error) {
+      this.logger.error(`[CxC Event] Error en handleCxcMovimientoCreado: ${error.message}`, error.stack);
+    }
+  }
+}
+
+```
+
+---
+
 ## 📄 src\modules\contabilidad\contabilidad.controller.ts
 
 ```typescript
 import {
   Controller, Get, Post, Put, Body, Param, Query,
-  UseGuards, ParseIntPipe,
+  UseGuards, ParseIntPipe, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ContabilidadService } from './contabilidad.service';
+import { ContabilidadLogicaService } from './contabilidad-logica.service';
 import {
   CreateTcoctacontablesDto, UpdateTcoctacontablesDto,
   CreateCopdamaeDto, UpdateCopdamaeDto,
   CreateCopdadetDto, UpdateCopdadetDto,
+  ContabilizarPartidaDto, CierreContableDto, ReporteContableDto,
+  IntegracionModuloDto,
 } from './dto/contabilidad.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -1718,7 +4810,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('contabilidad')
 @UseGuards(JwtAuthGuard)
 export class ContabilidadController {
-  constructor(private readonly service: ContabilidadService) {}
+  constructor(
+    private readonly service: ContabilidadService,
+    private readonly logica: ContabilidadLogicaService,
+  ) {}
 
   // ===== Ctacontables =====
 
@@ -1782,8 +4877,8 @@ export class ContabilidadController {
   @ApiOperation({ summary: 'Obtener grupo contable por ID' })
   @ApiResponse({ status: 200, description: 'Grupo contable encontrado' })
   @ApiResponse({ status: 404, description: 'Grupo contable no encontrado' })
-  findGrupocontable(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findGrupocontable(id);
+  findGrupocontable(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findGrupocontable(id, empresaId);
   }
 
   @Post('grupocontable')
@@ -1798,17 +4893,18 @@ export class ContabilidadController {
   @ApiResponse({ status: 200, description: 'Grupo contable actualizado exitosamente' })
   updateGrupocontable(
     @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: any,
     @CurrentUser() user: any,
   ) {
-    return this.service.updateGrupocontable(id, dto, user.usuario);
+    return this.service.updateGrupocontable(id, empresaId, dto, user.usuario);
   }
 
   @Put('grupocontable/:id/remove')
   @ApiOperation({ summary: 'Eliminar grupo contable' })
   @ApiResponse({ status: 200, description: 'Grupo contable eliminado exitosamente' })
-  removeGrupocontable(@Param('id', ParseIntPipe) id: number) {
-    return this.service.removeGrupocontable(id);
+  removeGrupocontable(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.removeGrupocontable(id, empresaId);
   }
 
   // ===== Plantilla PDAMAE =====
@@ -2610,6 +5706,144 @@ export class ContabilidadController {
   ) {
     return this.service.updateTipoDocFiscal(id, empresaId, dto, user.usuario);
   }
+
+  // ===== CONTABILIZACIÓN =====
+
+  @Post('copdamae/contabilizar')
+  @ApiOperation({ summary: 'Contabilizar una partida de diario (valida cuadrada, crea movimientos y saldos)' })
+  @ApiResponse({ status: 201, description: 'Partida contabilizada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Partida no cuadrada o período cerrado' })
+  contabilizarPartida(
+    @Body() dto: ContabilizarPartidaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarPartida(dto, user.usuario);
+  }
+
+  // ===== CIERRE CONTABLE =====
+
+  @Post('cierrectable/realizar')
+  @ApiOperation({ summary: 'Realizar cierre de período contable' })
+  @ApiResponse({ status: 201, description: 'Cierre realizado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Período ya cerrado o no existe' })
+  realizarCierre(
+    @Body() dto: CierreContableDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.realizarCierre(dto, user.usuario);
+  }
+
+  // ===== REPORTES CONTABLES =====
+
+  @Post('reportes/balance-comprobacion')
+  @ApiOperation({ summary: 'Generar Balance de Comprobación' })
+  @ApiResponse({ status: 200, description: 'Balance generado exitosamente' })
+  generarBalanceComprobacion(@Body() dto: ReporteContableDto) {
+    return this.logica.generarBalanceComprobacion(dto);
+  }
+
+  @Post('reportes/libro-diario')
+  @ApiOperation({ summary: 'Generar Libro Diario' })
+  @ApiResponse({ status: 200, description: 'Libro diario generado exitosamente' })
+  generarLibroDiario(@Body() dto: ReporteContableDto) {
+    return this.logica.generarLibroDiario(dto);
+  }
+
+  @Post('reportes/libro-mayor')
+  @ApiOperation({ summary: 'Generar Libro Mayor' })
+  @ApiResponse({ status: 200, description: 'Libro mayor generado exitosamente' })
+  generarLibroMayor(@Body() dto: ReporteContableDto) {
+    return this.logica.generarLibroMayor(dto);
+  }
+
+  // ===== INTEGRACIÓN CON MÓDULOS =====
+
+  @Post('integracion/factura')
+  @ApiOperation({ summary: 'Contabilizar factura de venta automáticamente' })
+  @ApiResponse({ status: 201, description: 'Factura contabilizada' })
+  async contabilizarFactura(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    const factura = await this.logica.findFacturaById(dto.documentoId, empresaId);
+    if (!factura) throw new NotFoundException(`Factura ${dto.documentoId} no encontrada`);
+    return this.logica.contabilizarFactura(factura, empresaId, Idsucursal, user.usuario);
+  }
+
+  @Post('integracion/factura/diagnostico')
+  @ApiOperation({ summary: 'Diagnosticar contabilización de factura (sin ejecutar)' })
+  async diagnosticarContabilizacion(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.logica.diagnosticarContabilizacion(dto.documentoId, empresaId);
+  }
+
+  @Post('integracion/cxc')
+  @ApiOperation({ summary: 'Contabilizar movimiento de CxC automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento CxC contabilizado' })
+  async contabilizarCxC(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    const movimiento = await this.logica.findMovimientoCxC(dto.documentoId, empresaId);
+    if (!movimiento) throw new NotFoundException(`Movimiento CxC ${dto.documentoId} no encontrado`);
+    return this.logica.contabilizarCxC(movimiento, empresaId, Idsucursal, user.usuario, dto.facturaId);
+  }
+
+  // ===== BITÁCORA POSFACMOV =====
+
+  @Get('posfacmov')
+  @ApiOperation({ summary: 'Consultar bitácora de partidas contables por factura' })
+  @ApiResponse({ status: 200, description: 'Lista de registros posfacmov' })
+  findPosfacmov(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('facturaId') facturaId?: string,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.logica.findPosfacmov(empresaId, facturaId ? Number(facturaId) : undefined, moduloId ? Number(moduloId) : undefined);
+  }
+
+  @Post('posfacmov/contabilizar-cxc')
+  @ApiOperation({ summary: 'Contabilizar un movimiento CxC existente y registrar en posfacmov' })
+  @ApiResponse({ status: 201, description: 'Movimiento contabilizado y registrado en posfacmov' })
+  async contabilizarMovimientoCxC(
+    @Body() body: { clienteMovId: number; empresaId: number; Idsucursal?: number },
+    @CurrentUser() user: any,
+  ) {
+    const { clienteMovId, empresaId, Idsucursal } = body;
+    const movimiento = await this.logica.findMovimientoCxC(clienteMovId, empresaId);
+    if (!movimiento) throw new NotFoundException(`Movimiento CxC ${clienteMovId} no encontrado`);
+    return this.logica.contabilizarCxC(movimiento, empresaId, Idsucursal || 0, user.usuario);
+  }
+
+  @Post('integracion/cxp')
+  @ApiOperation({ summary: 'Contabilizar movimiento de CxP automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento CxP contabilizado' })
+  contabilizarCxP(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarCxP({ cxpmovimientoId: dto.documentoId }, empresaId, Idsucursal, user.usuario);
+  }
+
+  @Post('integracion/bancos')
+  @ApiOperation({ summary: 'Contabilizar movimiento bancario automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento bancario contabilizado' })
+  contabilizarBanco(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarBanco({ bcomovimientosId: dto.documentoId }, empresaId, Idsucursal, user.usuario);
+  }
 }
 
 ```
@@ -2621,6 +5855,7 @@ export class ContabilidadController {
 ```typescript
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Tcoctacontables } from './entities/tcoctacontables.entity';
 import { Tcogrupocontable } from './entities/tcogrupocontable.entity';
 import { Tcoplantillapdamae } from './entities/tcoplantillapdamae.entity';
@@ -2628,7 +5863,7 @@ import { Tcoplantillapdadet } from './entities/tcoplantillapdadet.entity';
 import { Cosaldoscta } from './entities/cosaldoscta.entity';
 import { Cocierrectable } from './entities/cocierrectable.entity';
 import { Tcorepliquidez } from './entities/tcorepliquidez.entity';
-import { Cofactordecambios } from './entities/cofactordecambios.entity';
+import { Ttipofactordecambios } from './entities/ttipofactordecambios.entity';
 import { Tcoplantillabalancesmae } from './entities/tcoplantillabalancesmae.entity';
 import { Tcoplantillabalancesdet } from './entities/tcoplantillabalancesdet.entity';
 import { Tcorepdiarios } from './entities/tcorepdiarios.entity';
@@ -2641,11 +5876,22 @@ import { Tconivelcta } from './entities/tconivelcta.entity';
 import { Tconaturalezacta } from './entities/tconaturalezacta.entity';
 import { Tcoimpuestovecinal } from './entities/tcoimpuestovecinal.entity';
 import { TCoTipoDocumentoFiscal } from './entities/tcotipodocumentofiscal.entity';
+// Repos de otros módulos necesarios para integración automática
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { TPosFacMae } from '../facturacion/entities/posfacmae.entity';
+import { TPosFacDet } from '../facturacion/entities/posfacdet.entity';
+import { TPosFacCaja } from '../facturacion/entities/posfaccaja.entity';
+import { Posfacmov } from '../facturacion/entities/posfacmov.entity';
+import { TinvExistencia } from '../inventario/entities/existencia.entity';
+import { CxcMovimiento } from '../cxc/entities/cxcmovimiento.entity';
+import { Tproducto } from '../inventario/entities/producto.entity';
 import { ContabilidadService } from './contabilidad.service';
+import { ContabilidadLogicaService } from './contabilidad-logica.service';
 import { ContabilidadController } from './contabilidad.controller';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     TypeOrmModule.forFeature([
       Tcoctacontables,
       Tcogrupocontable,
@@ -2654,7 +5900,7 @@ import { ContabilidadController } from './contabilidad.controller';
       Cosaldoscta,
       Cocierrectable,
       Tcorepliquidez,
-      Cofactordecambios,
+      Ttipofactordecambios,
       Tcoplantillabalancesmae,
       Tcoplantillabalancesdet,
       Tcorepdiarios,
@@ -2667,11 +5913,20 @@ import { ContabilidadController } from './contabilidad.controller';
       Tconaturalezacta,
       Tcoimpuestovecinal,
       TCoTipoDocumentoFiscal,
+      // Repos para integración automática de facturación
+      TipoParametro,
+      TPosFacMae,
+      TPosFacDet,
+      TPosFacCaja,
+      Posfacmov,
+      TinvExistencia,
+      CxcMovimiento,
+      Tproducto,
     ]),
   ],
   controllers: [ContabilidadController],
-  providers: [ContabilidadService],
-  exports: [ContabilidadService],
+  providers: [ContabilidadService, ContabilidadLogicaService],
+  exports: [ContabilidadService, ContabilidadLogicaService],
 })
 export class ContabilidadModule {}
 
@@ -2685,6 +5940,7 @@ export class ContabilidadModule {}
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tcoctacontables } from './entities/tcoctacontables.entity';
 import { Tcogrupocontable } from './entities/tcogrupocontable.entity';
 import { Tcoplantillapdamae } from './entities/tcoplantillapdamae.entity';
@@ -2692,7 +5948,7 @@ import { Tcoplantillapdadet } from './entities/tcoplantillapdadet.entity';
 import { Cosaldoscta } from './entities/cosaldoscta.entity';
 import { Cocierrectable } from './entities/cocierrectable.entity';
 import { Tcorepliquidez } from './entities/tcorepliquidez.entity';
-import { Cofactordecambios } from './entities/cofactordecambios.entity';
+import { Ttipofactordecambios } from './entities/ttipofactordecambios.entity';
 import { Tcoplantillabalancesmae } from './entities/tcoplantillabalancesmae.entity';
 import { Tcoplantillabalancesdet } from './entities/tcoplantillabalancesdet.entity';
 import { Tcorepdiarios } from './entities/tcorepdiarios.entity';
@@ -2721,7 +5977,7 @@ export class ContabilidadService {
     @InjectRepository(Cosaldoscta) private readonly saldosctaRepo: Repository<Cosaldoscta>,
     @InjectRepository(Cocierrectable) private readonly cierrectableRepo: Repository<Cocierrectable>,
     @InjectRepository(Tcorepliquidez) private readonly repliquidezRepo: Repository<Tcorepliquidez>,
-    @InjectRepository(Cofactordecambios) private readonly factordecambioRepo: Repository<Cofactordecambios>,
+    @InjectRepository(Ttipofactordecambios) private readonly factordecambioRepo: Repository<Ttipofactordecambios>,
     @InjectRepository(Tcoplantillabalancesmae) private readonly plantillabalancesmaeRepo: Repository<Tcoplantillabalancesmae>,
     @InjectRepository(Tcoplantillabalancesdet) private readonly plantillabalancesdetRepo: Repository<Tcoplantillabalancesdet>,
     @InjectRepository(Tcorepdiarios) private readonly repdiariosRepo: Repository<Tcorepdiarios>,
@@ -2734,6 +5990,7 @@ export class ContabilidadService {
     @InjectRepository(Tconaturalezacta) private readonly naturalezactaRepo: Repository<Tconaturalezacta>,
     @InjectRepository(Tcoimpuestovecinal) private readonly impuestovecinalRepo: Repository<Tcoimpuestovecinal>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -2791,7 +6048,7 @@ export class ContabilidadService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -2822,7 +6079,7 @@ export class ContabilidadService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -2863,24 +6120,24 @@ export class ContabilidadService {
 
   async findAllGrupocontable(empresaId: number) {
     return this.grupocontableRepo.find({
-      where: { sn_activo: 'S' } as unknown as FindOptionsWhere<Tcogrupocontable>,
+      where: { empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<Tcogrupocontable>,
     });
   }
 
-  async findGrupocontable(tcogrupocontableId: number) {
-    return this.findOneByIdNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, 'Grupo Contable');
+  async findGrupocontable(tcogrupocontableId: number, empresaId: number) {
+    return this.findOneById(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, 'Grupo Contable');
   }
 
   async createGrupocontable(dto: any, currentUser: string) {
     return this.createEntity(this.grupocontableRepo, dto, currentUser);
   }
 
-  async updateGrupocontable(tcogrupocontableId: number, dto: any, currentUser: string) {
-    return this.updateEntityNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, dto, currentUser, 'Grupo Contable');
+  async updateGrupocontable(tcogrupocontableId: number, empresaId: number, dto: any, currentUser: string) {
+    return this.updateEntity(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, dto, currentUser, 'Grupo Contable');
   }
 
-  async removeGrupocontable(tcogrupocontableId: number) {
-    return this.softDeleteNoEmpresa(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, 'Grupo Contable');
+  async removeGrupocontable(tcogrupocontableId: number, empresaId: number) {
+    return this.softDelete(this.grupocontableRepo, 'tcogrupocontableId', tcogrupocontableId, empresaId, 'Grupo Contable');
   }
 
   async findAllPlantillapdamae(empresaId: number) {
@@ -2984,7 +6241,7 @@ export class ContabilidadService {
 
   async findAllFactordecambio(empresaId: number) {
     return this.factordecambioRepo.find({
-      where: { empresaId } as unknown as FindOptionsWhere<Cofactordecambios>,
+      where: { empresaId } as unknown as FindOptionsWhere<Ttipofactordecambios>,
       order: { fecharegistro: 'DESC' } as any,
     });
   }
@@ -3109,20 +6366,20 @@ export class ContabilidadService {
     });
   }
 
-  async findCopdamae(copdamaeId: number, empresaId: number) {
-    return this.findOneById(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, 'Partida Mayor');
+  async findCopdamae(partidaId: number, empresaId: number) {
+    return this.findOneById(this.copdamaeRepo, 'partidaId', partidaId, empresaId, 'Partida Mayor');
   }
 
   async createCopdamae(dto: CreateCopdamaeDto, currentUser: string) {
     return this.createEntity(this.copdamaeRepo, dto, currentUser);
   }
 
-  async updateCopdamae(copdamaeId: number, empresaId: number, dto: UpdateCopdamaeDto, currentUser: string) {
-    return this.updateEntity(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, dto, currentUser, 'Partida Mayor');
+  async updateCopdamae(partidaId: number, empresaId: number, dto: UpdateCopdamaeDto, currentUser: string) {
+    return this.updateEntity(this.copdamaeRepo, 'partidaId', partidaId, empresaId, dto, currentUser, 'Partida Mayor');
   }
 
-  async removeCopdamae(copdamaeId: number, empresaId: number) {
-    return this.softDelete(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, 'Partida Mayor');
+  async removeCopdamae(partidaId: number, empresaId: number) {
+    return this.softDelete(this.copdamaeRepo, 'partidaId', partidaId, empresaId, 'Partida Mayor');
   }
 
   async findAllCopdadet(empresaId: number) {
@@ -3245,8 +6502,731 @@ export class ContabilidadService {
 ## 📄 src\modules\contabilidad\dto\contabilidad.dto.ts
 
 ```typescript
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray, ValidateNested, IsDateString } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+// ========== DTOs para Contabilización ==========
+
+export class LineaPartidaDto {
+  @ApiProperty({ description: 'Código de cuenta contable' })
+  @IsString() @IsNotEmpty()
+  ctacontable: string;
+
+  @ApiProperty({ required: false, description: 'Descripción del movimiento' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ description: 'Monto de débito' })
+  @IsNumber()
+  debito: number;
+
+  @ApiProperty({ description: 'Monto de crédito' })
+  @IsNumber()
+  credito: number;
+}
+
+export class ContabilizarPartidaDto {
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ description: 'ID de la sucursal' })
+  @IsNumber()
+  Idsucursal: number;
+
+  @ApiProperty({ description: 'Período contable (1-12)' })
+  @IsNumber()
+  periodo: number;
+
+  @ApiProperty({ description: 'Año contable' })
+  @IsNumber()
+  anio: number;
+
+  @ApiProperty({ description: 'ID del módulo origen' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ description: 'ID del documento origen' })
+  @IsNumber()
+  documentoId: number;
+
+  @ApiProperty({ required: false, description: 'Fecha del documento' })
+  @IsDateString() @IsOptional()
+  fechadocumento?: string;
+
+  @ApiProperty({ description: 'Número de referencia' })
+  @IsString() @IsNotEmpty()
+  nroreferencia: string;
+
+  @ApiProperty({ description: 'Descripción de la partida' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ required: false, description: 'Factor de cambio' })
+  @IsNumber() @IsOptional()
+  factordecambio?: number;
+
+  @ApiProperty({ type: [LineaPartidaDto], description: 'Líneas de la partida (débitos y créditos)' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LineaPartidaDto)
+  lineas: LineaPartidaDto[];
+}
+
+// ========== DTOs para Cierre Contable ==========
+
+export class CierreContableDto {
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ description: 'Período a cerrar (1-12)' })
+  @IsNumber()
+  periodo: number;
+
+  @ApiProperty({ description: 'Año a cerrar' })
+  @IsNumber()
+  anio: number;
+
+  @ApiProperty({ required: false, description: 'Observación del cierre' })
+  @IsString() @IsOptional()
+  observacion?: string;
+}
+
+// ========== DTOs para Reportes ==========
+
+export class ReporteContableDto {
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ description: 'Período' })
+  @IsNumber()
+  periodo: number;
+
+  @ApiProperty({ description: 'Año' })
+  @IsNumber()
+  anio: number;
+
+  @ApiProperty({ required: false, description: 'Fecha desde (ISO string)' })
+  @IsDateString() @IsOptional()
+  fechaDesde?: string;
+
+  @ApiProperty({ required: false, description: 'Fecha hasta (ISO string)' })
+  @IsDateString() @IsOptional()
+  fechaHasta?: string;
+}
+
+// ========== DTOs para Integración ==========
+
+export class IntegracionModuloDto {
+  @ApiProperty({ description: 'ID del documento origen del módulo' })
+  @IsNumber()
+  documentoId: number;
+
+  @ApiProperty({ required: false, description: 'ID de la empresa' })
+  @IsNumber() @IsOptional()
+  empresaId?: number;
+
+  @ApiProperty({ required: false, description: 'ID de la factura en posfacmae (para vincular en posfacmov)' })
+  @IsNumber() @IsOptional()
+  facturaId?: number;
+}
+
+// ========== DTOs para Grupos Contables ==========
+
+export class CreateGrupocontableDto {
+  @ApiProperty({ description: 'Descripción del grupo contable' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateGrupocontableDto {
+  @ApiProperty({ required: false, description: 'Descripción del grupo contable' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Nivel Cta ==========
+
+export class CreateNivelctaDto {
+  @ApiProperty({ enum: ['1','2','3','4','5','6','7','8'], description: 'Nivel' })
+  @IsEnum(['1','2','3','4','5','6','7','8'])
+  nivel: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Diario' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_diario?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateNivelctaDto {
+  @ApiProperty({ enum: ['1','2','3','4','5','6','7','8'], required: false })
+  @IsEnum(['1','2','3','4','5','6','7','8']) @IsOptional()
+  nivel?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_diario?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Naturaleza Cta ==========
+
+export class CreateNaturalezactaDto {
+  @ApiProperty({ enum: ['D', 'C'], description: 'Naturaleza' })
+  @IsEnum(['D', 'C'])
+  descripcion: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateNaturalezactaDto {
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Periodo Contable ==========
+
+export class CreatePeriodoctableDto {
+  @ApiProperty({ description: 'Año' })
+  @IsNumber()
+  nroanio: number;
+
+  @ApiProperty({ description: 'Mes (1-12)' })
+  @IsNumber()
+  nromes: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, default: 'S' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_abierto?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdatePeriodoctableDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  nroanio?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  nromes?: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_abierto?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Cierre Contable (Catálogo) ==========
+
+export class CreateCierrectableDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  periodo?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  anio?: number;
+
+  @ApiProperty({ description: 'Fecha de cierre' })
+  @IsDateString()
+  fechacierre: string;
+
+  @ApiProperty({ required: false, description: 'Observación' })
+  @IsString() @IsOptional()
+  observacion?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateCierrectableDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  periodo?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  anio?: number;
+
+  @ApiProperty({ required: false })
+  @IsDateString() @IsOptional()
+  fechacierre?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  observacion?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Saldos Cta ==========
+
+export class CreateSaldosctaDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  anio?: number;
+
+  @ApiProperty({ description: 'Código de cuenta contable' })
+  @IsString() @IsNotEmpty()
+  ctacontable: string;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  saldoanterior?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  enero?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  febrero?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  marzo?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  abril?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  mayo?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  junio?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  julio?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  agosto?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  septiembre?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  octubre?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  noviembre?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsNumber() @IsOptional()
+  diciembre?: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateSaldosctaDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  saldoanterior?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  enero?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  febrero?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  marzo?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  abril?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  mayo?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  junio?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  julio?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  agosto?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  septiembre?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  octubre?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  noviembre?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  diciembre?: number;
+}
+
+// ========== DTOs para Impuesto Vecinal ==========
+
+export class CreateImpuestovecinalDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ description: 'Rango desde' })
+  @IsNumber()
+  del: number;
+
+  @ApiProperty({ description: 'Rango hasta' })
+  @IsNumber()
+  al: number;
+
+  @ApiProperty({ description: 'Importe' })
+  @IsNumber()
+  importe: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateImpuestovecinalDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  del?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  al?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  importe?: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Tipos Doc Fiscal ==========
+
+export class CreateTipoDocFiscalDto {
+  @ApiProperty({ description: 'Descripción' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ description: 'Abreviatura' })
+  @IsString() @IsNotEmpty()
+  abreviatura: string;
+
+  @ApiProperty({ enum: ['D', 'C'], description: 'Naturaleza' })
+  @IsEnum(['D', 'C'])
+  naturaleza: string;
+
+  @ApiProperty({ description: 'ID del módulo' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ description: 'ID cuenta contable' })
+  @IsNumber()
+  cuentacontableId: number;
+
+  @ApiProperty({ description: 'Nro correlativo' })
+  @IsNumber()
+  nrocorrelativo: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateTipoDocFiscalDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  abreviatura?: string;
+
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  naturaleza?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  cuentacontableId?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  nrocorrelativo?: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Factor de Cambio ==========
+
+export class CreateFactordecambioDto {
+  @ApiProperty({ description: 'Precio de compra' })
+  @IsNumber()
+  preciocompra: number;
+
+  @ApiProperty({ description: 'Precio de venta' })
+  @IsNumber()
+  precioventa: number;
+
+  @ApiProperty({ enum: ['D', 'E', 'Y'], description: 'Tipo de moneda' })
+  @IsEnum(['D', 'E', 'Y'])
+  tipomoneda: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateFactordecambioDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  preciocompra?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  precioventa?: number;
+
+  @ApiProperty({ enum: ['D', 'E', 'Y'], required: false })
+  @IsEnum(['D', 'E', 'Y']) @IsOptional()
+  tipomoneda?: string;
+}
+
+// ========== DTOs para Plantilla PDA ==========
+
+export class CreatePlantillaPdaMaeDto {
+  @ApiProperty({ description: 'Descripción' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ description: 'ID del módulo' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdatePlantillaPdaMaeDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+export class CreatePlantillaPdaDetDto {
+  @ApiProperty({ description: 'ID plantilla padre' })
+  @IsNumber()
+  tcoplantillapdamaeId: number;
+
+  @ApiProperty({ description: 'Número de fila' })
+  @IsNumber()
+  nrofila: number;
+
+  @ApiProperty({ description: 'Código cuenta contable' })
+  @IsString() @IsNotEmpty()
+  ctacontable: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  ctamayorId?: string;
+
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  naturaleza?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdatePlantillaPdaDetDto {
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  nrofila?: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  ctacontable?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  ctamayorId?: string;
+
+  @ApiProperty({ enum: ['D', 'C'], required: false })
+  @IsEnum(['D', 'C']) @IsOptional()
+  naturaleza?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+// ========== DTOs para Plantilla Balances ==========
+
+export class CreatePlantillaBalancesMaeDto {
+  @ApiProperty({ description: 'Descripción' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdatePlantillaBalancesMaeDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
+export class CreatePlantillaBalancesDetDto {
+  @ApiProperty({ description: 'ID plantilla padre' })
+  @IsNumber()
+  cocdefbalmaId: number;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  tipo?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  ctacontable?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  columna?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  renglon?: number;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdatePlantillaBalancesDetDto {
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  tipo?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  ctacontable?: string;
+
+  @ApiProperty({ required: false })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  columna?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber() @IsOptional()
+  renglon?: number;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
 
 export class CreateTcoctacontablesDto {
   @ApiProperty({ description: 'Código de la cuenta contable' })
@@ -3411,7 +7391,7 @@ export class UpdateCopdamaeDto {
 export class CreateCopdadetDto {
   @ApiProperty({ description: 'ID del comprobante padre' })
   @IsNumber()
-  copdamaeId: number;
+  partidaId: number;
 
   @ApiProperty({ required: false, description: 'Período contable' })
   @IsNumber() @IsOptional()
@@ -3465,7 +7445,7 @@ export class CreateCopdadetDto {
 export class UpdateCopdadetDto {
   @ApiProperty({ required: false, description: 'ID del comprobante padre' })
   @IsNumber() @IsOptional()
-  copdamaeId?: number;
+  partidaId?: number;
 
   @ApiProperty({ required: false, description: 'Período contable' })
   @IsNumber() @IsOptional()
@@ -3551,55 +7531,6 @@ export class Cocierrectable {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
-
-  @ApiProperty()
-  @Column()
-  empresaId: number;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\contabilidad\entities\cofactordecambios.entity.ts
-
-```typescript
-import { Entity, PrimaryColumn, Column } from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('cofactordecambios')
-export class Cofactordecambios {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'factordecambioId' })
-  factordecambioId: number;
-
-  @ApiProperty()
-  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
-  fecharegistro: Date;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
-  preciocompra: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
-  precioventa: number;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['D', 'E', 'Y'], default: 'D' })
-  tipomoneda: string;
 
   @ApiProperty()
   @Column()
@@ -3708,8 +7639,8 @@ export class Copdadet {
   copdadetId: number;
 
   @ApiProperty()
-  @Column()
-  copdamaeId: number;
+  @Column({ name: 'partidaId' })
+  partidaId: number;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
@@ -3793,8 +7724,8 @@ import { ApiProperty } from '@nestjs/swagger';
 @Entity('copdamae')
 export class Copdamae {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'copdamaeId' })
-  copdamaeId: number;
+  @PrimaryGeneratedColumn({ name: 'partidaId' })
+  partidaId: number;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
@@ -4091,6 +8022,10 @@ export class Tcogrupocontable {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  empresaId: number;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
@@ -4646,6 +8581,55 @@ export class TCoTipoDocumentoFiscal {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
+
+  @ApiProperty()
+  @Column()
+  empresaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
+## 📄 src\modules\contabilidad\entities\ttipofactordecambios.entity.ts
+
+```typescript
+import { Entity, PrimaryColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('ttipofactordecambios')
+export class Ttipofactordecambios {
+  @ApiProperty()
+  @PrimaryColumn({ name: 'factordecambioId' })
+  factordecambioId: number;
+
+  @ApiProperty()
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  fecharegistro: Date;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
+  preciocompra: number;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
+  precioventa: number;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['D', 'E', 'Y'], default: 'D' })
+  tipomoneda: string;
 
   @ApiProperty()
   @Column()
@@ -5286,7 +9270,7 @@ export class CxcController {
 ## 📄 src\modules\cxc\cxc.module.ts
 
 ```typescript
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CxcCliente } from './entities/cxccliente.entity';
@@ -5303,7 +9287,8 @@ import { TcctDiasCobro } from './entities/tcctdiascobro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
-import { TtipoParamCxc } from '../parametros/entities/param-cxc.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { ContabilidadModule } from '../contabilidad/contabilidad.module';
 import { CxcService } from './cxc.service';
 import { CxcController } from './cxc.controller';
 
@@ -5325,8 +9310,9 @@ import { CxcController } from './cxc.controller';
       CxcPrestamo,
       CxcPrestamoPP,
       CxcPariente,
-      TtipoParamCxc,
+      TipoParametro,
     ]),
+    forwardRef(() => ContabilidadModule),
   ],
   controllers: [CxcController],
   providers: [CxcService],
@@ -5356,10 +9342,12 @@ import { CxcMovimiento } from './entities/cxcmovimiento.entity';
 import { CxcHistoro } from './entities/cxchisto.entity';
 import { CxcSalFav } from './entities/cxcsalfav.entity';
 import { TcctDiasCobro } from './entities/tcctdiascobro.entity';
-import { TtipoParamCxc } from '../parametros/entities/param-cxc.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
+import { ContabilidadLogicaService } from '../contabilidad/contabilidad-logica.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import {
   CreateCxcClienteDto, UpdateCxcClienteDto,
   CreateCxcMovimientoDto, UpdateCxcMovimientoDto,
@@ -5383,8 +9371,11 @@ export class CxcService {
     @InjectRepository(CxcPrestamo) private readonly prestamoRepo: Repository<CxcPrestamo>,
     @InjectRepository(CxcPrestamoPP) private readonly prestamoPPRepo: Repository<CxcPrestamoPP>,
     @InjectRepository(CxcPariente) private readonly parienteRepo: Repository<CxcPariente>,
-    @InjectRepository(TtipoParamCxc) private readonly paramCxcRepo: Repository<TtipoParamCxc>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
+    @Inject(forwardRef(() => ContabilidadLogicaService))
+    private readonly contabilidadService: ContabilidadLogicaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -5429,9 +9420,10 @@ export class CxcService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -5444,9 +9436,10 @@ export class CxcService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -5476,34 +9469,45 @@ export class CxcService {
   }
 
   async createCliente(dto: CreateCxcClienteDto, currentUser: string) {
-    let params: TtipoParamCxc | null = null;
-    try {
-      params = await this.paramCxcRepo.findOne({ where: { empresaId: dto.empresaId } });
-    } catch (_) {}
+    // Leer parámetros de CxC de la tabla unificada ttipoparametros (moduloId=4)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 4, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
 
-    const nro = (params?.nrocliente ?? 0) + 1;
+    const nroclienteActual = await getParam('nrocliente', 0);
+    const nro = Number(nroclienteActual) + 1;
     const nrocliente = dto.nrocliente || String(nro).padStart(6, '0');
+    const now = await this.fechaSistema.getFecha(dto.empresaId);
 
     const payload: any = {
       ...dto,
       nrocliente,
       dni: dto.dni || '0000000000000',
       razonsocial: dto.razonsocial || `${dto.nombres} ${dto.apellidos}`,
-      fecharegistro: dto.fecharegistro || new Date().toISOString(),
-      fechanacimiento: dto.fechanacimiento || new Date().toISOString(),
-      interes: dto.interes ?? params?.interes ?? 0,
-      moratorio: dto.moratorio ?? params?.mora ?? 0,
-      diasplazo: dto.diasplazo ?? params?.diasPlazo ?? 0,
-      limiteCredito: dto.limiteCredito ?? params?.limitecredito ?? 0,
+      fecharegistro: dto.fecharegistro || now.toISOString(),
+      fechanacimiento: dto.fechanacimiento || now.toISOString(),
+      interes: dto.interes ?? await getParam('interes', 0),
+      moratorio: dto.moratorio ?? await getParam('mora', 0),
+      diasplazo: dto.diasplazo ?? await getParam('diasPlazo', 0),
+      limiteCredito: dto.limiteCredito ?? await getParam('limitecredito', 0),
     };
 
     const saved = await this.createEntity(this.clienteRepo, payload, currentUser);
 
-    if (params) {
-      try {
-        await this.paramCxcRepo.update({ empresaId: dto.empresaId }, { nrocliente: nro });
-      } catch (_) {}
-    }
+    // Incrementar contador en tabla unificada
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 4 AND field = :field', { eid: dto.empresaId, field: 'nrocliente' })
+        .execute();
+    } catch (_) {}
 
     return saved;
   }
@@ -5654,9 +9658,10 @@ export class CxcService {
 
   private async generarMovimientoDesdeCaja(caja: CxccajaMae, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(caja.clienteId, caja.empresaId);
+    const now = await this.fechaSistema.getFecha(caja.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: caja.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 4,
@@ -5677,9 +9682,10 @@ export class CxcService {
 
   private async generarMovimientoDesdeCajaDet(cajaDet: CxccajaDet, cajaMae: CxccajaMae, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(cajaDet.clienteId, cajaDet.empresaId);
+    const now = await this.fechaSistema.getFecha(cajaDet.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: cajaDet.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 4,
@@ -5692,6 +9698,7 @@ export class CxcService {
       sn_cotabilizada: 'N',
       sn_doc_anulado: 'N',
       empresaId: cajaDet.empresaId,
+      Idsucursal: cajaDet.Idsucursal || cajaMae.Idsucursal || 0,
       usuarioCreated: currentUser,
     });
 
@@ -5756,6 +9763,7 @@ export class CxcService {
       .addSelect('a.sn_doc_anulado', 'sn_doc_anulado')
       .addSelect('a.sn_cotabilizada', 'sn_cotabilizada')
       .addSelect('a.clienteMovId', 'clienteMovId')
+      .addSelect('a.documentoId', 'documentoId')
       .innerJoin('cxcclientes', 'b', 'b.clienteId = a.clienteId')
       .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
       .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
@@ -5905,9 +9913,10 @@ export class CxcService {
 
   async generarMovimientoDesdeFactura(factura: any, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(factura.clienteId, factura.empresaId);
+    const now = await this.fechaSistema.getFecha(factura.empresaId);
     
     const movimiento = this.movimientoRepo.create({
-      fecharegistro: new Date(),
+      fecharegistro: now,
       clienteId: factura.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 3,
@@ -5920,26 +9929,27 @@ export class CxcService {
       sn_cotabilizada: 'N',
       sn_doc_anulado: 'N',
       empresaId: factura.empresaId,
+      Idsucursal: factura.Idsucursal || 0,
       usuarioCreated: currentUser,
     });
 
     const saved = await this.movimientoRepo.save(movimiento);
 
-    this.eventEmitter.emit('cxc.movimiento.creado', { movimiento: saved, origen: 'facturacion', factura });
-
+    // El partidaId se asigna después en procesarKardexFactura cuando se contabiliza la factura
     return saved;
   }
 
   async anularMovimientoFactura(facturaId: number, nrofactura: number, empresaId: number, currentUser: string): Promise<void> {
+    const now = await this.fechaSistema.getFecha(empresaId);
     const movimientos = await this.movimientoRepo.find({
       where: { nroreferencia: nrofactura.toString(), moduloId: 3, empresaId } as FindOptionsWhere<CxcMovimiento>,
     });
 
     for (const mov of movimientos) {
       mov.sn_doc_anulado = 'S';
-      mov.fec_anulacion = new Date();
+      mov.fec_anulacion = now;
       mov.usuarioUpdated = currentUser;
-      mov.fechaUpdated = new Date();
+      mov.fechaUpdated = now;
       await this.movimientoRepo.save(mov);
     }
 
@@ -5947,15 +9957,16 @@ export class CxcService {
   }
 
   async anularCajaPorFactura(facturaId: number, nrofactura: number, empresaId: number, currentUser: string): Promise<void> {
+    const now = await this.fechaSistema.getFecha(empresaId);
     const cajas = await this.cajaMaeRepo.find({
       where: { nrodocumento: nrofactura.toString(), moduloId: 4, empresaId } as FindOptionsWhere<CxccajaMae>,
     });
 
     for (const caja of cajas) {
       caja.sn_anulado = 'S';
-      caja.fec_anulacion = new Date();
+      caja.fec_anulacion = now;
       caja.usuarioUpdated = currentUser;
-      caja.fechaUpdated = new Date();
+      caja.fechaUpdated = now;
       await this.cajaMaeRepo.save(caja);
 
       const detalles = await this.cajaDetRepo.find({
@@ -5964,9 +9975,9 @@ export class CxcService {
 
       for (const det of detalles) {
         det.sn_anulado = 'S';
-        det.fec_anulacion = new Date();
+        det.fec_anulacion = now;
         det.usuarioUpdated = currentUser;
-        det.fechaUpdated = new Date();
+        det.fechaUpdated = now;
         await this.cajaDetRepo.save(det);
       }
 
@@ -5976,9 +9987,9 @@ export class CxcService {
 
       for (const mov of movsCaja) {
         mov.sn_doc_anulado = 'S';
-        mov.fec_anulacion = new Date();
+        mov.fec_anulacion = now;
         mov.usuarioUpdated = currentUser;
-        mov.fechaUpdated = new Date();
+        mov.fechaUpdated = now;
         await this.movimientoRepo.save(mov);
       }
     }
@@ -5986,8 +9997,24 @@ export class CxcService {
     this.eventEmitter.emit('cxc.caja.anulada', { facturaId, empresaId, currentUser });
   }
 
+  /**
+   * Actualiza el partidaId en movimientos CxC de una factura.
+   * Se llama después de contabilizar la factura para vincular el movimiento CxC con la partida.
+   */
+  async actualizarPartidaMovimientos(nroreferencia: string, partidaId: number, empresaId: number, currentUser: string): Promise<void> {
+    const movimientos = await this.movimientoRepo.find({
+      where: { nroreferencia, moduloId: 3, empresaId } as unknown as FindOptionsWhere<CxcMovimiento>,
+    });
+    for (const mov of movimientos) {
+      mov.partidaId = partidaId;
+      mov.sn_cotabilizada = 'S';
+      mov.usuarioUpdated = currentUser;
+      await this.movimientoRepo.save(mov);
+    }
+  }
+
   async getAntiguedadSaldos(empresaId: number) {
-    const hoy = new Date();
+    const hoy = await this.fechaSistema.getFecha(empresaId);
     const clientes = await this.clienteRepo.find({ where: { empresaId } as FindOptionsWhere<CxcCliente> });
     const movimientos = await this.movimientoRepo.find({ where: { empresaId } as FindOptionsWhere<CxcMovimiento> });
 
@@ -6332,9 +10359,9 @@ export class UpdateCxcMovimientoDto {
   @IsString() @IsOptional()
   concepto?: string;
 
-  @ApiProperty({ description: 'Contabilizado', enum: ['S', 'N'], required: false })
+  @ApiProperty({ description: 'Contabilizada', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
-  sn_cotabilizada?: string;
+  sn_contabilizada?: string;
 
   @ApiProperty({ description: 'Documento Anulado', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
@@ -6513,6 +10540,12 @@ export class CxccajaDet {
   @Column({ type: 'datetime', nullable: true })
   fec_anulacion: Date;
 
+  @Column()
+  partidaId: number;
+
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_contabilizada: string;
+
   @Column({ type: 'int', nullable: true })
   Idsucursal: number;
 
@@ -6570,7 +10603,7 @@ export class CxccajaMae {
   concepto: string;
 
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_cotabilizada: string;
+  sn_contabilizada: string;
 
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_anulado: string;
@@ -7355,6 +11388,13 @@ export class CxpController {
     return this.service.findCompra(id, empresaId);
   }
 
+  @Get('compras-pag')
+  @ApiOperation({ summary: 'Facturas pendientes de pago' })
+  @ApiResponse({ status: 200, description: 'Lista de facturas pendientes de pago' })
+  findComprasPendientesPago(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findComprasPendientesPago(empresaId);
+  }
+
   @Get('compras-det')
   @ApiOperation({ summary: 'Listar detalle de compras' })
   @ApiResponse({ status: 200, description: 'Lista de detalle de compras obtenida exitosamente' })
@@ -7441,6 +11481,19 @@ export class CxpController {
     return this.service.findAllHistoricos(empresaId);
   }
 
+  @Get('historicos/filtros')
+  @ApiOperation({ summary: 'Históricos con filtros (DNI, proveedor, fechas)' })
+  @ApiResponse({ status: 200, description: 'Lista filtrada obtenida exitosamente' })
+  findHistoricoConFiltros(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('dni') dni?: string,
+    @Query('proveedor') proveedor?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ) {
+    return this.service.findHistoricoConFiltros(empresaId, dni, proveedor, fechaDesde, fechaHasta);
+  }
+
   @Get('saldos-av')
   @ApiOperation({ summary: 'Listar saldos anticipo de proveedores' })
   @ApiResponse({ status: 200, description: 'Lista de saldos obtenida exitosamente' })
@@ -7497,6 +11550,9 @@ import { TCxpHistorico } from './entities/historico.entity';
 import { TCxpSaldoAv } from './entities/saldoav.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
+import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxpService } from './cxp.service';
 import { CxpController } from './cxp.controller';
 import { InventarioModule } from '../inventario/inventario.module';
@@ -7515,6 +11571,9 @@ import { InventarioModule } from '../inventario/inventario.module';
       TCxpSaldoAv,
       Tproducto,
       TPosPrecioVtas,
+      Tmodulos,
+      TCoTipoDocumentoFiscal,
+      TipoParametro,
     ]),
     InventarioModule,
   ],
@@ -7544,9 +11603,13 @@ import { TCxpMovimiento } from './entities/movimiento.entity';
 import { TCxpHistorico } from './entities/historico.entity';
 import { TCxpSaldoAv } from './entities/saldoav.entity';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { KardexService } from '../inventario/kardex.service';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
+import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class CxpService {
@@ -7561,8 +11624,12 @@ export class CxpService {
     @InjectRepository(TCxpSaldoAv) private readonly saldoAvRepo: Repository<TCxpSaldoAv>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
+    @InjectRepository(Tmodulos) private readonly moduloRepo: Repository<Tmodulos>,
+    @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -7608,9 +11675,10 @@ export class CxpService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -7623,9 +11691,10 @@ export class CxpService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -7658,7 +11727,40 @@ export class CxpService {
   }
 
   async createProveedor(dto: CreateProveedorDto, currentUser: string) {
-    return this.createEntity(this.proveedorRepo, dto, currentUser);
+    // Auto-generar nroproveedor desde ttipoparametros (moduloId=5)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 5, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroproveedor', 0);
+    const nro = Number(nroActual) + 1;
+    const nroproveedor = dto.nroproveedor || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroproveedor,
+      razonsocial: dto.razonsocial || `${dto.nombres} ${dto.apellidos}`,
+      dni: dto.dni || '0000000000000',
+    };
+
+    const saved = await this.createEntity(this.proveedorRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 5 AND field = :field', { eid: dto.empresaId, field: 'nroproveedor' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updateProveedor(proveedorId: number, empresaId: number, dto: UpdateProveedorDto, currentUser: string) {
@@ -7703,6 +11805,40 @@ export class CxpService {
 
   async findAllCompras(empresaId: number) {
     return this.findAllByEmpresa(this.compraMaeRepo, empresaId);
+  }
+
+  async findComprasPendientesPago(empresaId: number) {
+    return this.compraMaeRepo.createQueryBuilder('c')
+      .innerJoin('proveedor', 'p', 'p.proveedorId = c.proveedorId')
+      .leftJoin(
+        qb => {
+          return qb
+            .select('m.nroreferencia', 'compraId')
+            .addSelect('COALESCE(SUM(m.importe), 0)', 'totalPagado')
+            .from('cxpmovimientos', 'm')
+            .where('m.tipomov = :tipomov', { tipomov: 'C' })
+            .andWhere('m.empresaId = :empresaId', { empresaId })
+            .groupBy('m.nroreferencia');
+        },
+        'pagos',
+        'pagos.compraId = c.compraId'
+      )
+      .select([
+        'c.compraId AS compraId',
+        'c.nroreferencia AS nroreferencia',
+        'c.total AS total',
+        'c.proveedorId AS proveedorId',
+        'p.nroproveedor AS codproveedor',
+        `COALESCE(p.razonsocial, CONCAT(p.nombres, ' ', p.apellidos)) AS proveedorNombre`,
+        'COALESCE(pagos.totalPagado, 0) AS totalPagado',
+        '(c.total - COALESCE(pagos.totalPagado, 0)) AS saldo',
+      ])
+      .where('c.empresaId = :empresaId', { empresaId })
+      .andWhere('c.sn_pagada = :sn_pagada', { sn_pagada: 'N' })
+      .andWhere('c.sn_procesada = :sn_procesada', { sn_procesada: 'S' })
+      .andWhere('c.sn_anulada = :sn_anulada', { sn_anulada: 'N' })
+      .orderBy('c.compraId', 'ASC')
+      .getRawMany();
   }
 
   async findCompra(compraId: number, empresaId: number) {
@@ -7860,9 +11996,10 @@ export class CxpService {
     if (compra.sn_anulada === 'S') {
       throw new BadRequestException('La compra ya está anulada');
     }
+    const now = await this.fechaSistema.getFecha(empresaId);
     compra.sn_anulada = 'S';
     compra.usuarioUpdated = currentUser;
-    compra.fechaUpdated = new Date();
+    compra.fechaUpdated = now;
     await this.compraMaeRepo.save(compra);
 
     const detalles = await this.compraDetRepo.find({
@@ -7902,9 +12039,9 @@ export class CxpService {
       });
       for (const mov of movimientos) {
         mov.sn_doc_anulado = 'S';
-        mov.fec_anulacion = new Date();
+        mov.fec_anulacion = now;
         mov.usuarioUpdated = currentUser;
-        mov.fechaUpdated = new Date();
+        mov.fechaUpdated = now;
         await this.movimientoRepo.save(mov);
       }
     } catch (error) {
@@ -7998,6 +12135,57 @@ export class CxpService {
     return this.findAllByEmpresa(this.historicoRepo, empresaId);
   }
 
+  async findHistoricoConFiltros(
+    empresaId: number,
+    dni?: string,
+    proveedor?: string,
+    fechaDesde?: string,
+    fechaHasta?: string,
+  ) {
+    const qb = this.movimientoRepo.createQueryBuilder('a')
+      .select('a.proveedorId', 'proveedorId')
+      .addSelect('a.fecharegistro', 'fecharegistro')
+      .addSelect('a.codproveedor', 'nroproveedor')
+      .addSelect('b.dni', 'dni')
+      .addSelect('b.razonsocial', 'proveedor')
+      .addSelect('c.descripcion', 'modulo')
+      .addSelect('d.abreviatura', 'abreviatura')
+      .addSelect('a.nroreferencia', 'nroreferencia')
+      .addSelect('a.tipomov', 'tipomov')
+      .addSelect('a.importe', 'importe')
+      .addSelect('COALESCE(a.descripcion1, a.descripcion2, \'\')', 'concepto')
+      .addSelect('a.sn_doc_anulado', 'sn_doc_anulado')
+      .addSelect('a.sn_contabilizado', 'sn_contabilizado')
+      .addSelect('a.bcomovId', 'bcomovId')
+      .addSelect('a.documentoId', 'documentoId')
+      .innerJoin('proveedor', 'b', 'b.proveedorId = a.proveedorId')
+      .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
+      .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
+      .where('a.empresaId = :empresaId', { empresaId })
+      .orderBy('b.razonsocial', 'ASC')
+      .addOrderBy('a.bcomovId', 'ASC');
+
+    if (dni && dni.trim()) {
+      qb.andWhere('b.dni LIKE :dni', { dni: `%${dni.trim()}%` });
+    }
+
+    if (proveedor && proveedor.trim()) {
+      qb.andWhere('(b.razonsocial LIKE :proveedor OR b.nombres LIKE :proveedor OR b.apellidos LIKE :proveedor)', {
+        proveedor: `%${proveedor.trim()}%`,
+      });
+    }
+
+    if (fechaDesde && fechaDesde.trim()) {
+      qb.andWhere('a.fecharegistro >= :fechaDesde', { fechaDesde: `${fechaDesde.trim()} 00:00:00` });
+    }
+
+    if (fechaHasta && fechaHasta.trim()) {
+      qb.andWhere('a.fecharegistro <= :fechaHasta', { fechaHasta: `${fechaHasta.trim()} 23:59:59` });
+    }
+
+    return qb.getRawMany();
+  }
+
   async findHistorico(cxphistoId: number, empresaId: number) {
     return this.findOneById(this.historicoRepo, 'cxphistoId', cxphistoId, empresaId, 'Historico');
   }
@@ -8038,9 +12226,9 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProveedorDto {
-  @ApiProperty({ description: 'Número de Proveedor' })
-  @IsString() @IsNotEmpty()
-  nroproveedor: string;
+  @ApiProperty({ required: false, description: 'Número de Proveedor (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroproveedor?: string;
 
   @ApiProperty({ description: 'Nombres' })
   @IsString() @IsNotEmpty()
@@ -8871,6 +13059,10 @@ export class CreatePosFacMaeDto {
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber() @IsNotEmpty()
   empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }
 
 export class UpdatePosFacMaeDto {
@@ -9283,6 +13475,10 @@ export class TPosCboDet {
   @Column()
   empresaId: number;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  descuentoId: number;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
@@ -9328,6 +13524,14 @@ export class TPosCboMae {
   @Column()
   empresaId: number;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  descuentoId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  tipocombo: string;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
@@ -9348,8 +13552,10 @@ export class TPosCboMae {
 ## 📄 src\modules\facturacion\entities\poscorrelativos.entity.ts
 
 ```typescript
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
+import { Tempresas } from '../../companies/entities/empresa.entity';
+import { Tsucursal } from '../../sucursales/entities/sucursal.entity';
 
 @Entity('poscorrelativos')
 export class TPosCorrelativos {
@@ -9362,17 +13568,37 @@ export class TPosCorrelativos {
   nrofactura: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 35 })
-  TCPIP: string;
-
-  @ApiProperty()
   @Column()
   empresaId: number;
+  
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 30 })
+  rangoDesde;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 30 })
+  rangoHasta;
+  
+  @ApiProperty({ required: true })
+  @Column({ type: 'datetime', nullable: false })
+  fechaLimite;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
+  
+  @ApiProperty()
+  @Column({ type: 'int' })
+  Idsucursal: number;
 
+  @ManyToOne(() => Tsucursal)
+  @JoinColumn({ name: 'Idsucursal' })
+  sucursal: Tsucursal;
+  
+  @ManyToOne(() => Tempresas)
+  @JoinColumn({ name: 'empresaId' })
+  empresa: Tempresas;
+  
   @ApiProperty({ required: false })
   @Column({ type: 'varchar', length: 12, nullable: true })
   usuarioUpdated: string;
@@ -9478,6 +13704,11 @@ export class TPosCotMae {
   @ApiProperty({ required: false })
   @Column({ nullable: true })
   gestorId: number;
+
+
+  @ApiProperty()
+  @Column()
+  partidaId: number
 
   @ApiProperty()
   @Column()
@@ -9650,6 +13881,10 @@ export class TPosFacDet {
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
   descuento: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00, name: 'p_descuento' })
+  p_descuento: number;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
@@ -9865,9 +14100,17 @@ export class TPosFacMae {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_contabilizada: string;
 
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  partidaId: number;   // FK a copdamae — partida contable generada
+
   @ApiProperty()
   @Column()
   empresaId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ nullable: true })
+  Idsucursal: number;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
@@ -9952,6 +14195,64 @@ export class TPosFacMaeAnul {
 
   @ApiProperty()
   @Column()
+  empresaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
+## 📄 src\modules\facturacion\entities\posfacmov.entity.ts
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+/**
+ * Bitácora de partidas contables que afectan una factura.
+ * Cada fila representa una partida vinculada: venta, abono CxC, anulación, etc.
+ * Permite mantener historial completo sin sobreescribir posfacmae.partidaId.
+ */
+@Entity('posfacmov')
+export class Posfacmov {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'posfacmovId' })
+  posfacmovId: number;
+
+  @ApiProperty()
+  @Column({ type: 'datetime', nullable: false })
+  fecharegistro: Date;
+
+  @ApiProperty()
+  @Column({ type: 'int', nullable: true })
+  facturaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', nullable: true })
+  moduloId: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', nullable: true })
+  partidaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', nullable: true })
+  Idsucursal: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', nullable: false })
   empresaId: number;
 
   @ApiProperty()
@@ -10293,6 +14594,7 @@ export class FacturacionController {
   @ApiOperation({ summary: 'Crear factura' })
   @ApiResponse({ status: 201, description: 'Factura creada exitosamente' })
   createFactura(@Body() dto: CreatePosFacMaeDto, @CurrentUser() user: any) {
+    dto.Idsucursal = user.idsucursal;
     return this.service.createFactura(dto, user.usuario);
   }
 
@@ -10640,6 +14942,13 @@ export class FacturacionController {
     return this.service.findAllComboMae(empresaId);
   }
 
+  @Get('combos-ofertas')
+  @ApiOperation({ summary: 'Productos en oferta/promoción (combo vigente, tipocombo != C)' })
+  @ApiResponse({ status: 200, description: 'Productos con precio descontado' })
+  findProductosEnOferta(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findProductosEnOferta(empresaId);
+  }
+
   @Get('combos/:id')
   @ApiOperation({ summary: 'Obtener combo por ID' })
   @ApiResponse({ status: 200, description: 'Combo encontrado' })
@@ -10955,7 +15264,7 @@ export class FacturacionController {
 ## 📄 src\modules\facturacion\facturacion.module.ts
 
 ```typescript
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TPosCorrelativos } from './entities/poscorrelativos.entity';
@@ -10977,13 +15286,15 @@ import { CxcCliente } from '../cxc/entities/cxccliente.entity';
 import { CxccClientesDir } from '../cxc/entities/cxccclientesdir.entity';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
-import { TtipoParamFac } from '../parametros/entities/param-fac.entity';
+import { TImpresora } from '../companies/entities/impresoras.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
 import { FacturacionService } from './facturacion.service';
 import { FacturacionController } from './facturacion.controller';
 import { InventarioModule } from '../inventario/inventario.module';
 import { CxcModule } from '../cxc/cxc.module';
+import { ContabilidadModule } from '../contabilidad/contabilidad.module';
 
 @Module({
   imports: [
@@ -11008,12 +15319,14 @@ import { CxcModule } from '../cxc/cxc.module';
       CxccClientesDir,
       Tempresas,
       TempresasDet,
-      TtipoParamFac,
+      TImpresora,
+      TipoParametro,
       Tproducto,
       TproductoImg,
     ]),
     InventarioModule,
     CxcModule,
+    forwardRef(() => ContabilidadModule),
   ],
   controllers: [FacturacionController],
   providers: [FacturacionService],
@@ -11058,11 +15371,14 @@ import {
 } from './dto/facturacion.dto';
 import { CxcService } from '../cxc/cxc.service';
 import { KardexService } from '../inventario/kardex.service';
+import { ContabilidadLogicaService } from '../contabilidad/contabilidad-logica.service';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
-import { TtipoParamFac } from '../parametros/entities/param-fac.entity';
+import { TImpresora } from '../companies/entities/impresoras.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { getTransporter, getMailFrom } from '../../config/mail';
 
 @Injectable()
@@ -11087,12 +15403,15 @@ export class FacturacionService {
     @InjectRepository(CxccClientesDir) private readonly clienteDirRepo: Repository<CxccClientesDir>,
     @InjectRepository(Tempresas) private readonly empresaRepo: Repository<Tempresas>,
     @InjectRepository(TempresasDet) private readonly empresaDetRepo: Repository<TempresasDet>,
-    @InjectRepository(TtipoParamFac) private readonly paramFacRepo: Repository<TtipoParamFac>,
+    @InjectRepository(TImpresora) private readonly impRepo: Repository<TImpresora>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TproductoImg) private readonly productoImgRepo: Repository<TproductoImg>,
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
+    @Inject(forwardRef(() => ContabilidadLogicaService)) private readonly contabilidadService: ContabilidadLogicaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -11144,9 +15463,10 @@ export class FacturacionService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: now,
     });
     return repo.save(entity);
   }
@@ -11159,9 +15479,10 @@ export class FacturacionService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const now2 = await this.fechaSistema.getFecha(empresaId);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: now2,
     });
     return repo.save(entity);
   }
@@ -11226,11 +15547,20 @@ export class FacturacionService {
 
     const empresa = await this.empresaRepo.findOne({ where: { empresaId } });
     const empresaDet = await this.empresaDetRepo.find({ where: { empresaId, sn_activo: 'S' } });
-    const paramFac = await this.paramFacRepo.findOne({ where: { empresaId } });
 
     const rtn = empresaDet.find((d) => d.tipo === 'RTN')?.descripcion || null;
     const telefono = empresaDet.find((d) => d.tipo === 'TELEFONO')?.descripcion || null;
     const direccion = empresaDet.find((d) => d.tipo === 'DIRECCION')?.descripcion || null;
+
+    // Buscar correlativo CAI para esta factura/sucursal
+    const corr = await this.correlativosRepo.findOne({
+      where: { empresaId, Idsucursal: factura.Idsucursal || 0 } as unknown as FindOptionsWhere<TPosCorrelativos>,
+      order: { poscorrelativosId: 'DESC' },
+    });
+
+    // CAI desde tempresasdet (tipo='CAI')
+    const caiDet = empresaDet.find((d) => d.tipo === 'CAI');
+    const caiCodigo = caiDet?.descripcion || null;
 
     return {
       factura,
@@ -11241,15 +15571,27 @@ export class FacturacionService {
         rtn,
         telefono,
         direccion,
-        mensajeFactura: empresa?.msjfactura || paramFac?.mensajeFactura || '',
+        mensajeFactura: empresa?.msjfactura || '',
         mensajeDevolucion: empresa?.msjdevfactura || '',
       },
+      correlativo: corr ? {
+        cai: caiCodigo || '',
+        rangoDesde: corr.rangoDesde || '',
+        rangoHasta: corr.rangoHasta || '',
+      } : (caiCodigo ? {
+        cai: caiCodigo,
+        rangoDesde: '',
+        rangoHasta: '',
+      } : null),
     };
   }
 
   async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
+    let caiInfo: { rangoDesde?: string; rangoHasta?: string; disponible?: number; alerta?: string } | undefined;
     if (!dto.nrofactura) {
-      dto.nrofactura = await this.asignarCorrelativo(dto.empresaId, currentUser);
+      const result = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
+      dto.nrofactura = result.nrofactura;
+      caiInfo = { rangoDesde: result.rangoDesde, rangoHasta: result.rangoHasta, disponible: result.disponible, alerta: result.alerta };
     }
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
 
@@ -11261,9 +15603,12 @@ export class FacturacionService {
       }
     }
 
+    // Integración contable automática (se ejecuta después del kardex)
+    // Se llama desde procesarKardexFactura porque necesita que el inventario esté procesado
+
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
 
-    return factura;
+    return { ...factura, ...caiInfo };
   }
 
   async procesarKardexFactura(facturaId: number, currentUser: string): Promise<{ procesados: number; errores: string[] }> {
@@ -11301,21 +15646,156 @@ export class FacturacionService {
       }
     }
 
+    // Integración contable automática post-kardex
+    // Se ejecuta después de procesar kardex porque necesita que el inventario esté actualizado
+    if (errores.length === 0) {
+      try {
+        const factura = await this.facMaeRepo.findOne({
+          where: { facturaId } as FindOptionsWhere<TPosFacMae>,
+        });
+        if (factura) {
+          await this.contabilidadService.contabilizarFactura(
+            factura,
+            Number(factura.empresaId),
+            Number(factura.Idsucursal) || 0,
+            currentUser,
+          );
+
+          // Después de contabilizar, vincular movimientos CxC con la partida de la factura
+          if (factura.tipofactura === 'C') {
+            try {
+              const refreshFactura = await this.facMaeRepo.findOne({
+                where: { facturaId } as FindOptionsWhere<TPosFacMae>,
+              });
+              if (refreshFactura?.partidaId) {
+                await this.cxcService.actualizarPartidaMovimientos(
+                  refreshFactura.nrofactura.toString(),
+                  refreshFactura.partidaId,
+                  Number(refreshFactura.empresaId),
+                  currentUser,
+                );
+                console.log(`[procesarKardex] Movimientos CxC vinculados a partida ${refreshFactura.partidaId}`);
+              }
+            } catch (e) {
+              console.error(`[procesarKardex] Error vinculando CxC con partida: ${e.message}`);
+            }
+          }
+        }
+      } catch (error: any) {
+        const msg = `Error integración contable: ${error.message || error}`;
+        console.error(`[procesarKardex] ${msg}`);
+        // No agregamos a errores para no bloquear — la contabilización es complementaria
+      }
+    }
+
     console.log(`[procesarKardex] finalizado: procesados=${procesados}, errores=${errores.length}`);
     return { procesados, errores };
   }
 
-  private async asignarCorrelativo(empresaId: number, currentUser: string): Promise<number> {
-    const doc = await this.tipoDocFiscalRepo.findOne({
-      where: { abreviatura: 'FAC', empresaId } as unknown as FindOptionsWhere<TCoTipoDocumentoFiscal>,
+  /**
+   * Extrae el número secuencial del rango formateado.
+   * Ej: '000-001-01-00120001' → 120001
+   */
+  private extractRangoNumero(rango: string): number {
+    const partes = rango.split('-');
+    const ultimo = partes[partes.length - 1];
+    return parseInt(ultimo, 10) || 0;
+  }
+
+  /**
+   * Asigna el número de factura siguiente y retorna info del CAI.
+   * - Valida rango: bloquea si siguiente > hasta, alerta si quedan ≤30
+   * - Si NO hay correlativo → usa nrocorrelativo de tcotipodocumentofiscal (FAC)
+   * - Si modo manual → retorna { nrofactura: 0 }
+   */
+  private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<{
+    nrofactura: number;
+    rangoDesde?: string;
+    rangoHasta?: string;
+    disponible?: number;
+    alerta?: string;
+  }> {
+    // 1. Leer modo_correlativo desde ttipoparametros (moduloId=3: facturación)
+    const paramModo = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId: 3, field: 'modo_correlativo', sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
     });
-    if (!doc) return 1;
-    const actual = Number(doc.nrocorrelativo) || 0;
-    doc.nrocorrelativo = actual + 1;
-    doc.usuarioUpdated = currentUser;
-    doc.fechaUpdated = new Date();
-    await this.tipoDocFiscalRepo.save(doc);
-    return actual;
+
+    const modo = paramModo?.valor || 'A'; // Default: automático
+
+    // 2. Si modo manual ('M') → no auto-asignar
+    if (modo === 'M') {
+      console.log(`[asignarCorrelativo] Modo manual (ttipoparametros). empresaId=${empresaId}`);
+      return { nrofactura: 0 };
+    }
+
+    // 3. Buscar correlativo (CAI) en poscorrelativos para esta empresa/sucursal
+    const corr = await this.correlativosRepo.findOne({
+      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TPosCorrelativos>,
+      order: { poscorrelativosId: 'DESC' },
+    });
+
+    // 4. SI hay correlativo (CAI) → usar nrofactura del CAI
+    if (corr) {
+      const nroActual = Number(corr.nrofactura) || 0;
+      const hasta = this.extractRangoNumero(corr.rangoHasta);
+
+      // Siguiente número
+      const siguiente = nroActual + 1;
+
+      // Validar: si el siguiente número supera el rango → BLOQUEAR
+      if (siguiente > hasta) {
+        throw new BadRequestException(
+          `Rango de facturación agotado. Último número: ${nroActual}. Rango autorizado: ${corr.rangoDesde} al ${corr.rangoHasta}. Renueve el CAI ante la SAT.`
+        );
+      }
+
+      // Calcular disponibles
+      const disponible = hasta - siguiente + 1;
+
+      // Alerta si quedan ≤30 facturas
+      let alerta: string | undefined;
+      if (disponible <= 30) {
+        alerta = `La autorización de facturación está próxima a caducar. Quedan solo ${disponible} factura(s) disponibles. Renueve el CAI ante la SAT.`;
+        console.warn(`[asignarCorrelativo] ${alerta}`);
+      }
+
+      // Incrementar y guardar
+      corr.nrofactura = siguiente;
+      corr.usuarioUpdated = currentUser;
+      corr.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+      await this.correlativosRepo.save(corr);
+
+      console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}, disponible=${disponible}`);
+
+      return {
+        nrofactura: siguiente,
+        rangoDesde: corr.rangoDesde,
+        rangoHasta: corr.rangoHasta,
+        disponible,
+        alerta,
+      };
+    }
+
+    // 5. NO hay correlativo (CAI) → usar nrocorrelativo de tcotipodocumentofiscal (FAC)
+    const tipoDocFAC = await this.tipoDocFiscalRepo.findOne({
+      where: { empresaId, tipodocumentofiscalId: 1 } as unknown as FindOptionsWhere<TCoTipoDocumentoFiscal>,
+    });
+
+    if (!tipoDocFAC) {
+      console.warn(`[asignarCorrelativo] No hay correlativo CAI ni tipo doc fiscal FAC para empresaId=${empresaId}`);
+      return { nrofactura: 1 };
+    }
+
+    const nroCorrelativo = Number(tipoDocFAC.nrocorrelativo) || 0;
+    const siguiente = nroCorrelativo + 1;
+
+    tipoDocFAC.nrocorrelativo = siguiente;
+    tipoDocFAC.usuarioUpdated = currentUser;
+    tipoDocFAC.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+    await this.tipoDocFiscalRepo.save(tipoDocFAC);
+
+    console.log(`[asignarCorrelativo] FAC (sin CAI): empresaId=${empresaId}, nrocorrelativo=${siguiente}`);
+    return { nrofactura: siguiente };
   }
 
   async updateFactura(facturaId: number, empresaId: number, dto: UpdatePosFacMaeDto, currentUser: string) {
@@ -11366,10 +15846,6 @@ export class FacturacionService {
       throw new BadRequestException('La factura ya esta anulada');
     }
 
-    if (facturaOriginal.sn_contabilizada === 'S') {
-      throw new BadRequestException('La factura esta contabilizada y no se puede anular');
-    }
-
     if (facturaOriginal.tipofactura === 'C') {
       const pagos = await this.facCajaRepo.find({
         where: { facturaId: dto.facturaId, empresaId: dto.empresaId, sn_anulado: 'N' } as any,
@@ -11402,7 +15878,7 @@ export class FacturacionService {
 
       facturaOriginal.sn_anulada = 'S';
       facturaOriginal.usuarioUpdated = currentUser;
-      facturaOriginal.fechaUpdated = new Date();
+      facturaOriginal.fechaUpdated = await this.fechaSistema.getFecha(facturaOriginal.empresaId);
       await this.facMaeRepo.save(facturaOriginal);
 
       try {
@@ -11421,6 +15897,17 @@ export class FacturacionService {
         await this.cxcService.anularCajaPorFactura(facturaOriginal.facturaId, facturaOriginal.nrofactura, facturaOriginal.empresaId, currentUser);
       } catch (error) {
         console.error('Error anulando Caja por Factura:', error);
+      }
+
+      // Descontabilizar si estaba contabilizada
+      try {
+        await this.contabilidadService.descontabilizarFactura(
+          facturaOriginal,
+          Number(facturaOriginal.empresaId),
+          currentUser,
+        );
+      } catch (error) {
+        console.error('Error descontabilizando factura:', error);
       }
     }
 
@@ -11522,11 +16009,16 @@ export class FacturacionService {
     });
     if (detalles.length === 0) throw new NotFoundException('El carrito estÃ¡ vacÃ­o');
 
-    const paramFac = await this.paramFacRepo.findOne({
-      where: { empresaId } as unknown as FindOptionsWhere<TtipoParamFac>,
-    });
-    const bodegaId = paramFac?.bodegaId || 1;
-    const cajaId = paramFac?.cajaId || 1;
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+    const bodegaId = await getParam('bodegaId', 1);
+    const cajaId = await getParam('cajaId', 1);
 
     let subTotal = 0;
     let impuestoTotal = 0;
@@ -11559,7 +16051,7 @@ export class FacturacionService {
       })) as CxcCliente;
     }
 
-    const nrofactura = await this.asignarCorrelativo(empresaId, currentUser);
+    const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
 
     const facturaPayload: any = {
       nrofactura,
@@ -11635,7 +16127,7 @@ export class FacturacionService {
     carrito.Nombrecliente = dto.nombrecliente;
     carrito.direccion = dto.direccion || '';
     carrito.usuarioUpdated = currentUser;
-    carrito.fechaUpdated = new Date();
+    carrito.fechaUpdated = await this.fechaSistema.getFecha(carrito.empresaId);
     await this.cotMaeRepo.save(carrito);
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
@@ -11730,11 +16222,16 @@ export class FacturacionService {
     });
     if (detalles.length === 0) throw new BadRequestException('El pedido está vacío');
 
-    const paramFac = await this.paramFacRepo.findOne({
-      where: { empresaId } as unknown as FindOptionsWhere<TtipoParamFac>,
-    });
-    const bodegaId = paramFac?.bodegaId || 1;
-    const cajaId = paramFac?.cajaId || 1;
+    const getParamPedido = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+    const bodegaId = await getParamPedido('bodegaId', 1);
+    const cajaId = await getParamPedido('cajaId', 1);
 
     let subTotal = 0;
     let impuestoTotal = 0;
@@ -11772,7 +16269,7 @@ export class FacturacionService {
       })) as CxcCliente;
     }
 
-    const nrofactura = await this.asignarCorrelativo(empresaId, currentUser);
+    const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
 
     const facturaPayload: any = {
       nrofactura,
@@ -11843,7 +16340,7 @@ export class FacturacionService {
     pedido.sn_facturado = 'S';
     pedido.facturaId = factura.facturaId;
     pedido.usuarioUpdated = currentUser;
-    pedido.fechaUpdated = new Date();
+    pedido.fechaUpdated = await this.fechaSistema.getFecha(pedido.empresaId);
     await this.pedMaeRepo.save(pedido);
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
@@ -11911,6 +16408,47 @@ export class FacturacionService {
   async removeCombo(poscbomaeId: number, empresaId: number) {
     await this.cboDetRepo.delete({ poscbomaeId, empresaId } as any);
     return this.cboMaeRepo.delete({ poscbomaeId, empresaId } as any);
+  }
+
+  /** Productos en oferta/promoción: combo vigente con tipocombo != 'C' */
+  async findProductosEnOferta(empresaId: number) {
+    const rows = await this.cboDetRepo
+      .createQueryBuilder('det')
+      .select([
+        'det.productoId AS productoId',
+        'det.codbarra AS codbarra',
+        'det.precioventa AS precioCbo',
+        'pro.precioventa AS precioNormal',
+        'des.porcentaje AS porcentaje',
+        'des.descripcion AS descuentoDesc',
+        'mae.tipocombo AS tipocombo',
+        'mae.descripcion AS comboDesc',
+        'mae.fec_vig_desde AS fecVigDesde',
+        'mae.fec_vig_hasta AS fecVigHasta',
+      ])
+      .innerJoin('tposdescuentos', 'des', 'des.descuentoId = det.descuentoId')
+      .innerJoin('productos', 'pro', 'pro.productoId = det.productoId')
+      .innerJoin('poscbomae', 'mae', 'mae.poscbomaeId = det.poscbomaeId')
+      .where('det.empresaId = :empresaId', { empresaId })
+      .andWhere('mae.empresaId = :empresaId', { empresaId })
+      .andWhere('DATE(mae.fec_vig_hasta) >= DATE(NOW())')
+      .andWhere('DATE(mae.fec_vig_desde) <= DATE(NOW())')
+      .andWhere("mae.tipocombo <> 'C'")
+      .andWhere('det.descuentoId IS NOT NULL')
+      .getRawMany();
+
+    return rows.map(r => ({
+      productoId: Number(r.productoId),
+      codbarra: r.codbarra,
+      precioNormal: Number(r.precioNormal),
+      precioConDescuento: Number(r.precioNormal) - (Number(r.precioNormal) * (Number(r.porcentaje) / 100)),
+      porcentaje: Number(r.porcentaje),
+      descuentoDesc: r.descuentoDesc,
+      tipocombo: r.tipocombo,
+      comboDesc: r.comboDesc,
+      fecVigDesde: r.fecVigDesde,
+      fecVigHasta: r.fecVigHasta,
+    }));
   }
 
   async findAllPrecios(empresaId: number) {
@@ -12113,17 +16651,25 @@ export class FacturacionService {
     const pagosBlock = pagos.length > 0 ? '<hr style="border:1px solid #e2e8f0"><h4>Pagos</h4>' + pagosHtml : '';
     const msjFac = emp.mensajeFactura || '';
 
+    // Info CAI
+    const corr = ticket.correlativo;
+    const nroFactFmt = corr?.rangoDesde
+      ? (() => { const p = corr.rangoDesde.split('-'); return p.length > 1 ? p.slice(0, -1).join('-') + '-' + String(nroFact).padStart(8, '0') : String(nroFact).padStart(8, '0'); })()
+      : String(nroFact);
+
     return '<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">'
       + '<h2 style="color:#10b981;margin-bottom:5px">' + nombre + '</h2>'
       + (rtn ? '<p style="color:#64748b;margin:0">RTN: ' + rtn + '</p>' : '')
       + (dirEmp ? '<p style="color:#64748b;margin:0">' + dirEmp + '</p>' : '')
       + (tel ? '<p style="color:#64748b;margin:0">Tel: ' + tel + '</p>' : '')
       + '<hr style="border:1px solid #e2e8f0">'
-      + '<h3 style="margin:10px 0">Factura #' + nroFact + '</h3>'
+      + '<h3 style="margin:10px 0">Factura #' + nroFactFmt + '</h3>'
       + '<p><strong>Cliente:</strong> ' + cliente + '</p>'
       + '<p><strong>Direccion:</strong> ' + dirCli + '</p>'
       + '<p><strong>Fecha:</strong> ' + fecha + '</p>'
       + '<p><strong>Tipo:</strong> ' + tipo + ' | <strong>Estado:</strong> ' + (f.sn_pagada === 'S' ? 'Pagada' : 'Pendiente') + '</p>'
+      + (corr ? '<p style="font-size:0.85em;color:#64748b"><strong>Rango Autorizado:</strong> del ' + corr.rangoDesde + ' al ' + corr.rangoHasta + '</p>'
+              + '<p style="font-size:0.85em;color:#64748b"><strong>CAI:</strong> ' + corr.cai + '</p>' : '')
       + '<table style="width:100%;border-collapse:collapse;margin:15px 0">'
       + '<thead><tr style="background:#10b981;color:white">'
       + '<th style="padding:8px;border:1px solid #10b981">#</th>'
@@ -12271,6 +16817,7 @@ import { TInvMovDet } from './entities/invmovdet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class AjusteInventarioService {
@@ -12280,6 +16827,7 @@ export class AjusteInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -12314,7 +16862,7 @@ export class AjusteInventarioService {
 
   async updateMae(invmovmaeid: number, empresaId: number, dto: any, usuario: string) {
     const mae = await this.findOneMae(invmovmaeid, empresaId);
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -12370,7 +16918,7 @@ export class AjusteInventarioService {
   async updateDet(invmovdetid: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { invmovdetid, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -12428,7 +16976,7 @@ export class AjusteInventarioService {
       await this.detRepo.update(det.invmovdetid, {
         verificador: 1,
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
 
       resultados.push({
@@ -12443,7 +16991,7 @@ export class AjusteInventarioService {
     await this.maeRepo.update(invmovmaeid, {
       sn_anulado: 'N',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Ajuste procesado', items: resultados };
@@ -13460,7 +18008,7 @@ export class TInvTrasladoDet {
   fecharegistro: Date;
 
   @ApiProperty()
-  @Column({ type: 'int' })
+  @Column({ type: 'int', name: 'trasladoId' })
   invtrasladomaeId: number;
 
   @ApiProperty()
@@ -13475,21 +18023,29 @@ export class TInvTrasladoDet {
   @Column({ type: 'varchar', length: 20 })
   codbarra: string;
 
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  descripcion: string;
-
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   cantidad: number;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'precioCosto' })
   costoUnitario: number;
 
+  @ApiProperty({ required: false })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'precioVenta', nullable: true })
+  precioVenta: number;
+
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'subTotal' })
   costoTotal: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bodegaOrigen: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bodegaDestino: string;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
@@ -14988,8 +19544,11 @@ export class InventarioController {
   @Get('productos-det')
   @ApiOperation({ summary: 'Listar detalle de productos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllProdDet(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProdDet(empresaId);
+  findAllProdDet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('produtoId') produtoId?: string,
+  ) {
+    return this.service.findAllProdDet(empresaId, produtoId ? Number(produtoId) : undefined);
   }
 
   @Get('productos-det/:id')
@@ -15036,8 +19595,11 @@ export class InventarioController {
   @Get('productos-img')
   @ApiOperation({ summary: 'Listar imágenes de productos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllProdImg(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProdImg(empresaId);
+  findAllProdImg(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('productoId') productoId?: string,
+  ) {
+    return this.service.findAllProdImg(empresaId, productoId ? Number(productoId) : undefined);
   }
 
   @Get('productos-img/:id')
@@ -15222,6 +19784,7 @@ import { CreateProductoDto, UpdateProductoDto } from './dto/producto.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
 import { KardexService, KardexEntradaDto, KardexSalidaDto } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class InventarioService {
@@ -15246,6 +19809,7 @@ export class InventarioService {
     @InjectRepository(TproductoDet) private readonly prodDetRepo: Repository<TproductoDet>,
     @InjectRepository(TproductoImg) private readonly prodImgRepo: Repository<TproductoImg>,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -15292,7 +19856,7 @@ export class InventarioService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -15307,7 +19871,7 @@ export class InventarioService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -15673,8 +20237,10 @@ export class InventarioService {
 
   // ===== ProductoDet =====
 
-  async findAllProdDet(empresaId: number) {
-    return this.prodDetRepo.find({ where: { empresaId } });
+  async findAllProdDet(empresaId: number, produtoId?: number) {
+    const where: any = { empresaId };
+    if (produtoId) where.produtoId = produtoId;
+    return this.prodDetRepo.find({ where });
   }
 
   async findProdDet(productosdetsId: number, empresaId: number) {
@@ -15695,8 +20261,10 @@ export class InventarioService {
 
   // ===== ProductoImg =====
 
-  async findAllProdImg(empresaId: number) {
-    return this.prodImgRepo.find({ where: { empresaId } });
+  async findAllProdImg(empresaId: number, productoId?: number) {
+    const where: any = { empresaId };
+    if (productoId) where.productoId = productoId;
+    return this.prodImgRepo.find({ where });
   }
 
   async findProductosTienda(empresaId: number) {
@@ -15871,6 +20439,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TinvKardex } from './entities/kardex.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { Tproducto } from './entities/producto.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 export interface KardexEntradaDto {
   bodegaId: number;
@@ -15915,6 +20484,7 @@ export class KardexService {
     @InjectRepository(Tproducto)
     private readonly productoRepo: Repository<Tproducto>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async registrarEntrada(dto: KardexEntradaDto): Promise<TinvKardex> {
@@ -15927,7 +20497,7 @@ export class KardexService {
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
-      FechaIngreso: dto.FechaIngreso || new Date(),
+      FechaIngreso: dto.FechaIngreso || await this.fechaSistema.getFecha(dto.empresaId),
       factordecambio: dto.factordecambio || 1,
       cantidad: dto.cantidad,
       existencia: saldoActual,
@@ -15969,7 +20539,7 @@ export class KardexService {
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
-      FechaIngreso: new Date(),
+      FechaIngreso: await this.fechaSistema.getFecha(dto.empresaId),
       factordecambio: dto.factordecambio || 1,
       cantidad: dto.cantidad,
       existencia: saldoActual,
@@ -16042,7 +20612,7 @@ export class KardexService {
         existencia: nuevaExistencia,
         costounitario: costoUnitario,
         usuarioUpdated,
-        fechaUpdated: new Date() as any,
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId) as any,
       })
       .where('bodegaId = :bodegaId AND productoId = :productoId AND empresaId = :empresaId', {
         bodegaId,
@@ -16304,6 +20874,7 @@ import { Repository } from 'typeorm';
 import { TInvReqMae } from './entities/invreqmae.entity';
 import { TInvReqDet } from './entities/invreqdet.entity';
 import { Tproducto } from './entities/producto.entity';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class RequisicionInventarioService {
@@ -16311,6 +20882,7 @@ export class RequisicionInventarioService {
     @InjectRepository(TInvReqMae) private readonly maeRepo: Repository<TInvReqMae>,
     @InjectRepository(TInvReqDet) private readonly detRepo: Repository<TInvReqDet>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -16349,7 +20921,7 @@ export class RequisicionInventarioService {
     if (dto.fechaEntrega) {
       dto.fechaEntrega = new Date(dto.fechaEntrega).toISOString().slice(0, 10);
     }
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -16400,7 +20972,7 @@ export class RequisicionInventarioService {
   async updateDet(invreqdetid: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { invreqdetid, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -16421,14 +20993,14 @@ export class RequisicionInventarioService {
       await this.detRepo.update(det.invreqdetid, {
         sn_estado: 'A',
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
     }
 
     await this.maeRepo.update(invreqmaeid, {
       sn_estado: 'A',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Requisición aprobada' };
@@ -16442,7 +21014,7 @@ export class RequisicionInventarioService {
       sn_anulado: 'S',
       sn_estado: 'X',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Requisición anulada' };
@@ -16593,6 +21165,7 @@ import { TInvFisDet } from './entities/invfisdet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class TomaInventarioService {
@@ -16602,6 +21175,7 @@ export class TomaInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -16631,7 +21205,7 @@ export class TomaInventarioService {
 
   async updateMae(invfisId: number, empresaId: number, dto: any, usuario: string) {
     const mae = await this.findOneMae(invfisId, empresaId);
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -16703,7 +21277,7 @@ export class TomaInventarioService {
   async updateDet(nvfisdetId: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { nvfisdetId, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: new Date() });
+    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -16777,7 +21351,7 @@ export class TomaInventarioService {
         costoTotal: Number(fisico) * Number(costoUnitario),
         sn_aplicado: 'S',
         usuarioUpdated: usuario,
-        fechaUpdated: new Date(),
+        fechaUpdated: await this.fechaSistema.getFecha(empresaId),
       } as any);
 
       resultados.push({
@@ -16793,7 +21367,7 @@ export class TomaInventarioService {
     await this.maeRepo.update(invfisId, {
       sn_anulado: 'N',
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);
 
     return { message: 'Inventario procesado', items: resultados };
@@ -16948,7 +21522,7 @@ export class TrasladoInventarioController {
   @ApiOperation({ summary: 'Procesar traslado (kardex salida + entrada)' })
   procesar(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body('empresaId', ParseIntPipe) empresaId: number,
     @CurrentUser() user: any,
   ) {
     return this.service.procesar(id, empresaId, user?.usuario || 'admin');
@@ -16958,7 +21532,7 @@ export class TrasladoInventarioController {
   @ApiOperation({ summary: 'Anular traslado' })
   anular(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body('empresaId', ParseIntPipe) empresaId: number,
     @CurrentUser() user: any,
   ) {
     return this.service.anular(id, empresaId, user?.usuario || 'admin');
@@ -16980,6 +21554,7 @@ import { TInvTrasladoDet } from './entities/invtrasladodet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 
 @Injectable()
 export class TrasladoInventarioService {
@@ -16989,6 +21564,7 @@ export class TrasladoInventarioService {
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
     private readonly kardexService: KardexService,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAllMae(empresaId: number) {
@@ -17002,7 +21578,17 @@ export class TrasladoInventarioService {
   }
 
   async findDetByMae(id: number, empresaId: number) {
-    return this.detRepo.find({ where: { invtrasladomaeId: id, empresaId } as any, order: { nrofila: 'ASC' } as any });
+    const rows = await this.detRepo.createQueryBuilder('d')
+      .leftJoinAndSelect(Tproducto, 'p', 'p.produtoId = d.productoId AND p.empresaId = d.empresaId')
+      .select([
+        'd.*',
+        'p.descripcion AS descripcion',
+      ])
+      .where('d.invtrasladomaeId = :id', { id })
+      .andWhere('d.empresaId = :empresaId', { empresaId })
+      .orderBy('d.nrofila', 'ASC')
+      .getRawMany();
+    return rows;
   }
 
   async createMae(dto: any, usuario: string) {
@@ -17029,7 +21615,7 @@ export class TrasladoInventarioService {
       bodegaDestinoId: dto.bodegaDestinoId,
       observaciones: dto.observaciones,
       usuarioUpdated: usuario,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.maeRepo.save(mae);
   }
@@ -17048,7 +21634,6 @@ export class TrasladoInventarioService {
       .getRawOne();
     const nrofila = (maxNro?.maxNro || 0) + 1;
 
-    let descripcion = dto.descripcion || '';
     let costoUnitario = Number(dto.costoUnitario) || 0;
     let productoId = dto.productoId;
 
@@ -17056,10 +21641,14 @@ export class TrasladoInventarioService {
       const prod = await this.productoRepo.findOne({ where: { codbarra: dto.codbarra, empresaId: dto.empresaId } as any });
       if (prod) {
         productoId = prod.produtoId;
-        descripcion = prod.descripcion;
         costoUnitario = Number(prod.cstounit) || 0;
       }
     }
+
+    // Obtener bodegas del maestro
+    const mae = await this.maeRepo.findOne({ where: { invtrasladomaeId: dto.invtrasladomaeId } as any });
+    const bodegaOrigen = String(mae?.bodegaOrigenId || '');
+    const bodegaDestino = String(mae?.bodegaDestinoId || '');
 
     const cantidad = Number(dto.cantidad) || 0;
     const costoTotal = cantidad * costoUnitario;
@@ -17069,10 +21658,11 @@ export class TrasladoInventarioService {
       nrofila,
       productoId,
       codbarra: dto.codbarra || '',
-      descripcion,
       cantidad,
       costoUnitario,
       costoTotal,
+      bodegaOrigen,
+      bodegaDestino,
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
@@ -17130,7 +21720,7 @@ export class TrasladoInventarioService {
 
     mae.sn_procesado = 'S';
     mae.usuarioUpdated = usuario;
-    mae.fechaUpdated = new Date();
+    mae.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.maeRepo.save(mae);
 
     return { message: 'Traslado procesado correctamente' };
@@ -17143,7 +21733,7 @@ export class TrasladoInventarioService {
 
     mae.sn_anulado = 'S';
     mae.usuarioUpdated = usuario;
-    mae.fechaUpdated = new Date();
+    mae.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.maeRepo.save(mae);
 
     return { message: 'Traslado anulado' };
@@ -17219,6 +21809,10 @@ export class Tmodulos {
   @ApiProperty()
   @Column()
   empresaId: number;
+
+  @ApiProperty({ required: false, description: 'Orden de presentación en el menú' })
+  @Column({ type: 'int', default: 0 })
+  zorden: number;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
@@ -17326,6 +21920,7 @@ export class ModulosModule {}
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tmodulos } from './entities/modulo.entity';
 import { CreateModuloDto, UpdateModuloDto } from './dto/modulo.dto';
 
@@ -17334,6 +21929,7 @@ export class ModulosService {
   constructor(
     @InjectRepository(Tmodulos)
     private readonly repo: Repository<Tmodulos>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll(empresaId: number) {
@@ -17361,7 +21957,7 @@ export class ModulosService {
     const entity = await this.findOne(moduloId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }
@@ -17489,429 +22085,6 @@ export class UpdateMonedaDto {
 
 ---
 
-## 📄 src\modules\parametros\dto\param-con.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamConDto {
-  @ApiProperty({ required: false, description: 'Número de partida' })
-  @IsNumber() @IsOptional()
-  nropartida?: number;
-
-  @ApiProperty({ required: false, description: 'Período fiscal' })
-  @IsNumber() @IsOptional()
-  periodofiscal?: number;
-
-  @ApiProperty({ required: false, description: 'Año fiscal' })
-  @IsNumber() @IsOptional()
-  aniofiscal?: number;
-
-  @ApiProperty({ required: false, description: 'ID de moneda fiscal' })
-  @IsNumber() @IsOptional()
-  monedafiscalId?: number;
-
-  @ApiProperty({ required: false, description: 'Máscara de cuenta contable' })
-  @IsString() @IsOptional()
-  mascaracta?: string;
-
-  @ApiProperty({ required: false, description: 'Nombre del contador' })
-  @IsString() @IsOptional()
-  nombrecontador?: string;
-
-  @ApiProperty({ required: false, description: 'Nombre del gerente' })
-  @IsString() @IsOptional()
-  nombregerente?: string;
-
-  @ApiProperty({ required: false, description: 'Nombre del auditor' })
-  @IsString() @IsOptional()
-  nombreauditor?: string;
-}
-
-export class UpdateParamConDto extends CreateParamConDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-cxc.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamCxcDto {
-  @ApiProperty({ required: false, description: 'Correlativo de cliente' })
-  @IsNumber() @IsOptional()
-  nrocliente?: number;
-
-  @ApiProperty({ required: false, description: 'Tasa de interés' })
-  @IsNumber() @IsOptional()
-  interes?: number;
-
-  @ApiProperty({ required: false, description: 'Tasa de mora' })
-  @IsNumber() @IsOptional()
-  mora?: number;
-
-  @ApiProperty({ required: false, description: 'Días de plazo' })
-  @IsNumber() @IsOptional()
-  diasPlazo?: number;
-
-  @ApiProperty({ required: false, description: 'Límite de crédito' })
-  @IsNumber() @IsOptional()
-  limitecredito?: number;
-
-  @ApiProperty({ required: false, description: 'Cuenta contable' })
-  @IsString() @IsOptional()
-  ctacontable?: string;
-}
-
-export class UpdateParamCxcDto extends CreateParamCxcDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-cxp.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamCxpDto {
-  @ApiProperty({ required: false, description: 'Correlativo de proveedor' })
-  @IsNumber() @IsOptional()
-  nroproveedor?: number;
-
-  @ApiProperty({ required: false, description: 'Tasa de interés' })
-  @IsNumber() @IsOptional()
-  interes?: number;
-
-  @ApiProperty({ required: false, description: 'Tasa de mora' })
-  @IsNumber() @IsOptional()
-  mora?: number;
-
-  @ApiProperty({ required: false, description: 'Días de plazo' })
-  @IsNumber() @IsOptional()
-  diasPlazo?: number;
-
-  @ApiProperty({ required: false, description: 'Límite de crédito' })
-  @IsNumber() @IsOptional()
-  limitecredito?: number;
-
-  @ApiProperty({ required: false, description: 'Cuenta contable' })
-  @IsString() @IsOptional()
-  ctacontable?: string;
-}
-
-export class UpdateParamCxpDto extends CreateParamCxpDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-fac.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsEnum, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamFacDto {
-  @ApiProperty({ required: false, description: 'ID de bodega predeterminada' })
-  @IsNumber() @IsOptional()
-  bodegaId?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de factura' })
-  @IsNumber() @IsOptional()
-  nrofactura?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de cotización' })
-  @IsNumber() @IsOptional()
-  nrocotizacion?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de anulación' })
-  @IsNumber() @IsOptional()
-  nroanulacion?: number;
-
-  @ApiProperty({ required: false, description: 'ID de impuesto' })
-  @IsNumber() @IsOptional()
-  impuestoId?: number;
-
-  @ApiProperty({ required: false, description: 'ID de caja' })
-  @IsNumber() @IsOptional()
-  cajaId?: number;
-
-  @ApiProperty({ required: false, description: 'Líneas por factura' })
-  @IsNumber() @IsOptional()
-  lineasFactura?: number;
-
-  @ApiProperty({ required: false, description: 'Días para devolución' })
-  @IsNumber() @IsOptional()
-  diasDevolucion?: number;
-
-  @ApiProperty({ required: false, description: 'Porcentaje máximo de devolución' })
-  @IsNumber() @IsOptional()
-  porcentajeDevolucion?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo PDA ventas' })
-  @IsNumber() @IsOptional()
-  nrodpdaventas?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo PDA devolución' })
-  @IsNumber() @IsOptional()
-  nropdadevolucion?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo PDA anulación' })
-  @IsNumber() @IsOptional()
-  nropdaanulacion?: number;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Integrado con CxC' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_integrado_cxc?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Punto de venta activo' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_puntoventa?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Integrado con caja' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_integrado_caja?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Anticipos activos' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_anticipos?: string;
-
-  @ApiProperty({ required: false, description: 'Mensaje de factura' })
-  @IsString() @IsOptional()
-  mensajeFactura?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Correlativo único' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_correlativoUnico?: string;
-
-  @ApiProperty({ required: false, description: 'Margen superior (mm)' })
-  @IsNumber() @IsOptional()
-  mg_t?: number;
-
-  @ApiProperty({ required: false, description: 'Margen inferior (mm)' })
-  @IsNumber() @IsOptional()
-  mg_b?: number;
-
-  @ApiProperty({ required: false, description: 'Margen izquierdo (mm)' })
-  @IsNumber() @IsOptional()
-  mg_l?: number;
-
-  @ApiProperty({ required: false, description: 'Margen derecho (mm)' })
-  @IsNumber() @IsOptional()
-  mg_d?: number;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Múltiples cajeros' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_multiplezcajeros?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Imprime factura' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_imprimefactura?: string;
-
-  @ApiProperty({ required: false, description: 'Impresora de factura' })
-  @IsString() @IsOptional()
-  ImpresoraFactura?: string;
-
-  @ApiProperty({ required: false, description: 'Impresora de comprobante' })
-  @IsString() @IsOptional()
-  ImpresoraComprobante?: string;
-
-  @ApiProperty({ required: false, description: 'Impresora de madera' })
-  @IsString() @IsOptional()
-  ImpresoraMadera?: string;
-
-  @ApiProperty({ required: false, description: 'Impresora de recibo' })
-  @IsString() @IsOptional()
-  ImpresoraRecibo?: string;
-
-  @ApiProperty({ required: false, description: 'Driver impresora 1' })
-  @IsString() @IsOptional()
-  DriverImpresora1?: string;
-
-  @ApiProperty({ required: false, description: 'Driver impresora 2' })
-  @IsString() @IsOptional()
-  DriverImpresora2?: string;
-
-  @ApiProperty({ required: false, description: 'Driver impresora 3' })
-  @IsString() @IsOptional()
-  DriverImpresora3?: string;
-
-  @ApiProperty({ required: false, description: 'Driver impresora 4' })
-  @IsString() @IsOptional()
-  DriverImpresora4?: string;
-
-  @ApiProperty({ required: false, description: 'Puerto impresora 1' })
-  @IsString() @IsOptional()
-  Puerto1?: string;
-
-  @ApiProperty({ required: false, description: 'Puerto impresora 2' })
-  @IsString() @IsOptional()
-  Puerto2?: string;
-
-  @ApiProperty({ required: false, description: 'Puerto impresora 3' })
-  @IsString() @IsOptional()
-  Puerto3?: string;
-
-  @ApiProperty({ required: false, description: 'Puerto impresora 4' })
-  @IsString() @IsOptional()
-  Puerto4?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Múltiples empresas' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_multipleempresa?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Impuesto incluido' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_impuestoincluido?: string;
-}
-
-export class UpdateParamFacDto extends CreateParamFacDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-inv.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamInvDto {
-  @ApiProperty({ required: false, description: 'ID de bodega predeterminada' })
-  @IsNumber() @IsOptional()
-  bodegaId?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de compra' })
-  @IsNumber() @IsOptional()
-  nrocompra?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de traslado' })
-  @IsNumber() @IsOptional()
-  nrotrasladoo?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de ajuste' })
-  @IsNumber() @IsOptional()
-  nroajuste?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo físico' })
-  @IsNumber() @IsOptional()
-  nrofisico?: number;
-
-  @ApiProperty({ required: false, description: 'Correlativo de requisición' })
-  @IsNumber() @IsOptional()
-  nrorequisicion?: number;
-
- @ApiProperty({ required: false, description: 'ID de impuesto de compra' })
-  @IsNumber() @IsOptional()
-  impuestocompraId?: number;
-
-
-  @ApiProperty({ required: false, description: 'ID de precio de venta' })
-  @IsNumber() @IsOptional()
-  preciovtaId?: number;
-
-  @ApiProperty({ required: false, description: 'ID de impuesto de venta' })
-  @IsNumber() @IsOptional()
-  impuestoventaId?: number;
-
-  @ApiProperty({ required: false, description: 'Número de partida' })
-  @IsNumber() @IsOptional()
-  nropartida?: number;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Requiere lote' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_requirelote?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Modo supermercado' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_supermercado?: string;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Múltiples precios' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_multiplesprecios?: string;
-}
-
-export class UpdateParamInvDto extends CreateParamInvDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-pla.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamPlaDto {
-  @ApiProperty({ required: false, description: 'Número de partida' })
-  @IsNumber() @IsOptional()
-  nropartida?: number;
-
-  @ApiProperty({ required: false, description: 'Número de planilla' })
-  @IsNumber() @IsOptional()
-  nroplanilla?: number;
-
-  @ApiProperty({ required: false, description: 'Techo salarial' })
-  @IsNumber() @IsOptional()
-  techo?: number;
-
-  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Validar techo' })
-  @IsEnum(['S', 'N']) @IsOptional()
-  sn_validatecho?: string;
-
-  @ApiProperty({ required: false, description: 'Días laborales' })
-  @IsNumber() @IsOptional()
-  diaslaborales?: number;
-}
-
-export class UpdateParamPlaDto extends CreateParamPlaDto {}
-
-```
-
----
-
-## 📄 src\modules\parametros\dto\param-pres.dto.ts
-
-```typescript
-import { IsOptional, IsNumber, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateParamPresDto {
-  @ApiProperty({ required: false, description: 'Tasa de interés' })
-  @IsNumber() @IsOptional()
-  interes?: number;
-
-  @ApiProperty({ required: false, description: 'Tasa de mora' })
-  @IsNumber() @IsOptional()
-  mora?: number;
-
-  @ApiProperty({ required: false, description: 'Días de plazo' })
-  @IsNumber() @IsOptional()
-  diasPlazo?: number;
-
-  @ApiProperty({ required: false, description: 'Límite de crédito' })
-  @IsNumber() @IsOptional()
-  limitecredito?: number;
-
-  @ApiProperty({ required: false, description: 'Cuenta contable' })
-  @IsString() @IsOptional()
-  ctacontable?: string;
-}
-
-export class UpdateParamPresDto extends CreateParamPresDto {}
-
-```
-
----
-
 ## 📄 src\modules\parametros\dto\simple-param.dto.ts
 
 ```typescript
@@ -17932,6 +22105,55 @@ export class UpdateSimpleParamDto {
   @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Estado activo' })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_activo?: string;
+}
+
+```
+
+---
+
+## 📄 src\modules\parametros\dto\tipo-parametro.dto.ts
+
+```typescript
+import { IsString, IsNumber, IsOptional, IsEnum, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class TipoParametroItemDto {
+  @ApiProperty()
+  @IsString()
+  field: string;
+
+  @ApiProperty({ enum: ['NUMBER', 'STRING'] })
+  @IsEnum(['NUMBER', 'STRING'])
+  tipo: string;
+
+  @ApiProperty()
+  @IsString()
+  valor: string;
+
+  @ApiPropertyOptional({ enum: ['S', 'N'] })
+  @IsOptional()
+  @IsEnum(['S', 'N'])
+  sn_activo?: string;
+}
+
+export class UpsertParametrosDto {
+  @ApiProperty({ type: [TipoParametroItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TipoParametroItemDto)
+  parametros: TipoParametroItemDto[];
+}
+
+export class TipoParametroQueryDto {
+  @ApiProperty()
+  @IsNumber()
+  empresaId: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  moduloId?: number;
 }
 
 ```
@@ -18353,637 +22575,6 @@ export class TtipoPais {
 
 ---
 
-## 📄 src\modules\parametros\entities\param-bco.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparambco')
-export class TtipoParamBco {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-con.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparamcon')
-export class TtipoParamCon {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty()
-  @Column({ type: 'int', default: 0 })
-  nropartida: number;
-
-  @ApiProperty()
-  @Column({ type: 'int', default: 0 })
-  periodofiscal: number;
-
-  @ApiProperty()
-  @Column({ type: 'int', default: 0 })
-  aniofiscal: number;
-
-  @ApiProperty()
-  @Column({ type: 'int', default: 0 })
-  monedafiscalId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  mascaracta: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  nombrecontador: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  nombregerente: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  nombreauditor: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-cxc.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparamcxc')
-export class TtipoParamCxc {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nrocliente: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  interes: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  mora: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  diasPlazo: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  limitecredito: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ctacontable: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-cxp.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparamcxp')
-export class TtipoParamCxp {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nroproveedor: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  interes: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  mora: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  diasPlazo: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  limitecredito: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ctacontable: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-fac.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column, ManyToOne, JoinColumn
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-import { Cxccajero } from '../../cxc/entities/cxccajero.entity';
-
-@Entity('ttipoparamfac')
-export class TtipoParamFac {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  bodegaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nrofactura: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nrocotizacion: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nroanulacion: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  impuestoId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  cajaId: number;
-
-  @ApiProperty({ type: () => Cxccajero, required: false })
-  @ManyToOne(() => Cxccajero)
-  @JoinColumn({ name: 'cajaId' })
-  cajero: Cxccajero;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  lineasFactura: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  diasDevolucion: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  porcentajeDevolucion: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nrodpdaventas: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nropdadevolucion: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nropdaanulacion: number;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_integrado_cxc: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_puntoventa: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_integrado_caja: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_anticipos: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  mensajeFactura: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_correlativoUnico: string;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'mg-t' })
-  mg_t: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'mg-b' })
-  mg_b: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'mg-l' })
-  mg_l: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0, name: 'mg-d' })
-  mg_d: number;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_multiplezcajeros: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_imprimefactura: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ImpresoraFactura: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ImpresoraComprobante: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ImpresoraMadera: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ImpresoraRecibo: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  DriverImpresora1: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  DriverImpresora2: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  DriverImpresora3: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  DriverImpresora4: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 6, nullable: true })
-  Puerto1: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 6, nullable: true })
-  Puerto2: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 6, nullable: true })
-  Puerto3: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 6, nullable: true })
-  Puerto4: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_multipleempresa: string;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_impuestoincluido: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-inv.entity.ts
-
-```typescript
-import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from "typeorm";
-import { ApiProperty } from "@nestjs/swagger";
-import { TtipoImpuesto } from "./impuesto.entity";
-import { TPosPrecioVtas } from "@/modules/facturacion/entities/tpospreciovtas.entity";
-
-@Entity("ttipoparaminv")
-export class TtipoParamInv {
-  @ApiProperty()
-  @PrimaryColumn({ name: "empresaId" })
-  empresaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  bodegaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  nrocompra: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  nrotrasladoo: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  nroajuste: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  nrofisico: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  nrorequisicion: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  impuestocompraId: number;
-
-  @ApiProperty({ type: () => TPosPrecioVtas, required: false })
-  @ManyToOne(() => TPosPrecioVtas)
-  @JoinColumn({ name: "preciovtaId" })
-  preciovtaId: number;
-
-  @ApiProperty({ type: () => TtipoImpuesto, required: false })
-  @ManyToOne(() => TtipoImpuesto)
-  impuestoCompra: TtipoImpuesto;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "int", nullable: true })
-  impuestoventaId: number;
-
-  @ApiProperty({ type: () => TtipoImpuesto, required: false })
-  @ManyToOne(() => TtipoImpuesto)
-  @JoinColumn({ name: "impuestoventaId" })
-  impuestoVenta: TtipoImpuesto;
-
-  @ApiProperty()
-  @Column({ type: "decimal", precision: 20, scale: 2, default: 0 })
-  nropartida: number;
-
-  @ApiProperty()
-  @Column({ type: "enum", enum: ["S", "N"], default: "N" })
-  sn_requirelote: string;
-
-  @ApiProperty()
-  @Column({ type: "enum", enum: ["S", "N"], default: "N" })
-  sn_supermercado: string;
-
-  @ApiProperty()
-  @Column({ type: "enum", enum: ["S", "N"], default: "N" })
-  sn_multiplesprecios: string;
-
-  @ApiProperty()
-  @Column({ type: "varchar", length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "varchar", length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: "datetime", nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-pap.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparampap')
-export class TtipoParamPap {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  moduloId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 150, nullable: true })
-  proforma: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 150, nullable: true })
-  reporte: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-pla.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparampla')
-export class TtipoParamPla {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  nropartida: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  nroplanilla: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  techo: number;
-
-  @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_validatecho: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'int', nullable: true })
-  diaslaborales: number;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
-## 📄 src\modules\parametros\entities\param-pres.entity.ts
-
-```typescript
-import {
-  Entity, PrimaryColumn, Column,
-} from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
-
-@Entity('ttipoparampres')
-export class TtipoParamPres {
-  @ApiProperty()
-  @PrimaryColumn({ name: 'empresaId' })
-  empresaId: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  interes: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  mora: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  diasPlazo: number;
-
-  @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  limitecredito: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  ctacontable: string;
-
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
-  usuarioCreated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  usuarioUpdated: string;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'datetime', nullable: true })
-  fechaUpdated: Date;
-}
-
-```
-
----
-
 ## 📄 src\modules\parametros\entities\pasatiempo.entity.ts
 
 ```typescript
@@ -19005,6 +22596,10 @@ export class TtipoPasatiempo {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  empresaId: number;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 12 })
@@ -19164,6 +22759,67 @@ export class TtipoTelefono {
 
 ---
 
+## 📄 src\modules\parametros\entities\tipo-parametro.entity.ts
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('ttipoparametros')
+export class TipoParametro {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'ttipoparametrosId' })
+  ttipoparametrosId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 30 })
+  field: string;
+
+  @ApiProperty({ enum: ['NUMBER', 'STRING'] })
+  @Column({ type: 'enum', enum: ['NUMBER', 'STRING'], default: 'NUMBER' })
+  tipo: string;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 50, default: '0' })
+  valor: string;
+
+  @ApiProperty({ enum: ['S', 'N'] })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_activo: string;
+
+  @ApiProperty()
+  @Column({ type: 'int', default: 0 })
+  moduloId: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', default: 0 })
+  Idsucursal: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', default: 0 })
+  empresaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 12 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaCreated: Date;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  usuarioUpdate: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdate: Date;
+}
+
+```
+
+---
+
 ## 📄 src\modules\parametros\entities\zona-vta-cob.entity.ts
 
 ```typescript
@@ -19271,13 +22927,7 @@ import { CreateSimpleParamDto, UpdateSimpleParamDto } from './dto/simple-param.d
 import { CreateMonedaDto, UpdateMonedaDto } from './dto/moneda.dto';
 import { CreateGestorDto, UpdateGestorDto } from './dto/gestor.dto';
 import { CreateImpuestoDto, UpdateImpuestoDto } from './dto/impuesto.dto';
-import { CreateParamFacDto, UpdateParamFacDto } from './dto/param-fac.dto';
-import { CreateParamInvDto, UpdateParamInvDto } from './dto/param-inv.dto';
-import { CreateParamConDto, UpdateParamConDto } from './dto/param-con.dto';
-import { CreateParamCxcDto, UpdateParamCxcDto } from './dto/param-cxc.dto';
-import { CreateParamCxpDto, UpdateParamCxpDto } from './dto/param-cxp.dto';
-import { CreateParamPlaDto, UpdateParamPlaDto } from './dto/param-pla.dto';
-import { CreateParamPresDto, UpdateParamPresDto } from './dto/param-pres.dto';
+
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -19622,15 +23272,15 @@ export class ParametrosController {
   @Get('pasatiempos')
   @ApiOperation({ summary: 'Listar pasatiempos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllPasatiempos() {
-    return this.service.findAllPasatiempos();
+  findAllPasatiempos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllPasatiempos(empresaId);
   }
 
   @Get('pasatiempos/:id')
   @ApiOperation({ summary: 'Obtener pasatiempo' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  findPasatiempo(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findPasatiempo(id);
+  findPasatiempo(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findPasatiempo(id, empresaId);
   }
 
   @Post('pasatiempos')
@@ -19645,10 +23295,11 @@ export class ParametrosController {
   @ApiResponse({ status: 200, description: 'Actualizado' })
   updatePasatiempo(
     @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: UpdateSimpleParamDto,
     @CurrentUser() user: any,
   ) {
-    return this.service.updatePasatiempo(id, dto, user.usuario);
+    return this.service.updatePasatiempo(id, empresaId, dto, user.usuario);
   }
 
   @Get('zonas')
@@ -19831,168 +23482,6 @@ export class ParametrosController {
     return this.service.updateZonaVtaCob(id, empresaId, dto, user.usuario);
   }
 
-  @Get('param-bco')
-  @ApiOperation({ summary: 'Obtener parámetros bancarios' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamBco(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamBco(empresaId);
-  }
-
-  @Put('param-bco')
-  @ApiOperation({ summary: 'Guardar parámetros bancarios' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamBco(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamBco(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-con')
-  @ApiOperation({ summary: 'Obtener parámetros de contabilidad' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCon(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCon(empresaId);
-  }
-
-  @Put('param-con')
-  @ApiOperation({ summary: 'Guardar parámetros de contabilidad' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCon(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamConDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCon(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-cxc')
-  @ApiOperation({ summary: 'Obtener parámetros de CxC' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCxc(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCxc(empresaId);
-  }
-
-  @Put('param-cxc')
-  @ApiOperation({ summary: 'Guardar parámetros de CxC' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCxc(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamCxcDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCxc(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-cxp')
-  @ApiOperation({ summary: 'Obtener parámetros de CxP' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamCxp(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamCxp(empresaId);
-  }
-
-  @Put('param-cxp')
-  @ApiOperation({ summary: 'Guardar parámetros de CxP' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamCxp(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamCxpDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamCxp(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-fac')
-  @ApiOperation({ summary: 'Obtener parámetros de facturación' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamFac(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamFac(empresaId);
-  }
-
-  @Put('param-fac')
-  @ApiOperation({ summary: 'Guardar parámetros de facturación' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamFac(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamFacDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamFac(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-inv')
-  @ApiOperation({ summary: 'Obtener parámetros de inventario' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamInv(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamInv(empresaId);
-  }
-
-  @Put('param-inv')
-  @ApiOperation({ summary: 'Guardar parámetros de inventario' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamInv(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamInvDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamInv(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pap')
-  @ApiOperation({ summary: 'Obtener parámetros de papelería' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPap(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPap(empresaId);
-  }
-
-  @Put('param-pap')
-  @ApiOperation({ summary: 'Guardar parámetros de papelería' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPap(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPap(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pla')
-  @ApiOperation({ summary: 'Obtener parámetros de planilla' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPla(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPla(empresaId);
-  }
-
-  @Put('param-pla')
-  @ApiOperation({ summary: 'Guardar parámetros de planilla' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPla(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamPlaDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPla(empresaId, dto, user.usuario);
-  }
-
-  @Get('param-pres')
-  @ApiOperation({ summary: 'Obtener parámetros de presupuesto' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findParamPres(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findParamPres(empresaId);
-  }
-
-  @Put('param-pres')
-  @ApiOperation({ summary: 'Guardar parámetros de presupuesto' })
-  @ApiResponse({ status: 200, description: 'Actualizado' })
-  upsertParamPres(
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateParamPresDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.upsertParamPres(empresaId, dto, user.usuario);
-  }
-
   @Get('precios-vta')
   @ApiOperation({ summary: 'Listar precios de venta' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -20008,6 +23497,95 @@ export class ParametrosController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findPreciosVta(id, empresaId);
+  }
+
+  // =============================================
+  // PARÁMETROS UNIFICADOS (ttipoparametros)
+  // =============================================
+
+  @Get('parametros')
+  @ApiOperation({ summary: 'Listar parámetros unificados por empresa y opcionalmente por módulo' })
+  findAllParametros(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.service.findAllParametros(empresaId, moduloId ? Number(moduloId) : undefined);
+  }
+
+  @Get('parametros/objeto')
+  @ApiOperation({ summary: 'Obtener parámetros como objeto { field: valor }' })
+  getParametrosComoObjeto(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+  ) {
+    return this.service.getParametrosComoObjeto(empresaId, moduloId);
+  }
+
+  @Get('parametros/valor')
+  @ApiOperation({ summary: 'Obtener valor de un parámetro específico' })
+  async getValor(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Query('field') field: string,
+    @Query('default') defaultValue?: string,
+  ) {
+    const valor = await this.service.getValor(empresaId, moduloId, field, defaultValue);
+    return { field, valor };
+  }
+
+  @Get('parametros/:id')
+  @ApiOperation({ summary: 'Obtener parámetro por ID' })
+  findParametroById(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findParametroById(id);
+  }
+
+  @Put('parametros/upsert')
+  @ApiOperation({ summary: 'Upsert un parámetro individual' })
+  upsertParametro(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { field: string; valor: string; tipo?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.upsertParametroModulo(
+      empresaId, moduloId, body.field, body.valor, body.tipo || 'STRING', user.usuario,
+    );
+  }
+
+  @Put('parametros/lote')
+  @ApiOperation({ summary: 'Upsert múltiples parámetros de un módulo' })
+  upsertParametrosLote(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { parametros: { field: string; valor: string; tipo?: string; sn_activo?: string }[] },
+    @CurrentUser() user: any,
+  ) {
+    const items = body.parametros.map(p => ({
+      ...p,
+      tipo: p.tipo || 'STRING',
+      sn_activo: p.sn_activo || 'S',
+    }));
+    return this.service.upsertParametrosLote(empresaId, moduloId, items, user.usuario);
+  }
+
+  @Put('parametros/:id/incrementar')
+  @ApiOperation({ summary: 'Incrementar valor numérico de un parámetro' })
+  incrementarParametro(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId', ParseIntPipe) moduloId: number,
+    @Body() body: { field: string; incremento?: number },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.incrementarValor(
+      empresaId, moduloId, body.field, user.usuario, body.incremento || 1,
+    );
+  }
+
+  @Put('parametros/:id')
+  @ApiOperation({ summary: 'Eliminar (desactivar) un parámetro' })
+  deleteParametro(@Param('id', ParseIntPipe) id: number) {
+    return this.service.deleteParametro(id);
   }
 }
 
@@ -20035,18 +23613,11 @@ import { TtipoGestor } from './entities/gestor.entity';
 import { TtipoImpuesto } from './entities/impuesto.entity';
 import { TtipoProforma } from './entities/proforma.entity';
 import { TtipoZonaVtaCob } from './entities/zona-vta-cob.entity';
-import { TtipoParamBco } from './entities/param-bco.entity';
-import { TtipoParamCon } from './entities/param-con.entity';
-import { TtipoParamCxc } from './entities/param-cxc.entity';
-import { TtipoParamCxp } from './entities/param-cxp.entity';
-import { TtipoParamFac } from './entities/param-fac.entity';
-import { TtipoParamInv } from './entities/param-inv.entity';
-import { TtipoParamPap } from './entities/param-pap.entity';
-import { TtipoParamPla } from './entities/param-pla.entity';
-import { TtipoParamPres } from './entities/param-pres.entity';
+
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { PlPlEmpleados } from '../planilla/entities/plplempleados.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { TipoParametro } from './entities/tipo-parametro.entity';
 import { ParametrosService } from './parametros.service';
 import { ParametrosController } from './parametros.controller';
 
@@ -20068,18 +23639,10 @@ import { ParametrosController } from './parametros.controller';
       TtipoImpuesto,
       TtipoProforma,
       TtipoZonaVtaCob,
-      TtipoParamBco,
-      TtipoParamCon,
-      TtipoParamCxc,
-      TtipoParamCxp,
-      TtipoParamFac,
-      TtipoParamInv,
-      TtipoParamPap,
-      TtipoParamPla,
-      TtipoParamPres,
       TCoTipoDocumentoFiscal,
       PlPlEmpleados,
       TPosPrecioVtas,
+      TipoParametro,
     ]),
   ],
   controllers: [ParametrosController],
@@ -20098,6 +23661,7 @@ export class ParametrosModule {}
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { TtipoMoneda } from './entities/moneda.entity';
 import { TtipoPais } from './entities/pais.entity';
 import { TtipoDeptoPais } from './entities/depto-pais.entity';
@@ -20113,22 +23677,16 @@ import { TtipoGestor } from './entities/gestor.entity';
 import { TtipoImpuesto } from './entities/impuesto.entity';
 import { TtipoProforma } from './entities/proforma.entity';
 import { TtipoZonaVtaCob } from './entities/zona-vta-cob.entity';
-import { TtipoParamBco } from './entities/param-bco.entity';
-import { TtipoParamCon } from './entities/param-con.entity';
-import { TtipoParamCxc } from './entities/param-cxc.entity';
-import { TtipoParamCxp } from './entities/param-cxp.entity';
-import { TtipoParamFac } from './entities/param-fac.entity';
-import { TtipoParamInv } from './entities/param-inv.entity';
-import { TtipoParamPap } from './entities/param-pap.entity';
-import { TtipoParamPla } from './entities/param-pla.entity';
-import { TtipoParamPres } from './entities/param-pres.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { PlPlEmpleados } from '../planilla/entities/plplempleados.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
+import { TipoParametro } from './entities/tipo-parametro.entity';
 
 @Injectable()
 export class ParametrosService {
   constructor(
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepoDup: Repository<TipoParametro>,
     @InjectRepository(TtipoMoneda) private readonly monedaRepo: Repository<TtipoMoneda>,
     @InjectRepository(TtipoPais) private readonly paisRepo: Repository<TtipoPais>,
     @InjectRepository(TtipoDeptoPais) private readonly deptoPaisRepo: Repository<TtipoDeptoPais>,
@@ -20144,21 +23702,12 @@ export class ParametrosService {
     @InjectRepository(TtipoImpuesto) private readonly impuestoRepo: Repository<TtipoImpuesto>,
     @InjectRepository(TtipoProforma) private readonly proformaRepo: Repository<TtipoProforma>,
     @InjectRepository(TtipoZonaVtaCob) private readonly zonaVtaCobRepo: Repository<TtipoZonaVtaCob>,
-    @InjectRepository(TtipoParamBco) private readonly paramBcoRepo: Repository<TtipoParamBco>,
-    @InjectRepository(TtipoParamCon) private readonly paramConRepo: Repository<TtipoParamCon>,
-    @InjectRepository(TtipoParamCxc) private readonly paramCxcRepo: Repository<TtipoParamCxc>,
-    @InjectRepository(TtipoParamCxp) private readonly paramCxpRepo: Repository<TtipoParamCxp>,
-    @InjectRepository(TtipoParamFac) private readonly paramFacRepo: Repository<TtipoParamFac>,
-    @InjectRepository(TtipoParamInv) private readonly paramInvRepo: Repository<TtipoParamInv>,
-    @InjectRepository(TtipoParamPap) private readonly paramPapRepo: Repository<TtipoParamPap>,
-    @InjectRepository(TtipoParamPla) private readonly paramPlaRepo: Repository<TtipoParamPla>,
-    @InjectRepository(TtipoParamPres) private readonly paramPresRepo: Repository<TtipoParamPres>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @InjectRepository(PlPlEmpleados) private readonly empleadoRepo: Repository<PlPlEmpleados>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
-  
   findAllTiposDocFiscal(empresaId: number) {
     return this.findAllByEmpresa(this.tipoDocFiscalRepo, empresaId);
   }
@@ -20186,17 +23735,6 @@ export class ParametrosService {
     return found;
   }
 
-  private async findOneByEmpresaId<T extends ObjectLiteral>(
-    repo: Repository<T>,
-    empresaId: number,
-    entityName: string,
-  ) {
-    const where = { empresaId } as unknown as FindOptionsWhere<T>;
-    const found = await repo.findOne({ where });
-    if (!found) throw new NotFoundException(`${entityName} empresa ${empresaId} no encontrado`);
-    return found;
-  }
-
   private async createEntity<T extends ObjectLiteral>(
     repo: Repository<T>,
     dto: any,
@@ -20221,30 +23759,7 @@ export class ParametrosService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
-    });
-    return repo.save(entity);
-  }
-
-  private async upsertParam<T extends ObjectLiteral>(
-    repo: Repository<T>,
-    empresaId: number,
-    dto: any,
-    currentUser: string,
-    entityName: string,
-  ) {
-    const found = await repo.findOne({ where: { empresaId } as unknown as FindOptionsWhere<T> });
-    if (found) {
-      Object.assign(found, dto, {
-        usuarioUpdated: currentUser,
-        fechaUpdated: new Date(),
-      });
-      return repo.save(found);
-    }
-    const entity = repo.create({
-      empresaId,
-      ...dto,
-      usuarioCreated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -20259,243 +23774,89 @@ export class ParametrosService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
 
-  async findAllMonedas(empresaId: number) {
-    return this.findAllByEmpresa(this.monedaRepo, empresaId);
-  }
+  // ── Monedas ──────────────────────────────────────────────
+  async findAllMonedas(empresaId: number) { return this.findAllByEmpresa(this.monedaRepo, empresaId); }
+  async findMoneda(id: number, empresaId: number) { return this.findOneById(this.monedaRepo, 'monedaId', id, empresaId, 'Moneda'); }
+  async createMoneda(dto: any, user: string) { return this.createEntity(this.monedaRepo, dto, user); }
+  async updateMoneda(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.monedaRepo, 'monedaId', id, eid, dto, user, 'Moneda'); }
+  async removeMoneda(id: number, eid: number) { return this.softDelete(this.monedaRepo, 'monedaId', id, eid, 'Moneda'); }
 
-  async findMoneda(monedaId: number, empresaId: number) {
-    return this.findOneById(this.monedaRepo, 'monedaId', monedaId, empresaId, 'Moneda');
-  }
+  // ── Países ───────────────────────────────────────────────
+  async findAllPaises(empresaId: number) { return this.findAllByEmpresa(this.paisRepo, empresaId); }
+  async findPais(id: number, empresaId: number) { return this.findOneById(this.paisRepo, 'paisId', id, empresaId, 'Pais'); }
+  async createPais(dto: any, user: string) { return this.createEntity(this.paisRepo, dto, user); }
+  async updatePais(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.paisRepo, 'paisId', id, eid, dto, user, 'Pais'); }
+  async removePais(id: number, eid: number) { return this.softDelete(this.paisRepo, 'paisId', id, eid, 'Pais'); }
 
-  async createMoneda(dto: any, currentUser: string) {
-    return this.createEntity(this.monedaRepo, dto, currentUser);
-  }
+  // ── Depto País ───────────────────────────────────────────
+  async findAllDeptoPais(empresaId: number) { return this.findAllByEmpresa(this.deptoPaisRepo, empresaId); }
+  async findDeptoPais(id: number, empresaId: number) { return this.findOneById(this.deptoPaisRepo, 'ttipodeptopaisId', id, empresaId, 'Depto Pais'); }
+  async createDeptoPais(dto: any, user: string) { return this.createEntity(this.deptoPaisRepo, dto, user); }
+  async updateDeptoPais(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoPaisRepo, 'ttipodeptopaisId', id, eid, dto, user, 'Depto Pais'); }
+  async removeDeptoPais(id: number, eid: number) { return this.softDelete(this.deptoPaisRepo, 'ttipodeptopaisId', id, eid, 'Depto Pais'); }
 
-  async updateMoneda(monedaId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.monedaRepo, 'monedaId', monedaId, empresaId, dto, currentUser, 'Moneda');
-  }
+  // ── Depto Empresa ────────────────────────────────────────
+  async findAllDeptoEmpresa(empresaId: number) { return this.findAllByEmpresa(this.deptoEmpresaRepo, empresaId); }
+  async findDeptoEmpresa(id: number, empresaId: number) { return this.findOneById(this.deptoEmpresaRepo, 'departamentostempresasId', id, empresaId, 'Depto Empresa'); }
+  async createDeptoEmpresa(dto: any, user: string) { return this.createEntity(this.deptoEmpresaRepo, dto, user); }
+  async updateDeptoEmpresa(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, dto, user, 'Depto Empresa'); }
+  async removeDeptoEmpresa(id: number, eid: number) { return this.softDelete(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, 'Depto Empresa'); }
 
-  async removeMoneda(monedaId: number, empresaId: number) {
-    return this.softDelete(this.monedaRepo, 'monedaId', monedaId, empresaId, 'Moneda');
-  }
+  // ── Direcciones ──────────────────────────────────────────
+  async findAllDirecciones(empresaId: number) { return this.findAllByEmpresa(this.direccionRepo, empresaId); }
+  async findDireccion(id: number, empresaId: number) { return this.findOneById(this.direccionRepo, 'direccionId', id, empresaId, 'Direccion'); }
+  async createDireccion(dto: any, user: string) { return this.createEntity(this.direccionRepo, dto, user); }
+  async updateDireccion(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.direccionRepo, 'direccionId', id, eid, dto, user, 'Direccion'); }
+  async removeDireccion(id: number, eid: number) { return this.softDelete(this.direccionRepo, 'direccionId', id, eid, 'Direccion'); }
 
-  async findAllPaises(empresaId: number) {
-    return this.findAllByEmpresa(this.paisRepo, empresaId);
-  }
+  // ── Estados ──────────────────────────────────────────────
+  async findAllEstados(empresaId: number) { return this.findAllByEmpresa(this.estadoRepo, empresaId); }
+  async findEstado(id: number, empresaId: number) { return this.findOneById(this.estadoRepo, 'estadoId', id, empresaId, 'Estado'); }
+  async createEstado(dto: any, user: string) { return this.createEntity(this.estadoRepo, dto, user); }
+  async updateEstado(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.estadoRepo, 'estadoId', id, eid, dto, user, 'Estado'); }
+  async removeEstado(id: number, eid: number) { return this.softDelete(this.estadoRepo, 'estadoId', id, eid, 'Estado'); }
 
-  async findPais(paisId: number, empresaId: number) {
-    return this.findOneById(this.paisRepo, 'paisId', paisId, empresaId, 'Pais');
-  }
+  // ── Formas de Pago ───────────────────────────────────────
+  async findAllFormasPago(empresaId: number) { return this.findAllByEmpresa(this.formaPagoRepo, empresaId); }
+  async findFormaPago(id: number, empresaId: number) { return this.findOneById(this.formaPagoRepo, 'formapagoId', id, empresaId, 'Forma Pago'); }
+  async createFormaPago(dto: any, user: string) { return this.createEntity(this.formaPagoRepo, dto, user); }
+  async updateFormaPago(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.formaPagoRepo, 'formapagoId', id, eid, dto, user, 'Forma Pago'); }
+  async removeFormaPago(id: number, eid: number) { return this.softDelete(this.formaPagoRepo, 'formapagoId', id, eid, 'Forma Pago'); }
 
-  async createPais(dto: any, currentUser: string) {
-    return this.createEntity(this.paisRepo, dto, currentUser);
-  }
+  // ── Teléfonos ────────────────────────────────────────────
+  async findAllTelefonos(empresaId: number) { return this.findAllByEmpresa(this.telefonoRepo, empresaId); }
+  async findTelefono(id: number, empresaId: number) { return this.findOneById(this.telefonoRepo, 'telefonoId', id, empresaId, 'Telefono'); }
+  async createTelefono(dto: any, user: string) { return this.createEntity(this.telefonoRepo, dto, user); }
+  async updateTelefono(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.telefonoRepo, 'telefonoId', id, eid, dto, user, 'Telefono'); }
+  async removeTelefono(id: number, eid: number) { return this.softDelete(this.telefonoRepo, 'telefonoId', id, eid, 'Telefono'); }
 
-  async updatePais(paisId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.paisRepo, 'paisId', paisId, empresaId, dto, currentUser, 'Pais');
-  }
+  // ── Tarjetas de Crédito ──────────────────────────────────
+  async findAllTarjetasCredito(empresaId: number) { return this.findAllByEmpresa(this.tarjetaCreditoRepo, empresaId); }
+  async findTarjetaCredito(id: number, empresaId: number) { return this.findOneById(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, empresaId, 'Tarjeta Credito'); }
+  async createTarjetaCredito(dto: any, user: string) { return this.createEntity(this.tarjetaCreditoRepo, dto, user); }
+  async updateTarjetaCredito(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, eid, dto, user, 'Tarjeta Credito'); }
+  async removeTarjetaCredito(id: number, eid: number) { return this.softDelete(this.tarjetaCreditoRepo, 'tarjetacreditoId', id, eid, 'Tarjeta Credito'); }
 
-  async removePais(paisId: number, empresaId: number) {
-    return this.softDelete(this.paisRepo, 'paisId', paisId, empresaId, 'Pais');
-  }
+  // ── Pasatiempos ──────────────────────────────────────────
+  async findAllPasatiempos(empresaId: number) { return this.findAllByEmpresa(this.pasatiempoRepo, empresaId); }
+  async findPasatiempo(id: number, empresaId: number) { return this.findOneById(this.pasatiempoRepo, 'pasatiempoId', id, empresaId, 'Pasatiempo'); }
+  async createPasatiempo(dto: any, user: string) { return this.createEntity(this.pasatiempoRepo, dto, user); }
+  async updatePasatiempo(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.pasatiempoRepo, 'pasatiempoId', id, eid, dto, user, 'Pasatiempo'); }
+  async removePasatiempo(id: number, eid: number) { return this.softDelete(this.pasatiempoRepo, 'pasatiempoId', id, eid, 'Pasatiempo'); }
 
-  async findAllDeptoPais(empresaId: number) {
-    return this.findAllByEmpresa(this.deptoPaisRepo, empresaId);
-  }
+  // ── Zonas ────────────────────────────────────────────────
+  async findAllZonas(empresaId: number) { return this.findAllByEmpresa(this.zonaRepo, empresaId); }
+  async findZona(id: number, empresaId: number) { return this.findOneById(this.zonaRepo, 'tzonadId', id, empresaId, 'Zona'); }
+  async createZona(dto: any, user: string) { return this.createEntity(this.zonaRepo, dto, user); }
+  async updateZona(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.zonaRepo, 'tzonadId', id, eid, dto, user, 'Zona'); }
+  async removeZona(id: number, eid: number) { return this.softDelete(this.zonaRepo, 'tzonadId', id, eid, 'Zona'); }
 
-  async findDeptoPais(ttipodeptopaisId: number, empresaId: number) {
-    return this.findOneById(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, 'Depto Pais');
-  }
-
-  async createDeptoPais(dto: any, currentUser: string) {
-    return this.createEntity(this.deptoPaisRepo, dto, currentUser);
-  }
-
-  async updateDeptoPais(ttipodeptopaisId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, dto, currentUser, 'Depto Pais');
-  }
-
-  async removeDeptoPais(ttipodeptopaisId: number, empresaId: number) {
-    return this.softDelete(this.deptoPaisRepo, 'ttipodeptopaisId', ttipodeptopaisId, empresaId, 'Depto Pais');
-  }
-
-  async findAllDeptoEmpresa(empresaId: number) {
-    return this.findAllByEmpresa(this.deptoEmpresaRepo, empresaId);
-  }
-
-  async findDeptoEmpresa(departamentostempresasId: number, empresaId: number) {
-    return this.findOneById(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, 'Depto Empresa');
-  }
-
-  async createDeptoEmpresa(dto: any, currentUser: string) {
-    return this.createEntity(this.deptoEmpresaRepo, dto, currentUser);
-  }
-
-  async updateDeptoEmpresa(departamentostempresasId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, dto, currentUser, 'Depto Empresa');
-  }
-
-  async removeDeptoEmpresa(departamentostempresasId: number, empresaId: number) {
-    return this.softDelete(this.deptoEmpresaRepo, 'departamentostempresasId', departamentostempresasId, empresaId, 'Depto Empresa');
-  }
-
-  async findAllDirecciones(empresaId: number) {
-    return this.findAllByEmpresa(this.direccionRepo, empresaId);
-  }
-
-  async findDireccion(direccionId: number, empresaId: number) {
-    return this.findOneById(this.direccionRepo, 'direccionId', direccionId, empresaId, 'Direccion');
-  }
-
-  async createDireccion(dto: any, currentUser: string) {
-    return this.createEntity(this.direccionRepo, dto, currentUser);
-  }
-
-  async updateDireccion(direccionId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.direccionRepo, 'direccionId', direccionId, empresaId, dto, currentUser, 'Direccion');
-  }
-
-  async removeDireccion(direccionId: number, empresaId: number) {
-    return this.softDelete(this.direccionRepo, 'direccionId', direccionId, empresaId, 'Direccion');
-  }
-
-  async findAllEstados(empresaId: number) {
-    return this.findAllByEmpresa(this.estadoRepo, empresaId);
-  }
-
-  async findEstado(estadoId: number, empresaId: number) {
-    return this.findOneById(this.estadoRepo, 'estadoId', estadoId, empresaId, 'Estado');
-  }
-
-  async createEstado(dto: any, currentUser: string) {
-    return this.createEntity(this.estadoRepo, dto, currentUser);
-  }
-
-  async updateEstado(estadoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.estadoRepo, 'estadoId', estadoId, empresaId, dto, currentUser, 'Estado');
-  }
-
-  async removeEstado(estadoId: number, empresaId: number) {
-    return this.softDelete(this.estadoRepo, 'estadoId', estadoId, empresaId, 'Estado');
-  }
-
-  async findAllFormasPago(empresaId: number) {
-    return this.findAllByEmpresa(this.formaPagoRepo, empresaId);
-  }
-
-  async findFormaPago(formapagoId: number, empresaId: number) {
-    return this.findOneById(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, 'Forma Pago');
-  }
-
-  async createFormaPago(dto: any, currentUser: string) {
-    return this.createEntity(this.formaPagoRepo, dto, currentUser);
-  }
-
-  async updateFormaPago(formapagoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, dto, currentUser, 'Forma Pago');
-  }
-
-  async removeFormaPago(formapagoId: number, empresaId: number) {
-    return this.softDelete(this.formaPagoRepo, 'formapagoId', formapagoId, empresaId, 'Forma Pago');
-  }
-
-  async findAllTelefonos(empresaId: number) {
-    return this.findAllByEmpresa(this.telefonoRepo, empresaId);
-  }
-
-  async findTelefono(telefonoId: number, empresaId: number) {
-    return this.findOneById(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, 'Telefono');
-  }
-
-  async createTelefono(dto: any, currentUser: string) {
-    return this.createEntity(this.telefonoRepo, dto, currentUser);
-  }
-
-  async updateTelefono(telefonoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, dto, currentUser, 'Telefono');
-  }
-
-  async removeTelefono(telefonoId: number, empresaId: number) {
-    return this.softDelete(this.telefonoRepo, 'telefonoId', telefonoId, empresaId, 'Telefono');
-  }
-
-  async findAllTarjetasCredito(empresaId: number) {
-    return this.findAllByEmpresa(this.tarjetaCreditoRepo, empresaId);
-  }
-
-  async findTarjetaCredito(tarjetacreditoId: number, empresaId: number) {
-    return this.findOneById(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, 'Tarjeta Credito');
-  }
-
-  async createTarjetaCredito(dto: any, currentUser: string) {
-    return this.createEntity(this.tarjetaCreditoRepo, dto, currentUser);
-  }
-
-  async updateTarjetaCredito(tarjetacreditoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, dto, currentUser, 'Tarjeta Credito');
-  }
-
-  async removeTarjetaCredito(tarjetacreditoId: number, empresaId: number) {
-    return this.softDelete(this.tarjetaCreditoRepo, 'tarjetacreditoId', tarjetacreditoId, empresaId, 'Tarjeta Credito');
-  }
-
-  async findAllPasatiempos() {
-    return this.findAllSimple(this.pasatiempoRepo);
-  }
-
-  async findPasatiempo(pasatiempoId: number) {
-    const found = await this.pasatiempoRepo.findOne({ where: { pasatiempoId } });
-    if (!found) throw new NotFoundException(`Pasatiempo ${pasatiempoId} no encontrado`);
-    return found;
-  }
-
-  async createPasatiempo(dto: any, currentUser: string) {
-    return this.createEntity(this.pasatiempoRepo, dto, currentUser);
-  }
-
-  async updatePasatiempo(pasatiempoId: number, dto: any, currentUser: string) {
-    const entity = await this.findPasatiempo(pasatiempoId);
-    Object.assign(entity, dto, {
-      usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
-    });
-    return this.pasatiempoRepo.save(entity);
-  }
-
-  async removePasatiempo(pasatiempoId: number) {
-    const entity = await this.findPasatiempo(pasatiempoId);
-    Object.assign(entity, {
-      sn_activo: 'N',
-      fechaUpdated: new Date(),
-    });
-    return this.pasatiempoRepo.save(entity);
-  }
-
-  async findAllZonas(empresaId: number) {
-    return this.findAllByEmpresa(this.zonaRepo, empresaId);
-  }
-
-  async findZona(tzonadId: number, empresaId: number) {
-    return this.findOneById(this.zonaRepo, 'tzonadId', tzonadId, empresaId, 'Zona');
-  }
-
-  async createZona(dto: any, currentUser: string) {
-    return this.createEntity(this.zonaRepo, dto, currentUser);
-  }
-
-  async updateZona(tzonadId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.zonaRepo, 'tzonadId', tzonadId, empresaId, dto, currentUser, 'Zona');
-  }
-
-  async removeZona(tzonadId: number, empresaId: number) {
-    return this.softDelete(this.zonaRepo, 'tzonadId', tzonadId, empresaId, 'Zona');
-  }
-
+  // ── Gestores ─────────────────────────────────────────────
   async findAllGestores(empresaId: number) {
     return this.gestorRepo
       .createQueryBuilder('g')
@@ -20504,166 +23865,124 @@ export class ParametrosService {
       .where('g.empresaId = :empresaId', { empresaId })
       .getRawMany();
   }
+  async findGestor(id: number, empresaId: number) { return this.findOneById(this.gestorRepo, 'gestorId', id, empresaId, 'Gestor'); }
+  async createGestor(dto: any, user: string) { return this.createEntity(this.gestorRepo, dto, user); }
+  async updateGestor(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.gestorRepo, 'gestorId', id, eid, dto, user, 'Gestor'); }
+  async removeGestor(id: number, eid: number) { return this.softDelete(this.gestorRepo, 'gestorId', id, eid, 'Gestor'); }
 
-  async findGestor(gestorId: number, empresaId: number) {
-    return this.findOneById(this.gestorRepo, 'gestorId', gestorId, empresaId, 'Gestor');
-  }
+  // ── Impuestos ────────────────────────────────────────────
+  async findAllImpuestos(empresaId: number) { return this.findAllByEmpresa(this.impuestoRepo, empresaId); }
+  async findImpuesto(id: number, empresaId: number) { return this.findOneById(this.impuestoRepo, 'impuestoId', id, empresaId, 'Impuesto'); }
+  async createImpuesto(dto: any, user: string) { return this.createEntity(this.impuestoRepo, dto, user); }
+  async updateImpuesto(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.impuestoRepo, 'impuestoId', id, eid, dto, user, 'Impuesto'); }
+  async removeImpuesto(id: number, eid: number) { return this.softDelete(this.impuestoRepo, 'impuestoId', id, eid, 'Impuesto'); }
 
-  async createGestor(dto: any, currentUser: string) {
-    return this.createEntity(this.gestorRepo, dto, currentUser);
-  }
+  // ── Proformas ────────────────────────────────────────────
+  async findAllProformas(empresaId: number) { return this.findAllByEmpresa(this.proformaRepo, empresaId); }
+  async findProforma(id: number, empresaId: number) { return this.findOneById(this.proformaRepo, 'proformaId', id, empresaId, 'Proforma'); }
+  async createProforma(dto: any, user: string) { return this.createEntity(this.proformaRepo, dto, user); }
+  async updateProforma(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.proformaRepo, 'proformaId', id, eid, dto, user, 'Proforma'); }
+  async removeProforma(id: number, eid: number) { return this.softDelete(this.proformaRepo, 'proformaId', id, eid, 'Proforma'); }
 
-  async updateGestor(gestorId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.gestorRepo, 'gestorId', gestorId, empresaId, dto, currentUser, 'Gestor');
-  }
+  // ── Zonas Vta/Cob ───────────────────────────────────────
+  async findAllZonasVtaCob(empresaId: number) { return this.findAllByEmpresa(this.zonaVtaCobRepo, empresaId); }
+  async findZonaVtaCob(id: number, empresaId: number) { return this.findOneById(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, empresaId, 'Zona Vta Cob'); }
+  async createZonaVtaCob(dto: any, user: string) { return this.createEntity(this.zonaVtaCobRepo, dto, user); }
+  async updateZonaVtaCob(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, eid, dto, user, 'Zona Vta Cob'); }
+  async removeZonaVtaCob(id: number, eid: number) { return this.softDelete(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, eid, 'Zona Vta Cob'); }
 
-  async removeGestor(gestorId: number, empresaId: number) {
-    return this.softDelete(this.gestorRepo, 'gestorId', gestorId, empresaId, 'Gestor');
-  }
-
-  async findAllImpuestos(empresaId: number) {
-    return this.findAllByEmpresa(this.impuestoRepo, empresaId);
-  }
-
-  async findImpuesto(impuestoId: number, empresaId: number) {
-    return this.findOneById(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, 'Impuesto');
-  }
-
-  async createImpuesto(dto: any, currentUser: string) {
-    return this.createEntity(this.impuestoRepo, dto, currentUser);
-  }
-
-  async updateImpuesto(impuestoId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, dto, currentUser, 'Impuesto');
-  }
-
-  async removeImpuesto(impuestoId: number, empresaId: number) {
-    return this.softDelete(this.impuestoRepo, 'impuestoId', impuestoId, empresaId, 'Impuesto');
-  }
-
-  async findAllProformas(empresaId: number) {
-    return this.findAllByEmpresa(this.proformaRepo, empresaId);
-  }
-
-  async findProforma(proformaId: number, empresaId: number) {
-    return this.findOneById(this.proformaRepo, 'proformaId', proformaId, empresaId, 'Proforma');
-  }
-
-  async createProforma(dto: any, currentUser: string) {
-    return this.createEntity(this.proformaRepo, dto, currentUser);
-  }
-
-  async updateProforma(proformaId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.proformaRepo, 'proformaId', proformaId, empresaId, dto, currentUser, 'Proforma');
-  }
-
-  async removeProforma(proformaId: number, empresaId: number) {
-    return this.softDelete(this.proformaRepo, 'proformaId', proformaId, empresaId, 'Proforma');
-  }
-
-  async findAllZonasVtaCob(empresaId: number) {
-    return this.findAllByEmpresa(this.zonaVtaCobRepo, empresaId);
-  }
-
-  async findZonaVtaCob(ttipozonasvtacobId: number, empresaId: number) {
-    return this.findOneById(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, 'Zona Vta Cob');
-  }
-
-  async createZonaVtaCob(dto: any, currentUser: string) {
-    return this.createEntity(this.zonaVtaCobRepo, dto, currentUser);
-  }
-
-  async updateZonaVtaCob(ttipozonasvtacobId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, dto, currentUser, 'Zona Vta Cob');
-  }
-
-  async removeZonaVtaCob(ttipozonasvtacobId: number, empresaId: number) {
-    return this.softDelete(this.zonaVtaCobRepo, 'ttipozonasvtacobId', ttipozonasvtacobId, empresaId, 'Zona Vta Cob');
-  }
-
-  async findParamBco(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramBcoRepo, empresaId, 'Param Bco');
-  }
-
-  async upsertParamBco(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramBcoRepo, empresaId, dto, currentUser, 'Param Bco');
-  }
-
-  async findParamCon(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramConRepo, empresaId, 'Param Con');
-  }
-
-  async upsertParamCon(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramConRepo, empresaId, dto, currentUser, 'Param Con');
-  }
-
-  async findParamCxc(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramCxcRepo, empresaId, 'Param Cxc');
-  }
-
-  async upsertParamCxc(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramCxcRepo, empresaId, dto, currentUser, 'Param Cxc');
-  }
-
-  async findParamCxp(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramCxpRepo, empresaId, 'Param Cxp');
-  }
-
-  async upsertParamCxp(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramCxpRepo, empresaId, dto, currentUser, 'Param Cxp');
-  }
-
-  async findParamFac(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramFacRepo, empresaId, 'Param Fac');
-  }
-
-  async upsertParamFac(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramFacRepo, empresaId, dto, currentUser, 'Param Fac');
-  }
-
-  async findParamInv(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramInvRepo, empresaId, 'Param Inv');
-  }
-
-  async upsertParamInv(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramInvRepo, empresaId, dto, currentUser, 'Param Inv');
-  }
-
-  async findParamPap(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPapRepo, empresaId, 'Param Pap');
-  }
-
-  async upsertParamPap(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPapRepo, empresaId, dto, currentUser, 'Param Pap');
-  }
-
-  async findParamPla(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPlaRepo, empresaId, 'Param Pla');
-  }
-
-  async upsertParamPla(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPlaRepo, empresaId, dto, currentUser, 'Param Pla');
-  }
-
-  async findParamPres(empresaId: number) {
-    return this.findOneByEmpresaId(this.paramPresRepo, empresaId, 'Param Pres');
-  }
-
-  async upsertParamPres(empresaId: number, dto: any, currentUser: string) {
-    return this.upsertParam(this.paramPresRepo, empresaId, dto, currentUser, 'Param Pres');
-  }
-
+  // ── Precios de Venta ─────────────────────────────────────
   async findAllPreciosVta(empresaId: number) {
     return this.posPrecioVtaRepo.find({
       where: { empresaId, sn_activo: 'S' } as any,
       order: { descripcion: 'ASC' } as any,
     });
   }
+  async findPreciosVta(id: number, empresaId: number) {
+    return this.posPrecioVtaRepo.findOne({ where: { preciovtaId: id, empresaId } as any });
+  }
 
-  async findPreciosVta(preciovtaId: number, empresaId: number) {
-    return this.posPrecioVtaRepo.findOne({
-      where: { preciovtaId, empresaId } as any,
+  // ══════════════════════════════════════════════════════════
+  // PARÁMETROS UNIFICADOS (ttipoparametros)
+  // ══════════════════════════════════════════════════════════
+
+  async findAllParametros(empresaId: number, moduloId?: number) {
+    const where: any = { empresaId, sn_activo: 'S' };
+    if (moduloId) where.moduloId = moduloId;
+    return this.tipoParametroRepo.find({ where, order: { moduloId: 'ASC', field: 'ASC' } });
+  }
+
+  async findParametroById(id: number) {
+    const found = await this.tipoParametroRepo.findOne({ where: { ttipoparametrosId: id } });
+    if (!found) throw new NotFoundException(`Parámetro ${id} no encontrado`);
+    return found;
+  }
+
+  async findParametroByField(empresaId: number, moduloId: number, field: string) {
+    return this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field, sn_activo: 'S' } as any,
     });
+  }
+
+  async upsertParametroModulo(empresaId: number, moduloId: number, field: string, valor: string, tipo: string, currentUser: string) {
+    const existing = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field } as any,
+    });
+    if (existing) {
+      existing.valor = valor;
+      existing.tipo = tipo;
+      existing.usuarioUpdate = currentUser;
+      existing.fechaUpdate = await this.fechaSistema.getFecha(empresaId);
+      return this.tipoParametroRepo.save(existing);
+    }
+    const entity = this.tipoParametroRepo.create({
+      empresaId, moduloId, field, valor, tipo,
+      sn_activo: 'S',
+      usuarioCreated: currentUser,
+    });
+    return this.tipoParametroRepo.save(entity);
+  }
+
+  async upsertParametrosLote(empresaId: number, moduloId: number, items: { field: string; valor: string; tipo: string; sn_activo?: string }[], currentUser: string) {
+    const results: TipoParametro[] = [];
+    for (const item of items) {
+      const result = await this.upsertParametroModulo(empresaId, moduloId, item.field, item.valor, item.tipo, currentUser);
+      results.push(result);
+    }
+    return results;
+  }
+
+  async getParametrosComoObjeto(empresaId: number, moduloId: number) {
+    const rows = await this.tipoParametroRepo.find({
+      where: { empresaId, moduloId, sn_activo: 'S' } as any,
+    });
+    const obj: Record<string, string> = {};
+    for (const row of rows) { obj[row.field] = row.valor; }
+    return obj;
+  }
+
+  async deleteParametro(id: number) {
+    const found = await this.findParametroById(id);
+    found.sn_activo = 'N';
+    found.fechaUpdate = await this.fechaSistema.getFecha(found.empresaId);
+    return this.tipoParametroRepo.save(found);
+  }
+
+  async getValor(empresaId: number, moduloId: number, field: string, defaultValue?: string) {
+    const row = await this.tipoParametroRepo.findOne({
+      where: { empresaId, moduloId, field, sn_activo: 'S' } as any,
+    });
+    return row ? row.valor : (defaultValue || '0');
+  }
+
+  async setValor(empresaId: number, moduloId: number, field: string, valor: string, currentUser: string) {
+    return this.upsertParametroModulo(empresaId, moduloId, field, valor, 'STRING', currentUser);
+  }
+
+  async incrementarValor(empresaId: number, moduloId: number, field: string, currentUser: string, incremento: number = 1) {
+    const actual = await this.getValor(empresaId, moduloId, field, '0');
+    const nuevo = String(Number(actual) + incremento);
+    return this.upsertParametroModulo(empresaId, moduloId, field, nuevo, 'NUMBER', currentUser);
   }
 }
 
@@ -20796,6 +24115,10 @@ import { IsString, IsOptional, IsNumber, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePlPlaMaeDto {
+  @ApiProperty({ required: false, description: 'Número de planilla (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroplanilla?: string;
+
   @ApiProperty({ description: 'Período de la planilla' })
   @IsNumber()
   periodo: number;
@@ -20862,6 +24185,10 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-valida
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePlEmpleadosDto {
+  @ApiProperty({ required: false, description: 'Número de empleado (auto-generado si se omite)' })
+  @IsString() @IsOptional()
+  nroempleado?: string;
+
   @ApiProperty({ description: 'Nombres del empleado' })
   @IsString() @IsNotEmpty()
   nombres: string;
@@ -21475,6 +24802,10 @@ export class PlPlaMae {
   planillaId: number;
 
   @ApiProperty()
+  @Column({ type: 'varchar', length: 20, default: '' })
+  nroplanilla: string;
+
+  @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   fecharegistro: Date;
 
@@ -21587,6 +24918,10 @@ export class PlPlEmpleados {
   @ApiProperty()
   @PrimaryGeneratedColumn({ name: 'empleadoId' })
   empleadoId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 20, default: '' })
+  nroempleado: string;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
@@ -22383,6 +25718,7 @@ import { TplPuestos } from './entities/tplpuestos.entity';
 import { TplProfesiones } from './entities/tplprofesiones.entity';
 import { TplDeducciones } from './entities/tpldeducciones.entity';
 import { TplIngresos } from './entities/tplingresos.entity';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { PlanillaService } from './planilla.service';
 import { PlanillaController } from './planilla.controller';
 
@@ -22401,6 +25737,7 @@ import { PlanillaController } from './planilla.controller';
       TplProfesiones,
       TplDeducciones,
       TplIngresos,
+      TipoParametro,
     ]),
   ],
   controllers: [PlanillaController],
@@ -22419,6 +25756,7 @@ export class PlanillaModule {}
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { PlPlEmpleados } from './entities/plplempleados.entity';
 import { PlEtits } from './entities/pletitulaciones.entity';
 import { PlAsistencia } from './entities/pleasistencia.entity';
@@ -22436,6 +25774,7 @@ import { CreatePlPlaMaeDto, UpdatePlPlaMaeDto } from './dto/pleplamae.dto';
 import { CreatePlPlaDetDto, UpdatePlPlaDetDto } from './dto/plepladet.dto';
 import { CreateTplDeduccionesDto, UpdateTplDeduccionesDto } from './dto/tpldeducciones.dto';
 import { CreateTplIngresosDto, UpdateTplIngresosDto } from './dto/tplingresos.dto';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 
 @Injectable()
 export class PlanillaService {
@@ -22452,6 +25791,8 @@ export class PlanillaService {
     @InjectRepository(TplProfesiones) private readonly profesionRepo: Repository<TplProfesiones>,
     @InjectRepository(TplDeducciones) private readonly deduccionRepo: Repository<TplDeducciones>,
     @InjectRepository(TplIngresos) private readonly ingresoRepo: Repository<TplIngresos>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -22509,7 +25850,7 @@ export class PlanillaService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -22524,7 +25865,7 @@ export class PlanillaService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -22538,7 +25879,39 @@ export class PlanillaService {
   }
 
   async createEmpleado(dto: CreatePlEmpleadosDto, currentUser: string) {
-    return this.createEntity(this.empleadoRepo, dto, currentUser);
+    // Auto-generar nroempleado desde ttipoparametros (moduloId=8)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 8, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroempleado', 0);
+    const nro = Number(nroActual) + 1;
+    const nroempleado = dto.nroempleado || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroempleado,
+      dni: dto.dni || '0000000000000',
+    };
+
+    const saved = await this.createEntity(this.empleadoRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 8 AND field = :field', { eid: dto.empresaId, field: 'nroempleado' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updateEmpleado(empleadoId: number, empresaId: number, dto: UpdatePlEmpleadosDto, currentUser: string) {
@@ -22654,7 +26027,38 @@ export class PlanillaService {
   }
 
   async createPlanilla(dto: CreatePlPlaMaeDto, currentUser: string) {
-    return this.createEntity(this.plamaeRepo, dto, currentUser);
+    // Auto-generar nroplanilla desde ttipoparametros (moduloId=8)
+    const getParam = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId: dto.empresaId, moduloId: 8, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+
+    const nroActual = await getParam('nroplanilla', 0);
+    const nro = Number(nroActual) + 1;
+    const nroplanilla = dto.nroplanilla || String(nro).padStart(6, '0');
+
+    const payload: any = {
+      ...dto,
+      nroplanilla,
+    };
+
+    const saved = await this.createEntity(this.plamaeRepo, payload, currentUser);
+
+    // Incrementar contador
+    try {
+      await this.tipoParametroRepo
+        .createQueryBuilder()
+        .update(TipoParametro)
+        .set({ valor: String(nro) })
+        .where('empresaId = :eid AND moduloId = 8 AND field = :field', { eid: dto.empresaId, field: 'nroplanilla' })
+        .execute();
+    } catch (_) {}
+
+    return saved;
   }
 
   async updatePlanilla(planillaId: number, empresaId: number, dto: UpdatePlPlaMaeDto, currentUser: string) {
@@ -22927,6 +26331,7 @@ export class SucursalesModule {}
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tsucursal } from './entities/sucursal.entity';
 import { CreateSucursalDto, UpdateSucursalDto } from './dto/sucursal.dto';
 
@@ -22935,6 +26340,7 @@ export class SucursalesService {
   constructor(
     @InjectRepository(Tsucursal)
     private readonly repo: Repository<Tsucursal>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   async findAll(empresaId: number) {
@@ -22962,7 +26368,7 @@ export class SucursalesService {
     const entity = await this.findOne(idsucursal, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }
@@ -23200,6 +26606,59 @@ export class UpdateUsuarioMnuItemDto {
   @ApiProperty({ description: 'Activo', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_activo?: string;
+}
+
+// ===== Bulk import DTO =====
+
+export class BulkMnuItemDto {
+  @ApiProperty({ description: 'ID del item en el CSV (para mapear parent)' })
+  @IsNumber()
+  csvId: number;
+
+  @ApiProperty({ description: 'Parent ID del CSV (referencia al csvId del padre)' })
+  @IsNumber()
+  parentId: number;
+
+  @ApiProperty({ description: 'Nivel' })
+  @IsNumber()
+  levelId: number;
+
+  @ApiProperty({ description: 'Nombre del Parent' })
+  @IsString() @IsNotEmpty()
+  nameParent: string;
+
+  @ApiProperty({ description: 'Nombre del Item' })
+  @IsString() @IsNotEmpty()
+  nameItem: string;
+
+  @ApiProperty({ description: 'Label del Item' })
+  @IsString() @IsNotEmpty()
+  labelItem: string;
+
+  @ApiProperty({ description: 'Icono', required: false })
+  @IsString() @IsOptional()
+  iconItem?: string;
+
+  @ApiProperty({ description: 'Router Link', required: false })
+  @IsString() @IsOptional()
+  routerLink?: string;
+}
+
+export class BulkCreateMnuItemsDto {
+  @ApiProperty({ description: 'ID de Empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ description: 'ID de Modulo' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ description: 'Usuario' })
+  @IsString() @IsNotEmpty()
+  usuario: string;
+
+  @ApiProperty({ description: 'Items del menu', type: [BulkMnuItemDto] })
+  items: BulkMnuItemDto[];
 }
 
 ```
@@ -23448,6 +26907,9 @@ export class TusuarioMnuItem {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
 
+  @Column({ type: 'int', default: 0 })
+  zorden: number;
+
   @Column({ type: 'varchar', length: 12 })
   usuarioCreated: string;
 
@@ -23551,7 +27013,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { UsersService } from './users.service';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './dto/usuario.dto';
 import { CreateUsuariosModuleDto, UpdateUsuariosModuleDto } from './dto/usuarios-module.dto';
-import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto } from './dto/usuarios-mnuitem.dto';
+import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto } from './dto/usuarios-mnuitem.dto';
 import { CreateUsuariosScriptsDto, UpdateUsuariosScriptsDto } from './dto/usuarios-scripts.dto';
 import { CreateUsuarioModAuthDto, UpdateUsuarioModAuthDto } from './dto/usuario-modauth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -23564,7 +27026,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class UsersController {
   constructor(private readonly service: UsersService) {}
 
-  // ===== Usuarios =====
+  // ===== Usuarios (rutas con :usuario al final, después de las estáticas) =====
 
   @Get()
   @ApiOperation({ summary: 'Listar usuarios' })
@@ -23573,34 +27035,11 @@ export class UsersController {
     return this.service.findAll(empresaId);
   }
 
-  @Get(':usuario')
-  @ApiOperation({ summary: 'Obtener usuario por ID' })
-  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
-  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  findOne(
-    @Param('usuario') usuario: string,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.findOne(usuario, empresaId);
-  }
-
   @Post()
   @ApiOperation({ summary: 'Crear usuario' })
   @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
   create(@Body() dto: CreateUsuarioDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.usuario);
-  }
-
-  @Put(':usuario')
-  @ApiOperation({ summary: 'Actualizar usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
-  update(
-    @Param('usuario') usuario: string,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateUsuarioDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.update(usuario, empresaId, dto, user.usuario);
   }
 
   // ===== UsuariosModule =====
@@ -23657,8 +27096,11 @@ export class UsersController {
   @Get('menu-items')
   @ApiOperation({ summary: 'Listar items de menú de usuario' })
   @ApiResponse({ status: 200, description: 'Lista de items de menú obtenida exitosamente' })
-  findAllMnuItems(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllMnuItems(empresaId);
+  findAllMnuItems(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('usuario') usuario?: string,
+  ) {
+    return this.service.findAllMnuItems(empresaId, usuario);
   }
 
   @Get('menu-items/:id')
@@ -23670,6 +27112,13 @@ export class UsersController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findMnuItem(id, empresaId);
+  }
+
+  @Post('menu-items/bulk')
+  @ApiOperation({ summary: 'Importar items de menú masivamente desde CSV' })
+  @ApiResponse({ status: 201, description: 'Items importados exitosamente' })
+  bulkCreateMnuItems(@Body() dto: BulkCreateMnuItemsDto, @CurrentUser() user: any) {
+    return this.service.bulkCreateMnuItems(dto, user.usuario);
   }
 
   @Post('menu-items')
@@ -23798,6 +27247,31 @@ export class UsersController {
   ) {
     return this.service.removeModAuth(id, empresaId);
   }
+
+  // ===== Rutas parametrizadas de :usuario SIEMPRE al final =====
+
+  @Get(':usuario')
+  @ApiOperation({ summary: 'Obtener usuario por ID' })
+  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  findOne(
+    @Param('usuario') usuario: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findOne(usuario, empresaId);
+  }
+
+  @Put(':usuario')
+  @ApiOperation({ summary: 'Actualizar usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
+  update(
+    @Param('usuario') usuario: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateUsuarioDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.update(usuario, empresaId, dto, user.usuario);
+  }
 }
 
 ```
@@ -23814,6 +27288,7 @@ import { TusuariosModule } from './entities/usuarios-module.entity';
 import { TusuarioMnuItem } from './entities/usuarios-mnuitem.entity';
 import { TusuariosScripts } from './entities/usuarios-scripts.entity';
 import { UsuarioModAuth } from './entities/usuario-modauth.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 
@@ -23824,6 +27299,7 @@ import { UsersController } from './users.controller';
     TusuarioMnuItem,
     TusuariosScripts,
     UsuarioModAuth,
+    Tmodulos,
   ])],
   controllers: [UsersController],
   providers: [UsersService],
@@ -23841,14 +27317,16 @@ export class UsersModule {}
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { Tusuarios } from './entities/usuario.entity';
 import { TusuariosModule } from './entities/usuarios-module.entity';
 import { TusuarioMnuItem } from './entities/usuarios-mnuitem.entity';
 import { TusuariosScripts } from './entities/usuarios-scripts.entity';
 import { UsuarioModAuth } from './entities/usuario-modauth.entity';
+import { Tmodulos } from '../modules/entities/modulo.entity';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './dto/usuario.dto';
 import { CreateUsuariosModuleDto, UpdateUsuariosModuleDto } from './dto/usuarios-module.dto';
-import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto } from './dto/usuarios-mnuitem.dto';
+import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto } from './dto/usuarios-mnuitem.dto';
 import { CreateUsuariosScriptsDto, UpdateUsuariosScriptsDto } from './dto/usuarios-scripts.dto';
 import { CreateUsuarioModAuthDto, UpdateUsuarioModAuthDto } from './dto/usuario-modauth.dto';
 
@@ -23876,6 +27354,9 @@ export class UsersService {
     private readonly scriptsRepo: Repository<TusuariosScripts>,
     @InjectRepository(UsuarioModAuth)
     private readonly authRepo: Repository<UsuarioModAuth>,
+    @InjectRepository(Tmodulos)
+    private readonly modulosRepo: Repository<Tmodulos>,
+    private readonly fechaSistema: FechaSistemaService,
   ) {}
 
   // ===== Generic helpers =====
@@ -23924,7 +27405,7 @@ export class UsersService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -23939,7 +27420,7 @@ export class UsersService {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     Object.assign(entity, {
       sn_activo: 'N',
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return repo.save(entity);
   }
@@ -23977,7 +27458,7 @@ export class UsersService {
     const entity = await this.findOne(usuario, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
-      fechaUpdated: new Date(),
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     });
     return this.repo.save(entity);
   }
@@ -24006,8 +27487,34 @@ export class UsersService {
 
   // ===== UsuarioMnuItem =====
 
-  async findAllMnuItems(empresaId: number) {
-    return this.mnuRepo.find({ where: { empresaId }, order: { usuario: 'ASC' } });
+  async findAllMnuItems(empresaId: number, usuario?: string) {
+    const qb = this.mnuRepo.createQueryBuilder('m')
+      .leftJoin(Tmodulos, 'mod', 'mod.moduloId = m.moduloId AND mod.empresaId = m.empresaId')
+      .select([
+        'm.tusuariomnuitemsId AS tusuariomnuitemsId',
+        'm.empresaId AS empresaId',
+        'm.moduloId AS moduloId',
+        'm.usuario AS usuario',
+        'm.parent AS parent',
+        'm.parentId AS parentId',
+        'm.levelId AS levelId',
+        'm.nameParent AS nameParent',
+        'm.nameItem AS nameItem',
+        'm.labelItem AS labelItem',
+        'm.iconItem AS iconItem',
+        'm.routerLink AS routerLink',
+        'm.sn_activo AS sn_activo',
+        'm.zorden AS zordenItem',
+      ])
+      .addSelect('COALESCE(mod.zorden, 0)', 'zordenMod')
+      .where('m.empresaId = :empresaId', { empresaId })
+      .orderBy('m.levelId', 'ASC');
+
+    if (usuario) {
+      qb.andWhere('m.usuario = :usuario', { usuario });
+    }
+
+    return qb.getRawMany();
   }
 
   async findMnuItem(tusuariomnuitemsId: number, empresaId: number) {
@@ -24024,6 +27531,56 @@ export class UsersService {
 
   async removeMnuItem(tusuariomnuitemsId: number, empresaId: number) {
     return this.softDelete(this.mnuRepo, 'tusuariomnuitemsId', tusuariomnuitemsId, empresaId, 'UsuarioMnuItem');
+  }
+
+  /**
+   * Bulk import menu items from CSV data.
+   * Maps csvId → generated tusuariomnuitemsId for parent relationships.
+   */
+  async bulkCreateMnuItems(dto: BulkCreateMnuItemsDto, currentUser: string) {
+    // 1. Delete existing menu items for this user+empresa
+    await this.mnuRepo
+      .createQueryBuilder()
+      .delete()
+      .where('empresaId = :empresaId AND usuario = :usuario', {
+        empresaId: dto.empresaId,
+        usuario: dto.usuario,
+      })
+      .execute();
+
+    // 2. Sort items by levelId (parents first)
+    const sorted = [...dto.items].sort((a, b) => a.levelId - b.levelId || a.csvId - b.csvId);
+
+    // 3. Insert sequentially, mapping csvId → generated ID
+    const idMap = new Map<number, number>(); // csvId → DB ID
+    const created: TusuarioMnuItem[] = [];
+
+    for (const item of sorted) {
+      const parentCsvId = item.parentId === item.csvId ? 0 : item.parentId;
+      const parentDbId = idMap.get(parentCsvId) ?? 0;
+
+      const entity = this.mnuRepo.create({
+        empresaId: dto.empresaId,
+        moduloId: dto.moduloId,
+        usuario: dto.usuario,
+        parent: parentDbId,
+        parentId: item.parentId,
+        levelId: item.levelId,
+        nameParent: item.nameParent,
+        nameItem: item.nameItem,
+        labelItem: item.labelItem,
+        iconItem: item.iconItem ?? '',
+        routerLink: item.routerLink ?? '',
+        sn_activo: 'S',
+        usuarioCreated: currentUser,
+      });
+
+      const saved = await this.mnuRepo.save(entity);
+      idMap.set(item.csvId, saved.tusuariomnuitemsId);
+      created.push(saved);
+    }
+
+    return { count: created.length, items: created };
   }
 
   // ===== UsuariosScripts =====
@@ -24070,6 +27627,54 @@ export class UsersService {
   async removeModAuth(usuariomodauthId: number, empresaId: number) {
     const entity = await this.findOneById(this.authRepo, 'usuariomodauthId', usuariomodauthId, empresaId, 'UsuarioModAuth');
     return this.authRepo.remove(entity);
+  }
+}
+
+```
+
+---
+
+## 📄 src\shared\fecha-sistema.module.ts
+
+```typescript
+import { Module, Global } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Tempresas } from '../modules/companies/entities/empresa.entity';
+import { FechaSistemaService } from './fecha-sistema.service';
+
+@Global()
+@Module({
+  imports: [TypeOrmModule.forFeature([Tempresas])],
+  providers: [FechaSistemaService],
+  exports: [FechaSistemaService],
+})
+export class FechaSistemaModule {}
+
+```
+
+---
+
+## 📄 src\shared\fecha-sistema.service.ts
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Tempresas } from '../modules/companies/entities/empresa.entity';
+
+@Injectable()
+export class FechaSistemaService {
+  constructor(
+    @InjectRepository(Tempresas) private readonly empresaRepo: Repository<Tempresas>,
+  ) {}
+
+  /**
+   * Obtiene la fecha del sistema desde tempresas.fechasistema.
+   * Si no existe la empresa o no tiene fechasistema, usa new Date() como fallback.
+   */
+  async getFecha(empresaId: number): Promise<Date> {
+    const empresa = await this.empresaRepo.findOne({ where: { empresaId } as any });
+    return empresa?.fechasistema ? new Date(empresa.fechasistema) : new Date();
   }
 }
 

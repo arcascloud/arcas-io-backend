@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CxcCliente } from './entities/cxccliente.entity';
@@ -16,6 +16,7 @@ import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { ContabilidadModule } from '../contabilidad/contabilidad.module';
 import { CxcService } from './cxc.service';
 import { CxcController } from './cxc.controller';
 
@@ -39,6 +40,7 @@ import { CxcController } from './cxc.controller';
       CxcPariente,
       TipoParametro,
     ]),
+    forwardRef(() => ContabilidadModule),
   ],
   controllers: [CxcController],
   providers: [CxcService],

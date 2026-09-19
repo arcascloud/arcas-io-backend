@@ -27,6 +27,11 @@ export class TPosCotMae {
   @Column({ nullable: true })
   gestorId: number;
 
+
+  @ApiProperty()
+  @Column()
+  partidaId: number
+
   @ApiProperty()
   @Column()
   empresaId: number;

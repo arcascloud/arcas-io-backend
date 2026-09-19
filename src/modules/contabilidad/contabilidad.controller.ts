@@ -1,13 +1,16 @@
 import {
   Controller, Get, Post, Put, Body, Param, Query,
-  UseGuards, ParseIntPipe,
+  UseGuards, ParseIntPipe, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ContabilidadService } from './contabilidad.service';
+import { ContabilidadLogicaService } from './contabilidad-logica.service';
 import {
   CreateTcoctacontablesDto, UpdateTcoctacontablesDto,
   CreateCopdamaeDto, UpdateCopdamaeDto,
   CreateCopdadetDto, UpdateCopdadetDto,
+  ContabilizarPartidaDto, CierreContableDto, ReporteContableDto,
+  IntegracionModuloDto,
 } from './dto/contabilidad.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -17,7 +20,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('contabilidad')
 @UseGuards(JwtAuthGuard)
 export class ContabilidadController {
-  constructor(private readonly service: ContabilidadService) {}
+  constructor(
+    private readonly service: ContabilidadService,
+    private readonly logica: ContabilidadLogicaService,
+  ) {}
 
   // ===== Ctacontables =====
 
@@ -909,5 +915,143 @@ export class ContabilidadController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateTipoDocFiscal(id, empresaId, dto, user.usuario);
+  }
+
+  // ===== CONTABILIZACIÓN =====
+
+  @Post('copdamae/contabilizar')
+  @ApiOperation({ summary: 'Contabilizar una partida de diario (valida cuadrada, crea movimientos y saldos)' })
+  @ApiResponse({ status: 201, description: 'Partida contabilizada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Partida no cuadrada o período cerrado' })
+  contabilizarPartida(
+    @Body() dto: ContabilizarPartidaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarPartida(dto, user.usuario);
+  }
+
+  // ===== CIERRE CONTABLE =====
+
+  @Post('cierrectable/realizar')
+  @ApiOperation({ summary: 'Realizar cierre de período contable' })
+  @ApiResponse({ status: 201, description: 'Cierre realizado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Período ya cerrado o no existe' })
+  realizarCierre(
+    @Body() dto: CierreContableDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.realizarCierre(dto, user.usuario);
+  }
+
+  // ===== REPORTES CONTABLES =====
+
+  @Post('reportes/balance-comprobacion')
+  @ApiOperation({ summary: 'Generar Balance de Comprobación' })
+  @ApiResponse({ status: 200, description: 'Balance generado exitosamente' })
+  generarBalanceComprobacion(@Body() dto: ReporteContableDto) {
+    return this.logica.generarBalanceComprobacion(dto);
+  }
+
+  @Post('reportes/libro-diario')
+  @ApiOperation({ summary: 'Generar Libro Diario' })
+  @ApiResponse({ status: 200, description: 'Libro diario generado exitosamente' })
+  generarLibroDiario(@Body() dto: ReporteContableDto) {
+    return this.logica.generarLibroDiario(dto);
+  }
+
+  @Post('reportes/libro-mayor')
+  @ApiOperation({ summary: 'Generar Libro Mayor' })
+  @ApiResponse({ status: 200, description: 'Libro mayor generado exitosamente' })
+  generarLibroMayor(@Body() dto: ReporteContableDto) {
+    return this.logica.generarLibroMayor(dto);
+  }
+
+  // ===== INTEGRACIÓN CON MÓDULOS =====
+
+  @Post('integracion/factura')
+  @ApiOperation({ summary: 'Contabilizar factura de venta automáticamente' })
+  @ApiResponse({ status: 201, description: 'Factura contabilizada' })
+  async contabilizarFactura(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    const factura = await this.logica.findFacturaById(dto.documentoId, empresaId);
+    if (!factura) throw new NotFoundException(`Factura ${dto.documentoId} no encontrada`);
+    return this.logica.contabilizarFactura(factura, empresaId, Idsucursal, user.usuario);
+  }
+
+  @Post('integracion/factura/diagnostico')
+  @ApiOperation({ summary: 'Diagnosticar contabilización de factura (sin ejecutar)' })
+  async diagnosticarContabilizacion(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.logica.diagnosticarContabilizacion(dto.documentoId, empresaId);
+  }
+
+  @Post('integracion/cxc')
+  @ApiOperation({ summary: 'Contabilizar movimiento de CxC automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento CxC contabilizado' })
+  async contabilizarCxC(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    const movimiento = await this.logica.findMovimientoCxC(dto.documentoId, empresaId);
+    if (!movimiento) throw new NotFoundException(`Movimiento CxC ${dto.documentoId} no encontrado`);
+    return this.logica.contabilizarCxC(movimiento, empresaId, Idsucursal, user.usuario, dto.facturaId);
+  }
+
+  // ===== BITÁCORA POSFACMOV =====
+
+  @Get('posfacmov')
+  @ApiOperation({ summary: 'Consultar bitácora de partidas contables por factura' })
+  @ApiResponse({ status: 200, description: 'Lista de registros posfacmov' })
+  findPosfacmov(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('facturaId') facturaId?: string,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.logica.findPosfacmov(empresaId, facturaId ? Number(facturaId) : undefined, moduloId ? Number(moduloId) : undefined);
+  }
+
+  @Post('posfacmov/contabilizar-cxc')
+  @ApiOperation({ summary: 'Contabilizar un movimiento CxC existente y registrar en posfacmov' })
+  @ApiResponse({ status: 201, description: 'Movimiento contabilizado y registrado en posfacmov' })
+  async contabilizarMovimientoCxC(
+    @Body() body: { clienteMovId: number; empresaId: number; Idsucursal?: number },
+    @CurrentUser() user: any,
+  ) {
+    const { clienteMovId, empresaId, Idsucursal } = body;
+    const movimiento = await this.logica.findMovimientoCxC(clienteMovId, empresaId);
+    if (!movimiento) throw new NotFoundException(`Movimiento CxC ${clienteMovId} no encontrado`);
+    return this.logica.contabilizarCxC(movimiento, empresaId, Idsucursal || 0, user.usuario);
+  }
+
+  @Post('integracion/cxp')
+  @ApiOperation({ summary: 'Contabilizar movimiento de CxP automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento CxP contabilizado' })
+  contabilizarCxP(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarCxP({ cxpmovimientoId: dto.documentoId }, empresaId, Idsucursal, user.usuario);
+  }
+
+  @Post('integracion/bancos')
+  @ApiOperation({ summary: 'Contabilizar movimiento bancario automáticamente' })
+  @ApiResponse({ status: 201, description: 'Movimiento bancario contabilizado' })
+  contabilizarBanco(
+    @Body() dto: IntegracionModuloDto,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('Idsucursal', ParseIntPipe) Idsucursal: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.contabilizarBanco({ bcomovimientosId: dto.documentoId }, empresaId, Idsucursal, user.usuario);
   }
 }

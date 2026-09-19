@@ -8,8 +8,8 @@ export class Copdadet {
   copdadetId: number;
 
   @ApiProperty()
-  @Column()
-  copdamaeId: number;
+  @Column({ name: 'partidaId' })
+  partidaId: number;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
@@ -40,7 +40,7 @@ export class Copdadet {
   ctacontable: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 70, nullable: true })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   descripcion: string;
 
   @ApiProperty()

@@ -310,6 +310,7 @@ export class CxcController {
   @ApiOperation({ summary: 'Crear movimiento' })
   @ApiResponse({ status: 201, description: 'Creado exitosamente' })
   createMovimiento(@Body() dto: CreateCxcMovimientoDto, @CurrentUser() user: any) {
+    dto.Idsucursal = user.idsucursal;
     return this.service.createMovimiento(dto, user.usuario);
   }
 

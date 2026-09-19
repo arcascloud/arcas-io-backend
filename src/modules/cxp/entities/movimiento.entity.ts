@@ -6,16 +6,19 @@ import { ApiProperty } from '@nestjs/swagger';
 @Entity('cxpmovimientos')
 export class TCxpMovimiento {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'bcomovId' })
+  @PrimaryGeneratedColumn({ name: 'cxpmovId' })
   bcomovId: number;
+
+  @Column({type:'int', default:0})
+  nromovimiento: number;
 
   @ApiProperty()
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   fecharegistro: Date;
 
   @ApiProperty()
-  @Column({ type: 'int', nullable: true })
-  bcoctasId: number;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  nrocuentabco: string;
 
   @ApiProperty()
   @Column()
@@ -42,8 +45,8 @@ export class TCxpMovimiento {
   nroreferencia: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  descripcion1: string;
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  concepto: string;
 
   @ApiProperty({ required: false })
   @Column({ type: 'varchar', length: 100, nullable: true })

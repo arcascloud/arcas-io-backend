@@ -51,6 +51,10 @@ export class TPosFacDet {
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
   descuento: number;
 
+  @ApiProperty({ required: false })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00, name: 'p_descuento' })
+  p_descuento: number;
+
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_anulada: string;

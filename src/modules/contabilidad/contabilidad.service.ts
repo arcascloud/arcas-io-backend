@@ -427,20 +427,20 @@ export class ContabilidadService {
     });
   }
 
-  async findCopdamae(copdamaeId: number, empresaId: number) {
-    return this.findOneById(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, 'Partida Mayor');
+  async findCopdamae(partidaId: number, empresaId: number) {
+    return this.findOneById(this.copdamaeRepo, 'partidaId', partidaId, empresaId, 'Partida Mayor');
   }
 
   async createCopdamae(dto: CreateCopdamaeDto, currentUser: string) {
     return this.createEntity(this.copdamaeRepo, dto, currentUser);
   }
 
-  async updateCopdamae(copdamaeId: number, empresaId: number, dto: UpdateCopdamaeDto, currentUser: string) {
-    return this.updateEntity(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, dto, currentUser, 'Partida Mayor');
+  async updateCopdamae(partidaId: number, empresaId: number, dto: UpdateCopdamaeDto, currentUser: string) {
+    return this.updateEntity(this.copdamaeRepo, 'partidaId', partidaId, empresaId, dto, currentUser, 'Partida Mayor');
   }
 
-  async removeCopdamae(copdamaeId: number, empresaId: number) {
-    return this.softDelete(this.copdamaeRepo, 'copdamaeId', copdamaeId, empresaId, 'Partida Mayor');
+  async removeCopdamae(partidaId: number, empresaId: number) {
+    return this.softDelete(this.copdamaeRepo, 'partidaId', partidaId, empresaId, 'Partida Mayor');
   }
 
   async findAllCopdadet(empresaId: number) {

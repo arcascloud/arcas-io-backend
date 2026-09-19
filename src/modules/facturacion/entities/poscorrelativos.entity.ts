@@ -20,7 +20,7 @@ export class TPosCorrelativos {
   @ApiProperty()
   @Column({ type: 'varchar', length: 30 })
   rangoDesde;
-  
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 30 })
   rangoHasta;

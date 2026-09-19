@@ -151,6 +151,10 @@ export class CreateCxcMovimientoDto {
   @IsNumber()
   documentoId: number;
 
+  @ApiProperty({ description: 'ID de Sucursal', required: false })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
   @ApiProperty({ description: 'Tipo de Movimiento', enum: ['D', 'C'], required: false })
   @IsEnum(['D', 'C']) @IsOptional()
   tipomov?: string;
@@ -197,9 +201,9 @@ export class UpdateCxcMovimientoDto {
   @IsString() @IsOptional()
   concepto?: string;
 
-  @ApiProperty({ description: 'Contabilizado', enum: ['S', 'N'], required: false })
+  @ApiProperty({ description: 'Contabilizada', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
-  sn_cotabilizada?: string;
+  sn_contabilizada?: string;
 
   @ApiProperty({ description: 'Documento Anulado', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()

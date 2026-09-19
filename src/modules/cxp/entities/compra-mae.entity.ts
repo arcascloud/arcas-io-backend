@@ -14,7 +14,7 @@ export class TCxpCompraMae {
   fecharegistro: Date;
 
   @ApiProperty()
-  @Column({ type: 'enum', enum: ['F', 'O'], default: 'F' })
+  @Column({ type: 'enum', enum: ['FCO', 'FCC', 'ORC'], default: 'FCO' })
   TipoCompra: string;
 
   @ApiProperty()
@@ -67,7 +67,11 @@ export class TCxpCompraMae {
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_cotabilizada: string;
+  sn_contabilizada: string;
+
+  @ApiProperty()
+  @Column()
+  partidaId: number;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })

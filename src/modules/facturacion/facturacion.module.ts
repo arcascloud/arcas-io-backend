@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TPosCorrelativos } from './entities/poscorrelativos.entity';
@@ -28,6 +28,7 @@ import { FacturacionService } from './facturacion.service';
 import { FacturacionController } from './facturacion.controller';
 import { InventarioModule } from '../inventario/inventario.module';
 import { CxcModule } from '../cxc/cxc.module';
+import { ContabilidadModule } from '../contabilidad/contabilidad.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { CxcModule } from '../cxc/cxc.module';
     ]),
     InventarioModule,
     CxcModule,
+    forwardRef(() => ContabilidadModule),
   ],
   controllers: [FacturacionController],
   providers: [FacturacionService],

@@ -178,6 +178,7 @@ export class CxpController {
   @Post('movimientos')
   @ApiOperation({ summary: 'Crear movimiento' })
   createMovimiento(@Body() dto: any, @CurrentUser() user: any) {
+    dto.Idsucursal = user.idsucursal;
     return this.service.createMovimiento(dto, user.usuario);
   }
 

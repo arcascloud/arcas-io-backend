@@ -8,6 +8,9 @@ export class CxcMovimiento {
   @PrimaryGeneratedColumn({ name: 'clienteMovId' })
   clienteMovId: number;
 
+  @Column({ type: 'int', default: 0 })
+  nromovimiento: number;
+
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   fecharegistro: Date;
 

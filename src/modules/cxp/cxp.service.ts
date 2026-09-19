@@ -255,7 +255,7 @@ export class CxpService {
 
   async createCompra(dto: any, currentUser: string) {
     const compra = await this.createEntity<TCxpCompraMae>(this.compraMaeRepo, {
-      TipoCompra: dto.TipoCompra || 'F',
+      TipoCompra: dto.TipoCompra || 'FCO',
       bodegaId: dto.bodegaId,
       proveedorId: dto.proveedorId,
       documentoId: dto.documentoId,
@@ -375,15 +375,15 @@ export class CxpService {
       this.proveedorRepo, 'proveedorId', compra.proveedorId, compra.empresaId, 'Proveedor',
     );
 
-    await this.createEntity(this.movimientoRepo, {
-      bcoctasId: 0,
-      moduloId: 2,
+    const saved = await this.createEntity(this.movimientoRepo, {
+      nrocuentabco: '',
+      moduloId: 5,
       documentoId: compra.documentoId || 1,
       proveedorId: compra.proveedorId,
       codproveedor: proveedor.nroproveedor,
       tipomov: 'D',
       nroreferencia: compra.compraId.toString(),
-      descripcion1: `Compra #${compra.compraId}`,
+      concepto: `Compra #${compra.compraId}`,
       descripcion2: proveedor.razonsocial || `${proveedor.nombres} ${proveedor.apellidos}`,
       importe: compra.total,
       sn_chq: 'N',
@@ -393,6 +393,13 @@ export class CxpService {
       sn_doc_anulado: 'N',
       empresaId: compra.empresaId,
     }, currentUser);
+
+    // Emitir evento para contabilización automática
+    this.eventEmitter.emit('cxp.movimiento.creado', {
+      movimiento: saved,
+      origen: 'compra',
+      TipoCompra: compra.TipoCompra || 'FCO',
+    });
   }
 
   async updateCompra(compraId: number, empresaId: number, dto: any, currentUser: string) {
@@ -532,7 +539,12 @@ export class CxpService {
   }
 
   async createMovimiento(dto: any, currentUser: string) {
-    return this.createEntity(this.movimientoRepo, dto, currentUser);
+    const saved = await this.createEntity(this.movimientoRepo, dto, currentUser);
+    // Emitir evento para contabilización automática
+    if (saved && dto.tipomov && (dto.tipomov === 'D' || dto.tipomov === 'C')) {
+      this.eventEmitter.emit('cxp.movimiento.creado', { movimiento: saved, origen: 'manual' });
+    }
+    return saved;
   }
 
   async updateMovimiento(bcomovId: number, empresaId: number, dto: any, currentUser: string) {
@@ -561,7 +573,7 @@ export class CxpService {
       .addSelect('a.nroreferencia', 'nroreferencia')
       .addSelect('a.tipomov', 'tipomov')
       .addSelect('a.importe', 'importe')
-      .addSelect('COALESCE(a.descripcion1, a.descripcion2, \'\')', 'concepto')
+      .addSelect('COALESCE(a.concepto, a.descripcion2, \'\')', 'concepto')
       .addSelect('a.sn_doc_anulado', 'sn_doc_anulado')
       .addSelect('a.sn_contabilizado', 'sn_contabilizado')
       .addSelect('a.bcomovId', 'bcomovId')
@@ -570,8 +582,8 @@ export class CxpService {
       .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
       .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
       .where('a.empresaId = :empresaId', { empresaId })
-      .orderBy('b.razonsocial', 'ASC')
-      .addOrderBy('a.bcomovId', 'ASC');
+      .orderBy('a.fecharegistro', 'DESC')
+      .addOrderBy('a.bcomovId', 'DESC');
 
     if (dni && dni.trim()) {
       qb.andWhere('b.dni LIKE :dni', { dni: `%${dni.trim()}%` });

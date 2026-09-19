@@ -32,7 +32,7 @@ export class CxccajaMae {
   concepto: string;
 
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
-  sn_cotabilizada: string;
+  sn_contabilizada: string;
 
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_anulado: string;

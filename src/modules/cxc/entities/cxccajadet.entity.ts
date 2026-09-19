@@ -43,6 +43,12 @@ export class CxccajaDet {
   @Column({ type: 'datetime', nullable: true })
   fec_anulacion: Date;
 
+  @Column()
+  partidaId: number;
+
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_contabilizada: string;
+
   @Column({ type: 'int', nullable: true })
   Idsucursal: number;
 

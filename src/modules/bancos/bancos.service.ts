@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral, DataSource } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
@@ -29,6 +30,7 @@ export class BancosService {
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly fechaSistema: FechaSistemaService,
     private readonly dataSource: DataSource,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -247,7 +249,12 @@ export class BancosService {
   }
 
   async createMovimiento(dto: CreateBcoMovimientoDto, currentUser: string) {
-    return this.createEntity(this.bcoMovimientoRepo, dto, currentUser);
+    const mov = await this.createEntity(this.bcoMovimientoRepo, dto, currentUser);
+    this.eventEmitter.emit('bancos.movimiento.creado', {
+      movimiento: mov,
+      origen: 'createMovimiento',
+    });
+    return mov;
   }
 
   async updateMovimiento(bcomovimientosId: number, empresaId: number, dto: UpdateBcoMovimientoDto, currentUser: string) {
@@ -385,6 +392,7 @@ export class BancosService {
 
     try {
       const chequesEmitidos: any[] = [];
+      const movimientosGuardados: TbcoMovimiento[] = [];
       const now = await this.fechaSistema.getFecha(dto.empresaId);
 
       // Obtener parámetro nrochq (una sola vez)
@@ -433,18 +441,20 @@ export class BancosService {
           usuarioCreated: currentUser,
         });
         await queryRunner.manager.save(movBanco);
+        movimientosGuardados.push(movBanco);
 
         // 2. Movimientos CxP — 1 por cada factura del grupo
+        const ctaOrigen = await this.bcoCtaRepo.findOne({ where: { bcoctasId: dto.bcoctasId } as any });
         for (const factura of grupo.facturas) {
           const movCxP = queryRunner.manager.create(TCxpMovimiento, {
-            bcoctasId: dto.bcoctasId,
+            nrocuentabco: ctaOrigen?.nrocuenta || '',
             moduloId: 2,
             documentoId: 1,
             proveedorId: grupo.proveedorId,
             codproveedor: grupo.codproveedor,
             tipomov: 'C',
             nroreferencia: factura.compraId.toString(),
-            descripcion1: conceptoCxP,
+            concepto: conceptoCxP,
             descripcion2: grupo.beneficiario,
             importe: factura.saldo,
             nrochq: nroChq,
@@ -499,6 +509,14 @@ export class BancosService {
       );
 
       await queryRunner.commitTransaction();
+
+      // Emitir eventos de contabilización después del commit
+      for (const mov of movimientosGuardados) {
+        this.eventEmitter.emit('bancos.movimiento.creado', {
+          movimiento: mov,
+          origen: 'emitirCheques',
+        });
+      }
 
       const totalGeneral = chequesEmitidos.reduce((sum, c) => sum + c.importe, 0);
       return {
@@ -569,6 +587,12 @@ export class BancosService {
       );
 
       await queryRunner.commitTransaction();
+
+      // Emitir evento de contabilización después del commit
+      this.eventEmitter.emit('bancos.movimiento.creado', {
+        movimiento: movBanco,
+        origen: 'emitirChequeParticular',
+      });
 
       return {
         mensaje: `Cheque ${nroChq} emitido — ${dto.beneficiario} — L ${dto.importe.toFixed(2)}`,

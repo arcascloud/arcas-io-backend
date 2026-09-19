@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral, Like } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OnEvent } from '@nestjs/event-emitter';
 import { CxcCliente } from './entities/cxccliente.entity';
 import { CxccClientesDir } from './entities/cxccclientesdir.entity';
 import { CxcClienteTel } from './entities/cxcclientestel.entity';
@@ -17,6 +18,7 @@ import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { CxcPrestamo } from './entities/cxcprestamo.entity';
 import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
+import { ContabilidadLogicaService } from '../contabilidad/contabilidad-logica.service';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import {
   CreateCxcClienteDto, UpdateCxcClienteDto,
@@ -26,6 +28,8 @@ import {
 
 @Injectable()
 export class CxcService {
+  private readonly logger = new Logger(CxcService.name);
+
   constructor(
     @InjectRepository(CxcCliente) private readonly clienteRepo: Repository<CxcCliente>,
     @InjectRepository(CxccClientesDir) private readonly clienteDirRepo: Repository<CxccClientesDir>,
@@ -44,12 +48,46 @@ export class CxcService {
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly eventEmitter: EventEmitter2,
     private readonly fechaSistema: FechaSistemaService,
+    @Inject(forwardRef(() => ContabilidadLogicaService))
+    private readonly contabilidadService: ContabilidadLogicaService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
     return repo.find({
       where: { empresaId } as unknown as FindOptionsWhere<T>,
     });
+  }
+
+  /**
+   * Genera el siguiente número de correlativo de movimiento desde ttipoparametros.
+   * tipomov='D' → field='nro_debito_cxc'
+   * tipomov='C' → field='nro_credito_cxc'
+   * Autoincrementa el valor en la tabla y retorna el nuevo número.
+   */
+  async generarNroMovimiento(empresaId: number, tipomov: 'D' | 'C'): Promise<number> {
+    const field = tipomov === 'D' ? 'nro_debito_cxc' : 'nro_credito_cxc';
+
+    const param = await this.tipoParametroRepo.findOne({
+      where: { empresaId, field, sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
+    });
+
+    if (!param) {
+      this.logger.warn(`Parámetro ${field} no encontrado para empresaId=${empresaId}. Usando 1.`);
+      return 1;
+    }
+
+    const actual = Number(param.valor) || 0;
+    const siguiente = actual + 1;
+
+    // Actualizar con query builder para evitar problemas de change detection
+    await this.tipoParametroRepo.createQueryBuilder()
+      .update(TipoParametro)
+      .set({ valor: siguiente.toString() } as any)
+      .where('ttipoparametrosId = :id', { id: param.ttipoparametrosId })
+      .execute();
+
+    this.logger.log(`Correlativo ${field}: ${actual} → ${siguiente}`);
+    return siguiente;
   }
 
   private async findOneById<T extends ObjectLiteral>(
@@ -269,15 +307,8 @@ export class CxcService {
 
   async createCajaMae(dto: any, currentUser: string) {
     const caja = await this.createEntity<CxccajaMae>(this.cajaMaeRepo, dto, currentUser);
-
-    if (dto.tipomov === 'C') {
-      try {
-        await this.generarMovimientoDesdeCaja(caja, currentUser);
-      } catch (error) {
-        console.error('Error generando movimiento CXC desde Caja:', error);
-      }
-    }
-
+    // NO se genera movimiento aquí. El movimiento real se crea en createCajaDet
+    // con el importe correcto de cada forma de pago.
     return caja;
   }
 
@@ -342,6 +373,7 @@ export class CxcService {
       sn_cotabilizada: 'N',
       sn_doc_anulado: 'N',
       empresaId: caja.empresaId,
+      Idsucursal: caja.Idsucursal || 1,
       usuarioCreated: currentUser,
     });
 
@@ -351,9 +383,12 @@ export class CxcService {
   private async generarMovimientoDesdeCajaDet(cajaDet: CxccajaDet, cajaMae: CxccajaMae, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(cajaDet.clienteId, cajaDet.empresaId);
     const now = await this.fechaSistema.getFecha(cajaDet.empresaId);
-    
+    const Idsucursal = cajaDet.Idsucursal || cajaMae.Idsucursal || 1;
+    const nromovimiento = await this.generarNroMovimiento(cajaDet.empresaId, 'C');
+
     const movimiento = this.movimientoRepo.create({
       fecharegistro: now,
+      nromovimiento,
       clienteId: cajaDet.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 4,
@@ -362,15 +397,17 @@ export class CxcService {
       nroreferencia: cajaMae.nrodocumento,
       factordecambio: cajaDet.factordecambio || 1,
       importe: cajaDet.importe,
-      concepto: `Pago ${cajaDet.formapagoId} - Caja #${cajaMae.cxccajaId}`,
+      concepto: `Abono Caja #${cajaMae.cxccajaId} - ${cajaMae.concepto || ''}`,
       sn_cotabilizada: 'N',
       sn_doc_anulado: 'N',
       empresaId: cajaDet.empresaId,
+      Idsucursal,
       usuarioCreated: currentUser,
     });
 
     const saved = await this.movimientoRepo.save(movimiento);
 
+    // Emitir evento para contabilización automática
     this.eventEmitter.emit('cxc.movimiento.creado', { movimiento: saved, origen: 'caja', cajaMae, cajaDet });
 
     return saved;
@@ -394,7 +431,12 @@ export class CxcService {
   }
 
   async createMovimiento(dto: CreateCxcMovimientoDto, currentUser: string) {
-    return this.createEntity(this.movimientoRepo, dto, currentUser);
+    const saved = await this.createEntity(this.movimientoRepo, dto, currentUser);
+    // Emitir evento para contabilización automática (nota débito/crédito)
+    if (saved && dto.tipomov && (dto.tipomov === 'D' || dto.tipomov === 'C')) {
+      this.eventEmitter.emit('cxc.movimiento.creado', { movimiento: saved, origen: 'manual' });
+    }
+    return saved;
   }
 
   async updateMovimiento(clienteMovId: number, empresaId: number, dto: UpdateCxcMovimientoDto, currentUser: string) {
@@ -435,8 +477,8 @@ export class CxcService {
       .innerJoin('tmodulos', 'c', 'c.moduloId = a.moduloId')
       .innerJoin('tcotipodocumentofiscal', 'd', 'd.tipodocumentofiscalId = a.documentoId')
       .where('a.empresaId = :empresaId', { empresaId })
-      .orderBy('b.razonsocial', 'ASC')
-      .addOrderBy('a.clienteMovId', 'ASC');
+      .orderBy('a.fecharegistro', 'DESC')
+      .addOrderBy('a.clienteMovId', 'DESC');
 
     if (dni && dni.trim()) {
       qb.andWhere('b.dni LIKE :dni', { dni: `%${dni.trim()}%` });
@@ -581,9 +623,11 @@ export class CxcService {
   async generarMovimientoDesdeFactura(factura: any, currentUser: string): Promise<CxcMovimiento> {
     const cliente = await this.findCliente(factura.clienteId, factura.empresaId);
     const now = await this.fechaSistema.getFecha(factura.empresaId);
+    const nromovimiento = await this.generarNroMovimiento(factura.empresaId, 'D');
     
     const movimiento = this.movimientoRepo.create({
       fecharegistro: now,
+      nromovimiento,
       clienteId: factura.clienteId,
       nrocliente: cliente.nrocliente,
       moduloId: 3,
@@ -596,13 +640,13 @@ export class CxcService {
       sn_cotabilizada: 'N',
       sn_doc_anulado: 'N',
       empresaId: factura.empresaId,
+      Idsucursal: factura.Idsucursal || 1,
       usuarioCreated: currentUser,
     });
 
     const saved = await this.movimientoRepo.save(movimiento);
 
-    this.eventEmitter.emit('cxc.movimiento.creado', { movimiento: saved, origen: 'facturacion', factura });
-
+    // El partidaId se asigna después en procesarKardexFactura cuando se contabiliza la factura
     return saved;
   }
 
@@ -662,6 +706,22 @@ export class CxcService {
     }
 
     this.eventEmitter.emit('cxc.caja.anulada', { facturaId, empresaId, currentUser });
+  }
+
+  /**
+   * Actualiza el partidaId en movimientos CxC de una factura.
+   * Se llama después de contabilizar la factura para vincular el movimiento CxC con la partida.
+   */
+  async actualizarPartidaMovimientos(nroreferencia: string, partidaId: number, empresaId: number, currentUser: string): Promise<void> {
+    const movimientos = await this.movimientoRepo.find({
+      where: { nroreferencia, moduloId: 3, empresaId } as unknown as FindOptionsWhere<CxcMovimiento>,
+    });
+    for (const mov of movimientos) {
+      mov.partidaId = partidaId;
+      mov.sn_cotabilizada = 'S';
+      mov.usuarioUpdated = currentUser;
+      await this.movimientoRepo.save(mov);
+    }
   }
 
   async getAntiguedadSaldos(empresaId: number) {
@@ -801,5 +861,53 @@ export class CxcService {
     return Array.from(mapaDocs.values())
       .map(doc => ({ ...doc, saldo: doc.importe - doc.pagado }))
       .filter(doc => doc.saldo > 0);
+  }
+
+  // ==================== EVENT LISTENERS ====================
+
+  /**
+   * Listener: Cuando la contabilidad confirma la contabilización de un pago CxC desde Caja.
+   * Actualiza cajamae y cajadet con partidaId y sn_contabilizada='S'.
+   */
+  @OnEvent('cxc.caja.contabilizada')
+  async handleCajaContabilizada(payload: any) {
+    const { cxccajaId, cxccajadetId, partidaId, empresaId, currentUser } = payload;
+    this.logger.log(`[CxC Event] Caja contabilizada: cajaId=${cxccajaId}, partidaId=${partidaId}`);
+
+    try {
+      const now = await this.fechaSistema.getFecha(empresaId);
+
+      // Actualizar caja maestro
+      await this.cajaMaeRepo.createQueryBuilder()
+        .update(CxccajaMae)
+        .set({
+          partidaId,
+          sn_contabilizada: 'S',
+          usuarioUpdated: currentUser,
+          fechaUpdated: now,
+        } as any)
+        .where('cxccajaId = :cxccajaId AND empresaId = :empresaId', { cxccajaId, empresaId })
+        .execute();
+
+      this.logger.log(`[CxC Event] cajamae #${cxccajaId} actualizado: partidaId=${partidaId}, sn_contabilizada=S`);
+
+      // Actualizar caja detalle (si existe)
+      if (cxccajadetId) {
+        await this.cajaDetRepo.createQueryBuilder()
+          .update(CxccajaDet)
+          .set({
+            partidaId,
+            sn_contabilizada: 'S',
+            usuarioUpdated: currentUser,
+            fechaUpdated: now,
+          } as any)
+          .where('cxccajadetId = :cxccajadetId AND empresaId = :empresaId', { cxccajadetId, empresaId })
+          .execute();
+
+        this.logger.log(`[CxC Event] cajadet #${cxccajadetId} actualizado: partidaId=${partidaId}, sn_contabilizada=S`);
+      }
+    } catch (error) {
+      this.logger.error(`[CxC Event] Error actualizando caja: ${error.message}`, error.stack);
+    }
   }
 }
