@@ -1,0 +1,67 @@
+2026-11-01T07:29:48.410911402Z ==> Downloading cache...
+2026-11-01T07:29:48.436038702Z ==> Cloning from https://github.com/arcascloud/arcas-io-backend
+2026-11-01T07:29:54.014233785Z ==> Checking out commit c2c8327e066c872d65ece917fd3f2821eba16806 in branch master
+2026-11-01T07:29:57.864450682Z ==> Downloaded and extracted 74 MiB cache in 9s.
+2026-11-01T07:29:59.315751447Z ==> Using Node.js version 24.22.1 (default)
+2026-11-01T07:29:59.315755344Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-11-01T07:29:59.344428896Z ==> Running build command 'npm install; npm run build'...
+2026-11-01T07:30:00.348902591Z 
+2026-11-01T07:30:00.348924087Z up to date, audited 442 packages in 906ms
+2026-11-01T07:30:00.34893169Z 
+2026-11-01T07:30:00.349019605Z 111 packages are looking for funding
+2026-11-01T07:30:00.349079704Z   run `npm fund` for details
+2026-11-01T07:30:00.379470377Z 
+2026-11-01T07:30:00.379476667Z 17 vulnerabilities (1 low, 7 moderate, 8 high, 1 critical)
+2026-11-01T07:30:00.37947803Z 
+2026-11-01T07:30:00.379479503Z To address issues that do not require attention, run:
+2026-11-01T07:30:00.379480888Z   npm audit fix
+2026-11-01T07:30:00.379482136Z 
+2026-11-01T07:30:00.379483729Z To address all issues (including breaking changes), run:
+2026-11-01T07:30:00.37948546Z   npm audit fix --force
+2026-11-01T07:30:00.379487073Z 
+2026-11-01T07:30:00.379488793Z Run `npm audit` for details.
+2026-11-01T07:30:00.519124351Z 
+2026-11-01T07:30:00.51913122Z > arcas-backend@1.0.0 build
+2026-11-01T07:30:00.519133417Z > node --max-old-space-size=4096 ./node_modules/@nestjs/cli/bin/nest.js build
+2026-11-01T07:30:00.519134823Z 
+2026-11-01T07:30:08.223117921Z ==> Uploading build...
+2026-11-01T07:30:12.901119515Z ==> Uploaded in 3.1s. Compression took 1.6s
+2026-11-01T07:30:12.902437738Z ==> Build successful 🎉
+2026-11-01T07:30:13.709753952Z ==> Deploying...
+2026-11-01T07:30:13.764714877Z ==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+2026-11-01T07:30:37.008168957Z ==> Running 'npm run start'
+2026-11-01T07:30:38.304471257Z 
+2026-11-01T07:30:38.304486387Z > arcas-backend@1.0.0 start
+2026-11-01T07:30:38.304490257Z > nest start
+2026-11-01T07:30:38.304492377Z 
+2026-11-01T07:31:16.784032223Z ==> No open ports detected, continuing to scan...
+2026-11-01T07:31:16.864337803Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-11-01T07:32:17.977131042Z ==> No open ports detected, continuing to scan...
+2026-11-01T07:32:18.041907235Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-11-01T07:32:45.406420555Z 
+2026-11-01T07:32:45.406456086Z <--- Last few GCs --->
+2026-11-01T07:32:45.406460886Z 
+2026-11-01T07:32:45.406466176Z [81:0x24b02000]   124501 ms: Scavenge 252.2 (256.9) -> 251.2 (256.9) MB, pooled: 0 MB, 0.21 / 0.00 ms  (average mu = 0.231, current mu = 0.244) allocation failure; 
+2026-11-01T07:32:45.406472806Z [81:0x24b02000]   127000 ms: Mark-Compact 252.2 (257.2) -> 250.8 (255.4) MB, pooled: 2 MB, 2400.33 / 0.00 ms  (average mu = 0.343, current mu = 0.429) allocation failure; scavenge might not succeed
+2026-11-01T07:32:45.406476676Z 
+2026-11-01T07:32:45.406481656Z FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+2026-11-01T07:32:45.406486356Z ----- Native stack trace -----
+2026-11-01T07:32:45.406490496Z 
+2026-11-01T07:32:45.801860834Z  1: 0x942e80  [node]
+2026-11-01T07:32:45.802583628Z  2: 0x75f71e node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]
+2026-11-01T07:32:45.802597548Z  3: 0xc9a1e0  [node]
+2026-11-01T07:32:45.802974515Z  4: 0xc9a2cf  [node]
+2026-11-01T07:32:45.803554716Z  5: 0xf3dba5  [node]
+2026-11-01T07:32:45.803803301Z  6: 0xf3dbd2  [node]
+2026-11-01T07:32:45.804151648Z  7: 0xf3deca  [node]
+2026-11-01T07:32:45.804561926Z  8: 0xf4ebca  [node]
+2026-11-01T07:32:45.805000955Z  9: 0xf52f70  [node]
+2026-11-01T07:32:45.805409603Z 10: 0x19f0c41  [node]
+2026-11-01T07:32:46.499679407Z Aborted (core dumped)
+2026-11-01T07:32:47.486003318Z ==> Exited with status 134
+2026-11-01T07:32:47.514026644Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2026-11-01T07:32:55.358290185Z ==> Running 'npm run start'
+2026-11-01T07:32:56.365636752Z 
+2026-11-01T07:32:56.365650572Z > arcas-backend@1.0.0 start
+2026-11-01T07:32:56.365655782Z > nest start
+2026-11-01T07:32:56.365658082Z 
