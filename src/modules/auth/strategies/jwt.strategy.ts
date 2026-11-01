@@ -13,7 +13,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersRepo: Repository<Tusuarios>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (request: any) => {
+          return request?.cookies?.jwt_token || ExtractJwt.fromAuthHeaderAsBearerToken()(request);
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_SECRET || 'arcas-software-secret-key-2026',
     });

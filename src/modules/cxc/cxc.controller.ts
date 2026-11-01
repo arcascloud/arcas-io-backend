@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Body, Param, Query,
+  Controller, Get, Post, Put, Delete, Body, Param, Query,
   UseGuards, ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -9,6 +9,9 @@ import {
   CreateCxcMovimientoDto, UpdateCxcMovimientoDto,
   CreateCxcPrestamoDto, UpdateCxcPrestamoDto,
 } from './dto/cxc.dto';
+import { CreateCxcCarteraCtaDto, UpdateCxcCarteraCtaDto } from './dto/carteracta.dto';
+import { CreateCxcClientesInfoDto, UpdateCxcClientesInfoDto } from './dto/clientesinfo.dto';
+import { CreateCxcCategoriaDto, UpdateCxcCategoriaDto } from './dto/cxccategoria.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -26,9 +29,27 @@ export class CxcController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('q') q?: string
+    @Query('q') q?: string,
+    @Query('moduloId') moduloId?: string,
   ) {
-    return this.service.findAllClientes(empresaId, page ? Number(page) : 1, limit ? Number(limit) : 10, q);
+    return this.service.findAllClientes(
+      empresaId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 10,
+      q,
+      moduloId ? Number(moduloId) : undefined,
+    );
+  }
+
+  @Get('clientes/dni-existe')
+  @ApiOperation({ summary: 'Verificar si el DNI ya existe en clientes de la empresa (llave maestra)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  verificarDniCliente(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('dni') dni: string,
+    @Query('excluirId') excluirId?: string,
+  ) {
+    return this.service.verificarDniCliente(empresaId, dni, excluirId ? Number(excluirId) : undefined);
   }
 
   @Get('clientes/:id')
@@ -57,76 +78,6 @@ export class CxcController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateCliente(id, empresaId, dto, user.usuario);
-  }
-
-  @Get('clientes-dir')
-  @ApiOperation({ summary: 'Listar direcciones de clientes' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllClientesDir(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllClientesDir(empresaId);
-  }
-
-  @Get('clientes-dir/:id')
-  @ApiOperation({ summary: 'Obtener dirección de cliente por ID' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findClienteDir(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.findClienteDir(id, empresaId);
-  }
-
-  @Post('clientes-dir')
-  @ApiOperation({ summary: 'Crear dirección de cliente' })
-  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
-  createClienteDir(@Body() dto: any, @CurrentUser() user: any) {
-    return this.service.createClienteDir(dto, user.usuario);
-  }
-
-  @Put('clientes-dir/:id')
-  @ApiOperation({ summary: 'Actualizar dirección de cliente' })
-  updateClienteDir(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.updateClienteDir(id, empresaId, dto, user.usuario);
-  }
-
-  @Get('clientes-tel')
-  @ApiOperation({ summary: 'Listar teléfonos de clientes' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findAllClientesTel(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllClientesTel(empresaId);
-  }
-
-  @Get('clientes-tel/:id')
-  @ApiOperation({ summary: 'Obtener teléfono de cliente por ID' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findClienteTel(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.findClienteTel(id, empresaId);
-  }
-
-  @Post('clientes-tel')
-  @ApiOperation({ summary: 'Crear teléfono de cliente' })
-  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
-  createClienteTel(@Body() dto: any, @CurrentUser() user: any) {
-    return this.service.createClienteTel(dto, user.usuario);
-  }
-
-  @Put('clientes-tel/:id')
-  @ApiOperation({ summary: 'Actualizar teléfono de cliente' })
-  updateClienteTel(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: any,
-    @CurrentUser() user: any,
-  ) {
-    return this.service.updateClienteTel(id, empresaId, dto, user.usuario);
   }
 
   @Get('clientes-ref')
@@ -216,6 +167,28 @@ export class CxcController {
     return this.service.findAllCajaMae(empresaId);
   }
 
+  // IMPORTANTE: estas rutas fijas deben ir ANTES de caja-mae/:id
+  // para que NestJS no las matchee como :id y falle ParseIntPipe.
+  @Get('caja-mae/rendicion')
+  @ApiOperation({ summary: 'Rendición de caja: totales por forma de pago de una fecha' })
+  @ApiResponse({ status: 200, description: 'Rendición obtenida' })
+  findRendicionCaja(
+    @Query('fecha') fecha: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findRendicionCaja(fecha, empresaId);
+  }
+
+  @Get('caja-mae/:id/recibo')
+  @ApiOperation({ summary: 'Obtener datos del recibo de caja para impresión' })
+  @ApiResponse({ status: 200, description: 'Datos del recibo' })
+  findCajaRecibo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCajaRecibo(id, empresaId);
+  }
+
   @Get('caja-mae/:id')
   @ApiOperation({ summary: 'Obtener cabecera de caja por ID' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -279,6 +252,31 @@ export class CxcController {
     return this.service.updateCajaDet(id, empresaId, dto, user.usuario);
   }
 
+  @Post('caja-mae/:id/procesar-abono')
+  @ApiOperation({ summary: 'Genera los movimientos CxC de un cobro (reparto cargos vs capital) o aplica a un préstamo (interés simple)' })
+  @ApiResponse({ status: 201, description: 'Movimientos generados o abono a préstamo aplicado' })
+  procesarAbonoCaja(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any,
+    @Body() body?: {
+      interes?: number;
+      mora?: number;
+      prestamoId?: number;
+    },
+  ) {
+    return this.service.procesarAbonoCaja(id, user.empresaId, user.usuario, body ?? {});
+  }
+
+  @Post('caja-mae/:id/anular')
+  @ApiOperation({ summary: 'Anular una caja (cobro) completa con reversa de movimientos' })
+  @ApiResponse({ status: 201, description: 'Caja anulada' })
+  anularCaja(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.anularCaja(id, user.empresaId, user.usuario);
+  }
+
   @Get('movimientos')
   @ApiOperation({ summary: 'Listar movimientos CxC' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -325,6 +323,19 @@ export class CxcController {
     return this.service.updateMovimiento(id, empresaId, dto, user.usuario);
   }
 
+  @Put('movimientos/:id/anular')
+  @ApiOperation({ summary: 'Anular un movimiento CxC (solo manuales no contabilizados)' })
+  @ApiResponse({ status: 200, description: 'Movimiento anulado' })
+  @ApiResponse({ status: 400, description: 'Automatico o contabilizado: no anulable aqui' })
+  @ApiResponse({ status: 409, description: 'Ya anulado' })
+  anularMovimiento(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.anularMovimiento(id, empresaId, user.usuario);
+  }
+
   @Get('historico')
   @ApiOperation({ summary: 'Listar histórico' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -341,9 +352,10 @@ export class CxcController {
     @Query('cliente') cliente?: string,
     @Query('fechaDesde') fechaDesde?: string,
     @Query('fechaHasta') fechaHasta?: string,
+	@Query('documentoId') documentoId?: string,
   ) {
     const id = Number(empresaId);
-    return this.service.findHistoricoConFiltros(id, dni, cliente, fechaDesde, fechaHasta);
+    return this.service.findHistoricoConFiltros(id, dni, cliente, fechaDesde, fechaHasta, documentoId);
   }
 
   @Get('historico/cliente/:clienteId')
@@ -499,6 +511,36 @@ export class CxcController {
     return this.service.updatePrestamo(id, empresaId, dto, user.usuario);
   }
 
+  @Put('prestamos/:id/preaprobado')
+  @ApiOperation({ summary: 'Pre-aprobar préstamo (guarda con prestamoId, NO genera nroprestamo)' })
+  preaprobarPrestamo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.preaprobarPrestamo(id, empresaId, user.usuario);
+  }
+
+  @Put('prestamos/:id/aprobar')
+  @ApiOperation({ summary: 'Aprobar préstamo (solo pre-aprobados)' })
+  aprobarPrestamo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.aprobarPrestamo(id, empresaId, user.usuario);
+  }
+
+  @Put('prestamos/:id/contabilizar')
+  @ApiOperation({ summary: 'Contabilizar préstamo (partida D préstamo / C bancos + movimiento D capital neto)' })
+  contabilizarPrestamo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.contabilizarPrestamo(id, empresaId, user.usuario);
+  }
+
   @Get('prestamo-pp')
   @ApiOperation({ summary: 'Listar plan de pagos de préstamos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -535,6 +577,16 @@ export class CxcController {
     @CurrentUser() user: any,
   ) {
     return this.service.updatePrestamoPP(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('prestamo-pp/prestamo/:prestamoId')
+  @ApiOperation({ summary: 'Eliminar todas las cuotas del plan de un préstamo (regenerar plan)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  deletePrestamoPPByPrestamo(
+    @Param('prestamoId', ParseIntPipe) prestamoId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.deletePrestamoPPByPrestamo(prestamoId, empresaId);
   }
 
   @Get('parientes')
@@ -589,11 +641,38 @@ export class CxcController {
     return this.service.getAntiguedadSaldos(empresaId);
   }
 
+  @Get('antiguedad-saldos-prestamos')
+  @ApiOperation({ summary: 'Antigüedad de saldos por préstamos (cuotas PP)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  getAntiguedadSaldosPrestamos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.getAntiguedadSaldosPrestamos(empresaId);
+  }
+
+  @Get('antiguedad-saldos-prestamos-cuotas')
+  @ApiOperation({ summary: 'Antigüedad de saldos por préstamos basada en cuotas (cxcprestamospp)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  getAntiguedadSaldosPrestamosCuotas(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.getAntiguedadSaldosPrestamosCuotas(empresaId);
+  }
+
   @Get('clientes-con-saldo')
   @ApiOperation({ summary: 'Clientes con saldo pendiente' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   getClientesConSaldo(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.getClientesConSaldo(empresaId);
+  }
+
+  @Get('clientes-con-prestamos')
+  @ApiOperation({ summary: 'Clientes con préstamos activos (caja destino=Préstamos)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  getClientesConPrestamos(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.service.getClientesConPrestamos(
+      empresaId,
+      moduloId ? Number(moduloId) : undefined,
+    );
   }
 
   @Get('documentos-pendientes/cliente/:clienteId')
@@ -604,5 +683,167 @@ export class CxcController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findDocumentosPendientesCliente(clienteId, empresaId);
+  }
+
+  // ========== Cartera Contable por Cliente (cxccarteracta) ==========
+
+  @Get('carteras-cliente')
+  @ApiOperation({ summary: 'Listar carteras contables por cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllCarterasCta(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCarterasCta(empresaId);
+  }
+
+  @Get('carteras-cliente/:id')
+  @ApiOperation({ summary: 'Obtener cartera contable de cliente por ID' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  findCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCarteraCta(id, empresaId);
+  }
+
+  @Post('carteras-cliente')
+  @ApiOperation({ summary: 'Asignar cartera contable a cliente' })
+  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Cliente/cartera inválido o asignación duplicada' })
+  createCarteraCta(@Body() dto: CreateCxcCarteraCtaDto, @CurrentUser() user: any) {
+    return this.service.createCarteraCta(dto, user.usuario, user.idsucursal);
+  }
+
+  @Put('carteras-cliente/:id')
+  @ApiOperation({ summary: 'Actualizar cartera contable de cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  updateCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCxcCarteraCtaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCarteraCta(id, empresaId, dto, user.usuario, user.idsucursal);
+  }
+
+  @Put('carteras-cliente/:id/remove')
+  @ApiOperation({ summary: 'Eliminar cartera contable de cliente (físico)' })
+  @ApiResponse({ status: 200, description: 'Eliminado exitosamente' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  removeCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCarteraCta(id, empresaId);
+  }
+
+  // ========== Info de Clientes (cxccclientesinfo) ==========
+
+  @Get('clientes-info')
+  @ApiOperation({ summary: 'Listar información de clientes (celular/dirección/correo)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllClientesInfo(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllClientesInfo(empresaId);
+  }
+
+  @Get('clientes-info/cliente/:clienteId')
+  @ApiOperation({ summary: 'Información por cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findClientesInfoByCliente(
+    @Param('clienteId', ParseIntPipe) clienteId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findClientesInfoByCliente(clienteId, empresaId);
+  }
+
+  @Get('clientes-info/:id')
+  @ApiOperation({ summary: 'Obtener información de cliente por ID' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  findClienteInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findClienteInfo(id, empresaId);
+  }
+
+  @Post('clientes-info')
+  @ApiOperation({ summary: 'Crear información de cliente' })
+  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Cliente inválido o tipo duplicado' })
+  createClienteInfo(@Body() dto: CreateCxcClientesInfoDto, @CurrentUser() user: any) {
+    return this.service.createClienteInfo(dto, user.usuario);
+  }
+
+  @Put('clientes-info/:id')
+  @ApiOperation({ summary: 'Actualizar información de cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  @ApiResponse({ status: 400, description: 'Cliente inválido o tipo duplicado' })
+  updateClienteInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCxcClientesInfoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateClienteInfo(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('clientes-info/:id/remove')
+  @ApiOperation({ summary: 'Desactivar información de cliente (sn_activo = N)' })
+  @ApiResponse({ status: 200, description: 'Desactivado exitosamente' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  removeClienteInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.removeClienteInfo(id, empresaId, user.usuario);
+  }
+
+  // ========== Categorías de Clientes (cxccategorias) ==========
+  @Get('categorias')
+  @ApiOperation({ summary: 'Listar categorías de clientes' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllCategorias(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCategorias(empresaId);
+  }
+
+  @Get('categorias/:id')
+  @ApiOperation({ summary: 'Obtener categoría de cliente por ID' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  findCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCategoria(id, empresaId);
+  }
+
+  @Post('categorias')
+  @ApiOperation({ summary: 'Crear categoría de cliente' })
+  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
+  createCategoria(@Body() dto: CreateCxcCategoriaDto, @CurrentUser() user: any) {
+    return this.service.createCategoria(dto, user.usuario);
+  }
+
+  @Put('categorias/:id')
+  @ApiOperation({ summary: 'Actualizar categoría de cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  updateCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCxcCategoriaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCategoria(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('categorias/:id')
+  @ApiOperation({ summary: 'Eliminar categoría de cliente' })
+  @ApiResponse({ status: 200, description: 'Eliminado exitosamente' })
+  removeCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCategoria(id, empresaId);
   }
 }

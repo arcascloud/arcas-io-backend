@@ -30,7 +30,7 @@ export class CxcMovimiento {
   @Column()
   documentoId: number;
 
-  @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
+  @Column({ type: 'enum', enum: ['D', 'C', 'I'], default: 'D' })
   tipomov: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -48,6 +48,13 @@ export class CxcMovimiento {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_cotabilizada: string;
 
+  /**
+   * Documento capturado manualmente por un usuario (S) vs. generado
+   * automáticamente por el sistema: factura, caja, préstamo, interés (N).
+   */
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_doc_manual: string;
+
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_doc_anulado: string;
 
@@ -58,15 +65,18 @@ export class CxcMovimiento {
   partidaId: number;
 
   @Column({ type: 'int', nullable: true })
+  carteracontableId: number;
+
+  @Column({ type: 'int', nullable: true })
   Idsucursal: number;
 
   @Column()
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

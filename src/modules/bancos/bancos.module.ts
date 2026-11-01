@@ -4,6 +4,7 @@ import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
+import { TbcoCcdocs } from './entities/bco-ccdocs.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
 import { TbcoMovimiento } from './entities/bco-movimiento.entity';
@@ -20,6 +21,7 @@ import { BancosController } from './bancos.controller';
       TbcoCta,
       TbcoConciliacion,
       TbcoConciliacionDet,
+      TbcoCcdocs,
       TbcoDireccion,
       TbcoTelefono,
       TbcoMovimiento,

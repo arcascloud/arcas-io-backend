@@ -55,9 +55,17 @@ export class Copdadet {
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
   factordecambio: number;
 
+  @ApiProperty({ description: "Anulada: 'S' = anulada, 'N' = vigente" })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_anulada: string;
+
   @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_activo: string;
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_contabilizada: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_cerrada: string;
 
   @ApiProperty()
   @Column()
@@ -68,11 +76,11 @@ export class Copdadet {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

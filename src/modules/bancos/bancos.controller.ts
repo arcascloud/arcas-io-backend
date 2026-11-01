@@ -5,7 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { BancosService } from './bancos.service';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto, CreateBcoCcdocsDto, UpdateBcoCcdocsDto } from './dto/banco.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -289,5 +289,54 @@ export class BancosController {
     @CurrentUser() user: any,
   ) {
     return this.service.realizarMatching(body.bcoctasId, body.empresaId, body.lineasCsv, user.usuario || user.sub);
+  }
+
+  // ── Documentos de conciliación (bcosccdocs) ────────────────
+
+  @Get('ccdocs')
+  @ApiOperation({ summary: 'Listar documentos de conciliación bancaria' })
+  @ApiResponse({ status: 200, description: 'Lista de documentos obtenida exitosamente' })
+  findAllCcdocs(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCcdocs(empresaId);
+  }
+
+  @Get('ccdocs/:id')
+  @ApiOperation({ summary: 'Obtener documento de conciliación por ID' })
+  @ApiResponse({ status: 200, description: 'Documento encontrado' })
+  @ApiResponse({ status: 404, description: 'Documento no encontrado' })
+  findCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCcdoc(id, empresaId);
+  }
+
+  @Post('ccdocs')
+  @ApiOperation({ summary: 'Crear documento de conciliación' })
+  @ApiResponse({ status: 201, description: 'Documento creado exitosamente' })
+  createCcdoc(@Body() dto: CreateBcoCcdocsDto, @CurrentUser() user: any) {
+    return this.service.createCcdoc(dto, user.usuario);
+  }
+
+  @Put('ccdocs/:id')
+  @ApiOperation({ summary: 'Actualizar documento de conciliación' })
+  @ApiResponse({ status: 200, description: 'Documento actualizado exitosamente' })
+  updateCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateBcoCcdocsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCcdoc(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('ccdocs/:id')
+  @ApiOperation({ summary: 'Desactivar documento de conciliación (soft delete: sn_activo=N)' })
+  @ApiResponse({ status: 200, description: 'Documento desactivado' })
+  removeCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCcdoc(id, empresaId);
   }
 }

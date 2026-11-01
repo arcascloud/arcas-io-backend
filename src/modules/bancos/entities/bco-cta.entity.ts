@@ -17,9 +17,17 @@ export class TbcoCta {
   @Column({ type: 'varchar', length: 20 })
   nrocuenta: string;
 
+  @ApiProperty({ description: 'Cuenta contable asociada (coctacontables.ctacontable)' })
+  @Column({ type: 'varchar', length: 20 })
+  ctacontable: string;
+
   @ApiProperty()
   @Column()
   monedaId: number;
+
+  @ApiProperty()
+  @Column()
+  saldo: number;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
@@ -34,11 +42,11 @@ export class TbcoCta {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

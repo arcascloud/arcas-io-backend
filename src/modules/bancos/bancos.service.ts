@@ -1,19 +1,21 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, DataSource, EntityManager } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
+import { TbcoCcdocs } from './entities/bco-ccdocs.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
 import { TbcoMovimiento } from './entities/bco-movimiento.entity';
 import { TCxpCompraMae } from '../cxp/entities/compra-mae.entity';
 import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
-import { FechaSistemaService } from '../../shared/fecha-sistema.service';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
+import { FechaSistemaService, TABLAS_FECHAREGISTRO } from '../../shared/fecha-sistema.service';
+import { CorrelativosService } from '../../shared/correlativos.service';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto, CreateBcoCcdocsDto, UpdateBcoCcdocsDto } from './dto/banco.dto';
 
 @Injectable()
 export class BancosService {
@@ -22,6 +24,7 @@ export class BancosService {
     @InjectRepository(TbcoCta) private readonly bcoCtaRepo: Repository<TbcoCta>,
     @InjectRepository(TbcoConciliacion) private readonly bcoConciliacionRepo: Repository<TbcoConciliacion>,
     @InjectRepository(TbcoConciliacionDet) private readonly bcoConciliacionDetRepo: Repository<TbcoConciliacionDet>,
+    @InjectRepository(TbcoCcdocs) private readonly bcoCcdocsRepo: Repository<TbcoCcdocs>,
     @InjectRepository(TbcoDireccion) private readonly bcoDireccionRepo: Repository<TbcoDireccion>,
     @InjectRepository(TbcoTelefono) private readonly bcoTelefonoRepo: Repository<TbcoTelefono>,
     @InjectRepository(TbcoMovimiento) private readonly bcoMovimientoRepo: Repository<TbcoMovimiento>,
@@ -29,6 +32,7 @@ export class BancosService {
     @InjectRepository(TCxpMovimiento) private readonly cxpMovimientoRepo: Repository<TCxpMovimiento>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     private readonly fechaSistema: FechaSistemaService,
+    private readonly correlativos: CorrelativosService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -57,10 +61,20 @@ export class BancosService {
     dto: any,
     currentUser: string,
   ) {
-    const entity = repo.create({
-      ...dto,
-      usuarioCreated: currentUser,
-    });
+    const datos: any = { ...dto, usuarioCreated: currentUser };
+
+    // Reglas 1 y 4: en las tablas afectadas (bcosmovimientos, bcosccmae,
+    // bcosccdet), `fecharegistro` lo impone el backend (snapshot
+    // tfecma.fechasistema con rango vigente, o tempresas.fechasistema sin él)
+    // — nunca el reloj del servidor ni el valor del body.
+    if (TABLAS_FECHAREGISTRO.has(repo.metadata.tableName)) {
+      datos.fecharegistro = await this.fechaSistema.obtenerFechaRegistro(
+        currentUser,
+        dto.empresaId,
+      );
+    }
+
+    const entity = repo.create(datos);
     return repo.save(entity);
   }
 
@@ -75,6 +89,12 @@ export class BancosService {
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
     const now = await this.fechaSistema.getFecha(empresaId);
+    // `fecharegistro` es inmutable en las tablas afectadas: se estampa al crear
+    // y un PUT no debe poder refechar el registro.
+    if (TABLAS_FECHAREGISTRO.has(repo.metadata.tableName) && dto) {
+      const { fecharegistro: _ignorado, ...resto } = dto;
+      dto = resto;
+    }
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
       fechaUpdated: now,
@@ -173,6 +193,28 @@ export class BancosService {
     return this.updateEntity(this.bcoConciliacionDetRepo, 'bcosdetconciliacionId', bcosdetconciliacionId, empresaId, dto, currentUser, 'Detalle Conciliacion');
   }
 
+  // ── Documentos de conciliación (bcosccdocs) ────────────────
+
+  async findAllCcdocs(empresaId: number) {
+    return this.findAllByEmpresa(this.bcoCcdocsRepo, empresaId);
+  }
+
+  async findCcdoc(bcosccdocsId: number, empresaId: number) {
+    return this.findOneById(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, 'Documento Conciliacion');
+  }
+
+  async createCcdoc(dto: CreateBcoCcdocsDto, currentUser: string) {
+    return this.createEntity(this.bcoCcdocsRepo, dto, currentUser);
+  }
+
+  async updateCcdoc(bcosccdocsId: number, empresaId: number, dto: UpdateBcoCcdocsDto, currentUser: string) {
+    return this.updateEntity(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, dto, currentUser, 'Documento Conciliacion');
+  }
+
+  async removeCcdoc(bcosccdocsId: number, empresaId: number) {
+    return this.softDelete(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, 'Documento Conciliacion');
+  }
+
   async findAllDirecciones(empresaId: number) {
     return this.findAllByEmpresa(this.bcoDireccionRepo, empresaId);
   }
@@ -248,8 +290,66 @@ export class BancosService {
     return this.findOneById(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, 'Movimiento Bancario');
   }
 
+  // ── Saldo de cuenta y validación de salidas ────────────────
+  // Convención D/C (perspectiva del cliente, sentido INVERSO al estado del banco):
+  //   DEPOSITO / NOTA_CREDITO (entrada)       → 'D' → suma al saldo
+  //   RETIRO / TRANSFERENCIA / PAGO / NOTA_DEBITO (salida) → 'C' → resta al saldo
+  // saldo = Σ Débitos − Σ Créditos, excluyendo movimientos anulados.
+
+  private dcPorTipoMov(tipomov: string): 'D' | 'C' {
+    return tipomov === 'DEPOSITO' || tipomov === 'NOTA_CREDITO' ? 'D' : 'C';
+  }
+
+  private async calcularSaldoCta(
+    bcoctasId: number,
+    empresaId: number,
+    excludeMovId?: number,
+    em?: EntityManager,
+  ): Promise<number> {
+    const repo = em ? em.getRepository(TbcoMovimiento) : this.bcoMovimientoRepo;
+    const qb = repo.createQueryBuilder('m')
+      .select(
+        "COALESCE(SUM(CASE WHEN m.dc_debitocredito = 'D' THEN m.importe ELSE -m.importe END), 0)",
+        'saldo',
+      )
+      .where('m.bcoctasId = :bcoctasId', { bcoctasId })
+      .andWhere('m.empresaId = :empresaId', { empresaId })
+      .andWhere("m.sn_doc_anulado = 'N'");
+    if (excludeMovId) {
+      qb.andWhere('m.bcomovimientosId != :excludeMovId', { excludeMovId });
+    }
+    const row = await qb.getRawOne();
+    return Math.round(Number(row?.saldo || 0) * 100) / 100;
+  }
+
+  /**
+   * Las salidas (RETIRO/TRANSFERENCIA/PAGO) solo se permiten si el saldo de la
+   * cuenta alcanza el importe solicitado. `excludeMovId` excluye el movimiento
+   * en edición (se evalúa como eliminar + recrear).
+   */
+  private async exigirSaldoSuficiente(
+    bcoctasId: number,
+    empresaId: number,
+    importe: number,
+    excludeMovId?: number,
+    em?: EntityManager,
+  ): Promise<void> {
+    const saldo = await this.calcularSaldoCta(bcoctasId, empresaId, excludeMovId, em);
+    const requerido = Math.round(Number(importe) * 100) / 100;
+    if (saldo < requerido) {
+      throw new BadRequestException(
+        `Saldo insuficiente en la cuenta: saldo actual L ${saldo.toFixed(2)}, importe solicitado L ${requerido.toFixed(2)}`,
+      );
+    }
+  }
+
   async createMovimiento(dto: CreateBcoMovimientoDto, currentUser: string) {
-    const mov = await this.createEntity(this.bcoMovimientoRepo, dto, currentUser);
+    // El tipo de movimiento determina la naturaleza (D/C) — no se acepta libremente
+    const dc = this.dcPorTipoMov(dto.tipomov);
+    if (dc === 'C') {
+      await this.exigirSaldoSuficiente(dto.bcoctasId, dto.empresaId, Number(dto.importe));
+    }
+    const mov = await this.createEntity(this.bcoMovimientoRepo, { ...dto, dc_debitocredito: dc }, currentUser);
     this.eventEmitter.emit('bancos.movimiento.creado', {
       movimiento: mov,
       origen: 'createMovimiento',
@@ -258,7 +358,25 @@ export class BancosService {
   }
 
   async updateMovimiento(bcomovimientosId: number, empresaId: number, dto: UpdateBcoMovimientoDto, currentUser: string) {
-    return this.updateEntity(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, dto, currentUser, 'Movimiento Bancario');
+    const existente = (await this.findOneById(
+      this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, 'Movimiento Bancario',
+    )) as TbcoMovimiento;
+
+    // Anulación vía PUT genérico (solo marca sn_doc_anulado): no revalida saldo ni recalcula D/C
+    const esSoloAnulacion = dto.sn_doc_anulado === 'S' && dto.tipomov === undefined && dto.importe === undefined;
+    let payload: UpdateBcoMovimientoDto = dto;
+
+    if (!esSoloAnulacion) {
+      const tipomov = dto.tipomov ?? (existente as any).tipomov;
+      const importe = Number(dto.importe ?? (existente as any).importe);
+      const dc = this.dcPorTipoMov(tipomov);
+      if (dc === 'C') {
+        await this.exigirSaldoSuficiente((existente as any).bcoctasId, empresaId, importe, bcomovimientosId);
+      }
+      payload = { ...dto, dc_debitocredito: dc };
+    }
+
+    return this.updateEntity(this.bcoMovimientoRepo, 'bcomovimientosId', bcomovimientosId, empresaId, payload, currentUser, 'Movimiento Bancario');
   }
 
   // ── Anulación de movimiento bancario ──────────────────────
@@ -395,29 +513,17 @@ export class BancosService {
       const movimientosGuardados: TbcoMovimiento[] = [];
       const now = await this.fechaSistema.getFecha(dto.empresaId);
 
-      // Obtener parámetro nrochq (una sola vez)
-      let parametroNroChq = await this.tipoParametroRepo.findOne({
-        where: { empresaId: dto.empresaId, field: 'nrochq' } as any,
-      });
+      // Asegurar parámetro nrochq (solo si falta; corre dentro de la transacción)
+      await this.correlativos.asegurar('nrochq', dto.empresaId, currentUser, '0', queryRunner);
 
-      if (!parametroNroChq) {
-        const nuevo = this.tipoParametroRepo.create({
-          empresaId: dto.empresaId,
-          field: 'nrochq',
-          tipo: 'NUMBER',
-          valor: '0',
-          moduloId: 6,
-          Idsucursal: 0,
-          usuarioCreated: currentUser,
-        } as any);
-        parametroNroChq = (await queryRunner.manager.save(nuevo)) as unknown as TipoParametro;
-      }
-
-      let nroChqActual = Number(parametroNroChq.valor) || 0;
+      // Los cheques son salidas (PAGO = 'C') y disminuyen el saldo: validar contra el
+      // saldo de la cuenta dentro de la transacción, descontando cada cheque del lote.
+      let saldoDisponible = await this.calcularSaldoCta(dto.bcoctasId, dto.empresaId, undefined, queryRunner.manager);
 
       // ── Un cheque por cada proveedor ──
       for (const grupo of dto.grupos) {
-        nroChqActual++;
+        // Correlativo atómico nrochq (dentro de la transacción: rollback revierte el incremento)
+        const nroChqActual = await this.correlativos.siguiente('nrochq', dto.empresaId, currentUser, queryRunner);
         const nroChq = String(nroChqActual).padStart(10, '0');
 
         const nrosFacturas = grupo.facturas.map(f => f.nroReferencia || String(f.compraId)).join(', ');
@@ -425,19 +531,29 @@ export class BancosService {
         const conceptoCxP = `Chq ${nroChq} - ${nrosFacturas}`;
         const totalCheque = grupo.facturas.reduce((sum, f) => sum + (f.saldo || 0), 0);
 
+        const totalChequeRedondeado = Math.round(totalCheque * 100) / 100;
+        if (saldoDisponible < totalChequeRedondeado) {
+          throw new BadRequestException(
+            `Saldo insuficiente para emitir el cheque #${nroChq}: saldo disponible L ${saldoDisponible.toFixed(2)}, importe del cheque L ${totalChequeRedondeado.toFixed(2)}`,
+          );
+        }
+        saldoDisponible = Math.round((saldoDisponible - totalCheque) * 100) / 100;
+
         // 1. Movimiento bancario consolidado (1 solo por proveedor)
         const movBanco = queryRunner.manager.create(TbcoMovimiento, {
           bancoId: dto.bancoId,
           bcoctasId: dto.bcoctasId,
           moduloId: 2,
           tipomov: 'PAGO',
-          dc_debitocredito: 'D',
+          dc_debitocredito: 'C',
           importe: totalCheque,
           nroreferencia: nroChq,
           nrochq: nroChq,
           factordecambio: 1,
           concepto: conceptoBanco,
           empresaId: dto.empresaId,
+          // Reglas 1 y 4: fecha impuesta por el backend, no el reloj del servidor
+          fecharegistro: await this.fechaSistema.obtenerFechaRegistro(currentUser, dto.empresaId),
           usuarioCreated: currentUser,
         });
         await queryRunner.manager.save(movBanco);
@@ -460,6 +576,8 @@ export class BancosService {
             nrochq: nroChq,
             sn_chq: 'S',
             empresaId: dto.empresaId,
+            // Reglas 1 y 4: misma fuente que el movBanco de arriba, por coherencia
+            fecharegistro: await this.fechaSistema.obtenerFechaRegistro(currentUser, dto.empresaId),
             usuarioCreated: currentUser,
           });
           await queryRunner.manager.save(movCxP);
@@ -501,13 +619,6 @@ export class BancosService {
         });
       }
 
-      // 4. Actualizar número de cheque en parámetros
-      await queryRunner.manager.update(
-        TipoParametro,
-        { ttipoparametrosId: parametroNroChq.ttipoparametrosId } as any,
-        { valor: String(nroChqActual), usuarioUpdate: currentUser, fechaUpdate: now } as any,
-      );
-
       await queryRunner.commitTransaction();
 
       // Emitir eventos de contabilización después del commit
@@ -525,6 +636,7 @@ export class BancosService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error instanceof BadRequestException) throw error;
       throw new BadRequestException(`Error al emitir cheques: ${error.message}`);
     } finally {
       await queryRunner.release();
@@ -539,52 +651,40 @@ export class BancosService {
     await queryRunner.startTransaction();
 
     try {
-      const now = await this.fechaSistema.getFecha(dto.empresaId);
+      // Asegurar parámetro nrochq (solo si falta; corre dentro de la transacción)
+      await this.correlativos.asegurar('nrochq', dto.empresaId, currentUser, '0', queryRunner);
 
-      // Obtener parámetro nrochq
-      let parametroNroChq = await this.tipoParametroRepo.findOne({
-        where: { empresaId: dto.empresaId, field: 'nrochq' } as any,
-      });
-
-      if (!parametroNroChq) {
-        const nuevo = this.tipoParametroRepo.create({
-          empresaId: dto.empresaId,
-          field: 'nrochq',
-          tipo: 'NUMBER',
-          valor: '0',
-          moduloId: 6,
-          Idsucursal: 0,
-          usuarioCreated: currentUser,
-        } as any);
-        parametroNroChq = (await queryRunner.manager.save(nuevo)) as unknown as TipoParametro;
-      }
-
-      const nroChqActual = Number(parametroNroChq.valor) + 1;
+      // Correlativo atómico nrochq (dentro de la transacción: rollback revierte el incremento)
+      const nroChqActual = await this.correlativos.siguiente('nrochq', dto.empresaId, currentUser, queryRunner);
       const nroChq = String(nroChqActual).padStart(10, '0');
 
-      // 1. Crear movimiento bancario (RETIRO - DÉBITO)
+      // El cheque es una salida (PAGO = 'C') y disminuye el saldo: validar antes de emitir
+      const saldoDisponible = await this.calcularSaldoCta(dto.bcoctasId, dto.empresaId, undefined, queryRunner.manager);
+      const importeCheque = Math.round(Number(dto.importe) * 100) / 100;
+      if (saldoDisponible < importeCheque) {
+        throw new BadRequestException(
+          `Saldo insuficiente para emitir el cheque #${nroChq}: saldo disponible L ${saldoDisponible.toFixed(2)}, importe del cheque L ${importeCheque.toFixed(2)}`,
+        );
+      }
+
+      // 1. Crear movimiento bancario (SALIDA - CRÉDITO)
       const movBanco = queryRunner.manager.create(TbcoMovimiento, {
         bancoId: dto.bancoId,
         bcoctasId: dto.bcoctasId,
         moduloId: 2,
         tipomov: 'PAGO',
-        dc_debitocredito: 'D',
+        dc_debitocredito: 'C',
         importe: dto.importe,
         nroreferencia: nroChq,
         nrochq: nroChq,
         factordecambio: 1,
         concepto: `Pago a ${dto.beneficiario} — ${dto.concepto}`,
         empresaId: dto.empresaId,
+        // Reglas 1 y 4: fecha impuesta por el backend, no el reloj del servidor
+        fecharegistro: await this.fechaSistema.obtenerFechaRegistro(currentUser, dto.empresaId),
         usuarioCreated: currentUser,
       });
       await queryRunner.manager.save(movBanco);
-
-      // 2. Actualizar nrochq
-      await queryRunner.manager.update(
-        TipoParametro,
-        { ttipoparametrosId: parametroNroChq.ttipoparametrosId } as any,
-        { valor: String(nroChqActual), usuarioUpdate: currentUser, fechaUpdate: now } as any,
-      );
 
       await queryRunner.commitTransaction();
 
@@ -605,6 +705,7 @@ export class BancosService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error instanceof BadRequestException) throw error;
       throw new BadRequestException(`Error al emitir cheque: ${error.message}`);
     } finally {
       await queryRunner.release();
@@ -688,7 +789,12 @@ export class BancosService {
       const movMatch = movimientos.find(m => {
         const movRef = (m.nroreferencia || '').trim();
         const movImporte = Number(m.importe) || 0;
-        return movRef === referencia && movImporte === importe && m.dc_debitocredito === linea.naturaleza;
+        // El estado del banco muestra las operaciones en sentido INVERSO (los ahorros son
+        // un pasivo del banco): banco 'D' (débito = salida para ellos) = nuestro 'C'
+        // (retiro/transferencia/cheque); banco 'C' (crédito = entrada para ellos) = nuestro
+        // 'D' (depósito).
+        const naturalezaNuestra = linea.naturaleza === 'D' ? 'C' : 'D';
+        return movRef === referencia && movImporte === importe && m.dc_debitocredito === naturalezaNuestra;
       });
 
       const snConciliado = movMatch ? 'S' : 'N';
@@ -733,7 +839,8 @@ export class BancosService {
    * Guarda conciliación: crea bcosccmae + bcosccdet
    */
   async guardarConciliacion(dto: CreateConciliacionDto, currentUser: string) {
-    const now = await this.fechaSistema.getFecha(dto.empresaId);
+    // Reglas 1 y 4: fecha impuesta por el backend para maestro y detalle
+    const fecharegistro = await this.fechaSistema.obtenerFechaRegistro(currentUser, dto.empresaId);
 
     const mae = this.bcoConciliacionRepo.create({
       ctabcoId: dto.ctabcoId,
@@ -745,6 +852,7 @@ export class BancosService {
       saldoFinal: dto.saldoFinal || 0,
       empresaId: dto.empresaId,
       Idsucursal: dto.Idsucursal || 0,
+      fecharegistro,
       usuarioCreated: currentUser,
     } as any);
     const savedMae = await this.bcoConciliacionRepo.save(mae) as unknown as TbcoConciliacion;
@@ -762,6 +870,7 @@ export class BancosService {
         bcomovimientosId: det.bcomovimientosId || null,
         empresaId: dto.empresaId,
         Idsucursal: dto.Idsucursal || 0,
+        fecharegistro,
         usuarioCreated: currentUser,
       } as any);
       const savedDet = await this.bcoConciliacionDetRepo.save(detEntity);

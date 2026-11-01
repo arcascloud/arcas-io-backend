@@ -16,13 +16,39 @@ import {
 } from './dto/posfaccaja.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { FacturacionDashboardService } from './dashboard.service';
 
-@ApiTags('FacturaciÃ³n')
+@ApiTags('Facturación')
 @ApiBearerAuth()
 @Controller('facturacion')
 @UseGuards(JwtAuthGuard)
 export class FacturacionController {
-  constructor(private readonly service: FacturacionService) {}
+  constructor(
+    private readonly service: FacturacionService,
+    private readonly dashboard: FacturacionDashboardService,
+  ) {}
+
+  // ===== Dashboard de ventas =====
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Dashboard de ventas y KPIs (contado/crédito, vendedores, meses, cobranza, margen, top/bottom productos)' })
+  @ApiResponse({ status: 200, description: 'Dashboard calculado' })
+  @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
+  getDashboard(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+    @Query('sucursalId') sucursalId?: string,
+    @Query('categoriaId') categoriaId?: string,
+  ) {
+    return this.dashboard.getDashboard(empresaId, {
+      anio: anio != null && anio !== '' ? Number(anio) : undefined,
+      mes: mes != null && mes !== '' ? Number(mes) : undefined,
+      sucursalId: sucursalId != null && sucursalId !== '' ? Number(sucursalId) : undefined,
+      categoriaId: categoriaId != null && categoriaId !== '' ? Number(categoriaId) : undefined,
+    });
+  }
 
   // ===== Correlativos =====
 
@@ -68,8 +94,11 @@ export class FacturacionController {
   @Get('facturas')
   @ApiOperation({ summary: 'Listar facturas' })
   @ApiResponse({ status: 200, description: 'Lista de facturas obtenida exitosamente' })
-  findAllFacturas(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllFacturas(empresaId);
+  findAllFacturas(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('usuario') usuario?: string,
+  ) {
+    return this.service.findAllFacturas(empresaId, usuario);
   }
 
   @Get('facturas/:id')
@@ -271,10 +300,11 @@ export class FacturacionController {
   }
 
   @Post('cotizaciones')
-  @ApiOperation({ summary: 'Crear cotizaciÃ³n' })
-  @ApiResponse({ status: 201, description: 'CotizaciÃ³n creada exitosamente' })
-  createCotizacion(@Body() dto: CreatePosCotMaeDto, @CurrentUser() user: any) {
-    return this.service.createCotizacion(dto, user.usuario);
+  @Public()
+  @ApiOperation({ summary: 'Crear cotización (carrito tienda online — público, sin sesión)' })
+  @ApiResponse({ status: 201, description: 'Cotización creada exitosamente' })
+  createCotizacion(@Body() dto: CreatePosCotMaeDto, @CurrentUser() user?: any) {
+    return this.service.createCotizacion(dto, user?.usuario || 'TIENDA');
   }
 
   @Put('cotizaciones/:id')
@@ -310,10 +340,11 @@ export class FacturacionController {
   }
 
   @Post('cotizaciones-det')
-  @ApiOperation({ summary: 'Crear detalle de cotizaciÃ³n' })
-  @ApiResponse({ status: 201, description: 'Detalle de cotizaciÃ³n creado exitosamente' })
-  createCotizacionDet(@Body() dto: any, @CurrentUser() user: any) {
-    return this.service.createCotizacionDet(dto, user.usuario);
+  @Public()
+  @ApiOperation({ summary: 'Crear detalle de cotización (carrito tienda online — público, sin sesión)' })
+  @ApiResponse({ status: 201, description: 'Detalle de cotización creado exitosamente' })
+  createCotizacionDet(@Body() dto: any, @CurrentUser() user?: any) {
+    return this.service.createCotizacionDet(dto, user?.usuario || 'TIENDA');
   }
 
   @Put('cotizaciones-det/:id')
@@ -333,8 +364,11 @@ export class FacturacionController {
   @Get('pedidos')
   @ApiOperation({ summary: 'Listar pedidos' })
   @ApiResponse({ status: 200, description: 'Lista de pedidos obtenida exitosamente' })
-  findAllPedidos(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllPedidos(empresaId);
+  findAllPedidos(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.findAllPedidos(empresaId, user?.usuario);
   }
 
   @Get('pedidos/:id')
@@ -344,14 +378,17 @@ export class FacturacionController {
   findPedido(
     @Param('id', ParseIntPipe) id: number,
     @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
   ) {
-    return this.service.findPedido(id, empresaId);
+    return this.service.findPedido(id, empresaId, user?.usuario);
   }
 
   @Post('pedidos')
   @ApiOperation({ summary: 'Crear pedido' })
   @ApiResponse({ status: 201, description: 'Pedido creado exitosamente' })
   createPedido(@Body() dto: CreatePosPedMaeDto, @CurrentUser() user: any) {
+    // pospedmae.Idsucursal es NOT NULL sin default → desde el JWT (igual que checkout)
+    if (!dto.Idsucursal) dto.Idsucursal = user.idsucursal;
     return this.service.createPedido(dto, user.usuario);
   }
 
@@ -432,8 +469,9 @@ export class FacturacionController {
   deletePedidoDet(
     @Param('id', ParseIntPipe) id: number,
     @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
   ) {
-    return this.service.deletePedidoDet(id, empresaId);
+    return this.service.deletePedidoDet(id, empresaId, user.usuario);
   }
 
   // ===== Combos =====
@@ -446,7 +484,8 @@ export class FacturacionController {
   }
 
   @Get('combos-ofertas')
-  @ApiOperation({ summary: 'Productos en oferta/promoción (combo vigente, tipocombo != C)' })
+  @Public()
+  @ApiOperation({ summary: 'Productos en oferta/promoción (combo vigente, tipocombo != C). Público: la tienda online muestra ofertas a visitantes sin sesión' })
   @ApiResponse({ status: 200, description: 'Productos con precio descontado' })
   findProductosEnOferta(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findProductosEnOferta(empresaId);
@@ -700,17 +739,21 @@ export class FacturacionController {
   @ApiOperation({ summary: 'Checkout de pedido — convierte pedido en factura' })
   @ApiResponse({ status: 201, description: 'Factura creada exitosamente' })
   checkoutPedido(@Body() dto: CheckoutPedidoDto, @CurrentUser() user: any) {
+    // Igual que createFactura: posfacmae.Idsucursal es NOT NULL sin default
+    dto.Idsucursal = user.idsucursal;
     return this.service.checkoutPedido(dto, user.usuario);
   }
 
   @Get('cotizaciones-det/mae/:maeId')
-  @ApiOperation({ summary: 'Obtener detalles de cotizaciÃ³n por maestro' })
+  @Public()
+  @ApiOperation({ summary: 'Obtener detalles de cotización por maestro — público (carrito tienda online)' })
   @ApiResponse({ status: 200, description: 'Detalles encontrados' })
   findCotizacionDetByMaeId(
     @Param('maeId', ParseIntPipe) maeId: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('empresaId') empresaId?: string,
   ) {
-    return this.service.findCotizacionDetByMaeId(maeId, empresaId);
+    const emp = empresaId ? parseInt(empresaId, 10) : undefined;
+    return this.service.findCotizacionDetByMaeId(maeId, emp);
   }
 
   @Delete('cotizaciones/:id')
@@ -724,13 +767,15 @@ export class FacturacionController {
   }
 
   @Delete('cotizaciones-det/:id')
-  @ApiOperation({ summary: 'Eliminar detalle de cotizaciÃ³n' })
+  @Public()
+  @ApiOperation({ summary: 'Eliminar detalle de cotización — público (carrito tienda online)' })
   @ApiResponse({ status: 200, description: 'Detalle eliminado' })
   deleteCotizacionDet(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('empresaId') empresaId?: string,
   ) {
-    return this.service.deleteCotizacionDet(id, empresaId);
+    const emp = empresaId ? parseInt(empresaId, 10) : undefined;
+    return this.service.deleteCotizacionDet(id, emp);
   }
 
   @Post('cotizaciones/:id/enviar-correo')

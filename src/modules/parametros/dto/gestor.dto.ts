@@ -10,6 +10,18 @@ export class CreateGestorDto {
   @IsNumber()
   empleadoId: number;
 
+  @ApiProperty({ description: 'ID de la empresa (obligatorio: la columna NOT NULL no tiene default)' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID del usuario del sistema vinculado (se resuelve desde el usuario autenticado si no llega)' })
+  @IsNumber() @IsOptional()
+  usuarioId?: number;
+
+  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Estado activo' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
   @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Es vendedor' })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_vendedor?: string;

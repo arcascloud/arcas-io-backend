@@ -39,9 +39,17 @@ export class CreateBcoCtaDto {
   @IsString() @IsNotEmpty()
   nrocuenta: string;
 
+  @ApiProperty({ description: 'Cuenta contable asociada (coctacontables.ctacontable)' })
+  @IsString() @IsNotEmpty()
+  ctacontable: string;
+
   @ApiProperty({ description: 'ID de la moneda' })
   @IsNumber()
   monedaId: number;
+
+  @ApiProperty({ required: false, description: 'Saldo inicial de la cuenta (default 0.00)' })
+  @IsNumber() @IsOptional()
+  saldo?: number;
 
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber()
@@ -57,9 +65,17 @@ export class UpdateBcoCtaDto {
   @IsString() @IsOptional()
   nrocuenta?: string;
 
+  @ApiProperty({ required: false, description: 'Cuenta contable asociada (coctacontables.ctacontable)' })
+  @IsString() @IsOptional()
+  ctacontable?: string;
+
   @ApiProperty({ required: false, description: 'ID de la moneda' })
   @IsNumber() @IsOptional()
   monedaId?: number;
+
+  @ApiProperty({ required: false, description: 'Saldo de la cuenta — informativo, lo mueven los movimientos bancarios' })
+  @IsNumber() @IsOptional()
+  saldo?: number;
 
   @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Activo (Sí/No)' })
   @IsEnum(['S', 'N']) @IsOptional()
@@ -85,13 +101,13 @@ export class CreateBcoMovimientoDto {
   @IsNumber()
   moduloId: number;
 
-  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], description: 'Tipo de movimiento' })
-  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'])
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], description: 'Tipo de movimiento' })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'])
   tipomov: string;
 
-  @ApiProperty({ enum: ['D', 'C'], description: 'Débito o crédito' })
-  @IsEnum(['D', 'C'])
-  dc_debitocredito: string;
+  @ApiProperty({ enum: ['D', 'C'], required: false, description: 'Débito o crédito — se deriva del tipo (DEPOSITO=D; RETIRO/TRANSFERENCIA/PAGO=C)' })
+  @IsEnum(['D', 'C']) @IsOptional()
+  dc_debitocredito?: string;
 
   @ApiProperty({ required: false, description: 'Número de referencia' })
   @IsString() @IsOptional()
@@ -119,8 +135,8 @@ export class CreateBcoMovimientoDto {
 }
 
 export class UpdateBcoMovimientoDto {
-  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], required: false })
-  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO']) @IsOptional()
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], required: false })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO']) @IsOptional()
   tipomov?: string;
 
   @ApiProperty({ enum: ['D', 'C'], required: false })
@@ -311,4 +327,38 @@ export class UpdateConciliacionDto {
   @ValidateNested({ each: true })
   @Type(() => CreateConciliacionDetDto)
   detalles?: CreateConciliacionDetDto[];
+}
+
+// ── Documentos de conciliación (bcosccdocs) ────────────────
+
+export class CreateBcoCcdocsDto {
+  @ApiProperty({ description: 'Descripción del documento' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ required: false, description: 'Abreviatura del documento' })
+  @IsString() @IsOptional()
+  abreviatura?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Activo (Sí/No)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateBcoCcdocsDto {
+  @ApiProperty({ required: false, description: 'Descripción del documento' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false, description: 'Abreviatura del documento' })
+  @IsString() @IsOptional()
+  abreviatura?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Activo (Sí/No)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
 }

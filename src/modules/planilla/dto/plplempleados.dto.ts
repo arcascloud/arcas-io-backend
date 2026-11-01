@@ -16,7 +16,7 @@ export class CreatePlEmpleadosDto {
 
   @ApiProperty({ description: 'Documento de identidad' })
   @IsString() @IsNotEmpty()
-  dni: string;
+  nrodocumento: string;
 
   @ApiProperty({ required: false, description: 'Fecha de nacimiento' })
   @IsString() @IsOptional()
@@ -62,6 +62,14 @@ export class CreatePlEmpleadosDto {
   @IsNumber() @IsOptional()
   puestoId?: number;
 
+  @ApiProperty({ required: false, description: 'ID de departamento' })
+  @IsNumber() @IsOptional()
+  deptoId?: number;
+
+  @ApiProperty({ required: false, description: 'ID del jefe inmediato' })
+  @IsNumber() @IsOptional()
+  jefeId?: number;
+
   @ApiProperty({ required: false, description: 'Sueldo bruto' })
   @IsNumber() @IsOptional()
   sueldobruto?: number;
@@ -78,9 +86,25 @@ export class CreatePlEmpleadosDto {
   @IsString() @IsOptional()
   lugardenacimiento?: string;
 
+  @ApiProperty({ required: false, enum: ['D', 'M', 'N'], description: 'Jornada: D=Diurna (8h), M=Mixta (7h), N=Nocturna (6h)' })
+  @IsEnum(['D', 'M', 'N']) @IsOptional()
+  sn_jornada?: string;
+
   @ApiProperty({ description: 'ID de tipo de empleado' })
   @IsNumber()
   tipoempId: number;
+
+  @ApiProperty({ required: false, description: 'Fecha de alta' })
+  @IsString() @IsOptional()
+  fecha_alta?: string;
+
+  @ApiProperty({ required: false, description: 'Fecha de baja' })
+  @IsString() @IsOptional()
+  fecha_baja?: string;
+
+  @ApiProperty({ required: false, description: 'Foto en base64' })
+  @IsString() @IsOptional()
+  foto?: string;
 
   @ApiProperty({ description: 'ID de sucursal' })
   @IsNumber()
@@ -102,7 +126,7 @@ export class UpdatePlEmpleadosDto {
 
   @ApiProperty({ required: false, description: 'Documento de identidad' })
   @IsString() @IsOptional()
-  dni?: string;
+  nrodocumento?: string;
 
   @ApiProperty({ required: false, description: 'Fecha de nacimiento' })
   @IsString() @IsOptional()
@@ -148,6 +172,14 @@ export class UpdatePlEmpleadosDto {
   @IsNumber() @IsOptional()
   puestoId?: number;
 
+  @ApiProperty({ required: false, description: 'ID de departamento' })
+  @IsNumber() @IsOptional()
+  deptoId?: number;
+
+  @ApiProperty({ required: false, description: 'ID del jefe inmediato' })
+  @IsNumber() @IsOptional()
+  jefeId?: number;
+
   @ApiProperty({ required: false, description: 'Sueldo bruto' })
   @IsNumber() @IsOptional()
   sueldobruto?: number;
@@ -164,9 +196,25 @@ export class UpdatePlEmpleadosDto {
   @IsString() @IsOptional()
   lugardenacimiento?: string;
 
+  @ApiProperty({ required: false, enum: ['D', 'M', 'N'], description: 'Jornada: D=Diurna (8h), M=Mixta (7h), N=Nocturna (6h)' })
+  @IsEnum(['D', 'M', 'N']) @IsOptional()
+  sn_jornada?: string;
+
   @ApiProperty({ required: false, description: 'ID de tipo de empleado' })
   @IsNumber() @IsOptional()
   tipoempId?: number;
+
+  @ApiProperty({ required: false, description: 'Fecha de alta' })
+  @IsString() @IsOptional()
+  fecha_alta?: string;
+
+  @ApiProperty({ required: false, description: 'Fecha de baja' })
+  @IsString() @IsOptional()
+  fecha_baja?: string;
+
+  @ApiProperty({ required: false, description: 'Foto en base64' })
+  @IsString() @IsOptional()
+  foto?: string;
 
   @ApiProperty({ required: false, description: 'ID de sucursal' })
   @IsNumber() @IsOptional()

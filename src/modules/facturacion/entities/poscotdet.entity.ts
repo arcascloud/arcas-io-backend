@@ -35,16 +35,20 @@ export class TPosCotDet {
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
   subTotal: number;
 
+  @ApiProperty({ required: false, description: 'Importe del descuento de la línea' })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
+  descuento: number;
+
   @ApiProperty({ required: false })
   @Column({ nullable: true })
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

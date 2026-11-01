@@ -7,7 +7,7 @@ export class Cxccajero {
   @PrimaryGeneratedColumn({ name: 'cajaId' })
   cajaId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuario: string;
 
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
@@ -16,7 +16,7 @@ export class Cxccajero {
   @Column()
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

@@ -14,6 +14,10 @@ export class TCxpCompraMae {
   fecharegistro: Date;
 
   @ApiProperty()
+  @Column()
+  nrocompra: number;
+
+  @ApiProperty()
   @Column({ type: 'enum', enum: ['FCO', 'FCC', 'ORC'], default: 'FCO' })
   TipoCompra: string;
 
@@ -82,11 +86,11 @@ export class TCxpCompraMae {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

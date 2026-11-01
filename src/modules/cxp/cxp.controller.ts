@@ -5,6 +5,8 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CxpService } from './cxp.service';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
+import { CreateCarteraCtaDto, UpdateCarteraCtaDto } from './dto/carteracta.dto';
+import { CreateProveedorInfoDto, UpdateProveedorInfoDto } from './dto/proveedorinfo.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -31,6 +33,17 @@ export class CxpController {
     @Query('q') q?: string,
   ) {
     return this.service.findProveedoresPag(empresaId, Number(page) || 1, Number(limit) || 15, q || '');
+  }
+
+  @Get('proveedores/dni-existe')
+  @ApiOperation({ summary: 'Verificar si el DNI ya existe en proveedores de la empresa (llave maestra)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  verificarDniProveedor(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('dni') dni: string,
+    @Query('excluirId') excluirId?: string,
+  ) {
+    return this.service.verificarDniProveedor(empresaId, dni, excluirId ? Number(excluirId) : undefined);
   }
 
   @Get('proveedores/:id')
@@ -61,20 +74,6 @@ export class CxpController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateProveedor(id, empresaId, dto, user.usuario);
-  }
-
-  @Get('proveedores-dir')
-  @ApiOperation({ summary: 'Listar direcciones de proveedores' })
-  @ApiResponse({ status: 200, description: 'Lista de direcciones de proveedores obtenida exitosamente' })
-  findAllProveedorDirs(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProveedorDirs(empresaId);
-  }
-
-  @Get('proveedores-tel')
-  @ApiOperation({ summary: 'Listar teléfonos de proveedores' })
-  @ApiResponse({ status: 200, description: 'Lista de teléfonos de proveedores obtenida exitosamente' })
-  findAllProveedorTels(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllProveedorTels(empresaId);
   }
 
   @Get('compras')
@@ -148,6 +147,16 @@ export class CxpController {
     return this.service.deleteCompra(id, empresaId, user.usuario);
   }
 
+  @Put('compras/:id/contabilizar')
+  @ApiOperation({ summary: 'Contabilizar una compra ya procesada (genera partida y enlaces)' })
+  contabilizarCompra(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.contabilizarCompra(id, empresaId, user.usuario, user.idsucursal);
+  }
+
   @Put('compras/:id/procesar')
   @ApiOperation({ summary: 'Procesar compra (kardex entrada + movimiento CxP débito)' })
   @ApiResponse({ status: 200, description: 'Compra procesada exitosamente' })
@@ -173,6 +182,16 @@ export class CxpController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findMovimientosByProveedor(proveedorId, empresaId);
+  }
+
+  @Get('movimientos/:id')
+  @ApiOperation({ summary: 'Obtener movimiento CxP por ID' })
+  @ApiResponse({ status: 200, description: 'Movimiento encontrado' })
+  findMovimiento(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findMovimiento(id, empresaId);
   }
 
   @Post('movimientos')
@@ -235,5 +254,119 @@ export class CxpController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateCompraDet(id, empresaId, dto, user.usuario);
+  }
+
+  // ========== Cartera Contable por Proveedor (cxpcarteracta) ==========
+
+  @Get('carteras-cta')
+  @ApiOperation({ summary: 'Listar carteras contables por proveedor' })
+  @ApiResponse({ status: 200, description: 'Lista obtenida exitosamente' })
+  findAllCarterasCta(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCarterasCta(empresaId);
+  }
+
+  @Get('carteras-cta/:id')
+  @ApiOperation({ summary: 'Obtener cartera contable de proveedor por ID' })
+  @ApiResponse({ status: 200, description: 'Registro encontrado' })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  findCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCarteraCta(id, empresaId);
+  }
+
+  @Post('carteras-cta')
+  @ApiOperation({ summary: 'Asignar cartera contable a proveedor' })
+  @ApiResponse({ status: 201, description: 'Registro creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Proveedor/cartera inválido o asignación duplicada' })
+  createCarteraCta(@Body() dto: CreateCarteraCtaDto, @CurrentUser() user: any) {
+    return this.service.createCarteraCta(dto, user.usuario, user.idsucursal);
+  }
+
+  @Put('carteras-cta/:id')
+  @ApiOperation({ summary: 'Actualizar cartera contable de proveedor' })
+  @ApiResponse({ status: 200, description: 'Registro actualizado exitosamente' })
+  updateCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCarteraCtaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCarteraCta(id, empresaId, dto, user.usuario, user.idsucursal);
+  }
+
+  @Put('carteras-cta/:id/remove')
+  @ApiOperation({ summary: 'Eliminar cartera contable de proveedor (físico)' })
+  @ApiResponse({ status: 200, description: 'Registro eliminado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  removeCarteraCta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCarteraCta(id, empresaId);
+  }
+
+  // ========== Info de Proveedores (proveedorinfo) ==========
+
+  @Get('proveedor-info')
+  @ApiOperation({ summary: 'Listar información de proveedores (correo/celular/dirección)' })
+  @ApiResponse({ status: 200, description: 'Lista obtenida exitosamente' })
+  findAllProveedorInfo(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllProveedorInfo(empresaId);
+  }
+
+  @Get('proveedor-info/proveedor/:proveedorId')
+  @ApiOperation({ summary: 'Información por proveedor' })
+  @ApiResponse({ status: 200, description: 'Lista obtenida exitosamente' })
+  findProveedorInfoByProveedor(
+    @Param('proveedorId', ParseIntPipe) proveedorId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findProveedorInfoByProveedor(proveedorId, empresaId);
+  }
+
+  @Get('proveedor-info/:id')
+  @ApiOperation({ summary: 'Obtener información de proveedor por ID' })
+  @ApiResponse({ status: 200, description: 'Registro encontrado' })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  findProveedorInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findProveedorInfo(id, empresaId);
+  }
+
+  @Post('proveedor-info')
+  @ApiOperation({ summary: 'Crear información de proveedor' })
+  @ApiResponse({ status: 201, description: 'Registro creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Proveedor inválido o tipo duplicado' })
+  createProveedorInfo(@Body() dto: CreateProveedorInfoDto, @CurrentUser() user: any) {
+    return this.service.createProveedorInfo(dto, user.usuario);
+  }
+
+  @Put('proveedor-info/:id')
+  @ApiOperation({ summary: 'Actualizar información de proveedor' })
+  @ApiResponse({ status: 200, description: 'Registro actualizado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Proveedor inválido o tipo duplicado' })
+  updateProveedorInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateProveedorInfoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateProveedorInfo(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('proveedor-info/:id/remove')
+  @ApiOperation({ summary: 'Desactivar información de proveedor (sn_activo = N)' })
+  @ApiResponse({ status: 200, description: 'Registro desactivado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  removeProveedorInfo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.removeProveedorInfo(id, empresaId, user.usuario);
   }
 }

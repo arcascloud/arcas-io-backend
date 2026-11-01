@@ -40,13 +40,16 @@ export class TomaInventarioService {
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: fecha impuesta por el backend (no el reloj de MySQL)
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.maeRepo.save(mae);
   }
 
   async updateMae(invfisId: number, empresaId: number, dto: any, usuario: string) {
     const mae = await this.findOneMae(invfisId, empresaId);
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
+    const { fecharegistro, ...cambios } = dto ?? {}; // nunca se re-estampa en un PUT
+    Object.assign(mae, cambios, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -111,6 +114,8 @@ export class TomaInventarioService {
       sn_aplicado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: misma fecha que el maestro de la toma
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.detRepo.save(det);
   }
@@ -118,7 +123,8 @@ export class TomaInventarioService {
   async updateDet(nvfisdetId: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { nvfisdetId, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
+    const { fecharegistro, ...cambios } = dto ?? {}; // nunca se re-estampa en un PUT
+    Object.assign(det, cambios, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 
@@ -130,33 +136,48 @@ export class TomaInventarioService {
     const mae = await this.findOneMae(invfisId, empresaId);
     const dets = await this.findDetByMae(invfisId, empresaId);
 
+    if (mae.sn_anulado === 'S') {
+      throw new BadRequestException(`La toma de inventario #${invfisId} está anulada y no se puede procesar.`);
+    }
+    // Idempotencia: sin esta bandera se repetiría el kardex al volver a procesar
+    if (mae.sn_procesado === 'S') {
+      throw new BadRequestException(`La toma de inventario #${invfisId} ya fue procesada.`);
+    }
+
     if (dets.length === 0) {
       throw new BadRequestException('No hay items para procesar');
     }
 
     const resultados: any[] = [];
 
+    // OPCIÓN A: el ajuste se calcula contra la existencia ACTUAL de la bodega,
+    // no contra el snapshot guardado en la línea. En un proceso "desde cero"
+    // (sin kardex ni invexistencias) la actual es 0 ⇒ ajuste = conteo físico.
     for (const det of dets) {
       const fisico = Number(det.fisico) || 0;
-      const sistema = Number(det.existencia) || 0;
-      const costoUnitario = Number(det.costoUnitario) || 0;
-      const diferencia = fisico - sistema;
-
-      let ajusteEntrada = 0;
-      let ajusteSalida = 0;
-
-      if (sistema === 0 && fisico > 0) {
-        ajusteEntrada = fisico;
-      } else if (diferencia > 0) {
-        ajusteEntrada = diferencia;
-      } else if (diferencia < 0) {
-        ajusteSalida = Math.abs(diferencia);
-      }
 
       const prod = await this.productoRepo.findOne({ where: { codbarra: det.codbarra, empresaId } as any });
       const productoId = prod?.produtoId;
+      if (!productoId) {
+        // Antes se omitía en silencio y aún así se marcaba sn_aplicado = 'S'
+        throw new BadRequestException(
+          `El producto con código de barras ${det.codbarra} no existe en el catálogo; no se puede registrar el kardex.`,
+        );
+      }
+      // Costo de la línea; si está en 0 se toma el del catálogo para no
+      // generar existencia de valor cero
+      const costoUnitario = Number(det.costoUnitario) || Number(prod.cstounit) || 0;
 
-      if (productoId && ajusteEntrada > 0) {
+      const regActual = await this.existenciaRepo.findOne({
+        where: { bodegaId: mae.bodegaId, productoId, empresaId } as any,
+      });
+      const sistema = regActual ? Number(regActual.existencia) || 0 : 0;
+
+      const diferencia = fisico - sistema;
+      const ajusteEntrada = diferencia > 0 ? diferencia : 0;
+      const ajusteSalida = diferencia < 0 ? Math.abs(diferencia) : 0;
+
+      if (ajusteEntrada > 0) {
         await this.kardexService.registrarEntrada({
           bodegaId: mae.bodegaId,
           productoId,
@@ -171,7 +192,7 @@ export class TomaInventarioService {
         });
       }
 
-      if (productoId && ajusteSalida > 0) {
+      if (ajusteSalida > 0) {
         await this.kardexService.registrarSalida({
           bodegaId: mae.bodegaId,
           productoId,
@@ -187,9 +208,12 @@ export class TomaInventarioService {
       }
 
       await this.detRepo.update(det.nvfisdetId, {
+        // existencia = base realmente usada, para que la tabla
+        // (Existencia | Físico | Ajuste) quede coherente
+        existencia: sistema,
         ajusteEntrada,
         ajusteSalida,
-        costoTotal: Number(fisico) * Number(costoUnitario),
+        costoTotal: fisico * costoUnitario,
         sn_aplicado: 'S',
         usuarioUpdated: usuario,
         fechaUpdated: await this.fechaSistema.getFecha(empresaId),
@@ -206,7 +230,8 @@ export class TomaInventarioService {
     }
 
     await this.maeRepo.update(invfisId, {
-      sn_anulado: 'N',
+      // sn_procesado = 'S' es lo que el frontend usa para bloquear "Agregar" después de procesar
+      sn_procesado: 'S',
       usuarioUpdated: usuario,
       fechaUpdated: await this.fechaSistema.getFecha(empresaId),
     } as any);

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TtipoMoneda } from './entities/moneda.entity';
 import { TtipoPais } from './entities/pais.entity';
@@ -15,16 +15,25 @@ import { TtipoGestor } from './entities/gestor.entity';
 import { TtipoImpuesto } from './entities/impuesto.entity';
 import { TtipoProforma } from './entities/proforma.entity';
 import { TtipoZonaVtaCob } from './entities/zona-vta-cob.entity';
-
+import { TTipoMes } from './entities/tipo-mes.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
-import { PlPlEmpleados } from '../planilla/entities/plplempleados.entity';
+import { PlEmpleados } from '../planilla/entities/plempleados.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
 import { TipoParametro } from './entities/tipo-parametro.entity';
+import { TusuarioCaja } from './entities/usuario-caja.entity';
+import { TtipoWorldCity } from './entities/world-city.entity';
+import { Tfecma } from './entities/fecma.entity';
+import { Tfecdet } from './entities/fecdet.entity';
+import { Tusuarios } from '../users/entities/usuario.entity';
+import { UsersModule } from '../users/users.module';
 import { ParametrosService } from './parametros.service';
 import { ParametrosController } from './parametros.controller';
+import { FecService } from './fec.service';
+import { FecController } from './fec.controller';
 
 @Module({
   imports: [
+    UsersModule,
     TypeOrmModule.forFeature([
       TtipoMoneda,
       TtipoPais,
@@ -41,14 +50,20 @@ import { ParametrosController } from './parametros.controller';
       TtipoImpuesto,
       TtipoProforma,
       TtipoZonaVtaCob,
+      TTipoMes,
       TCoTipoDocumentoFiscal,
-      PlPlEmpleados,
+      PlEmpleados,
       TPosPrecioVtas,
       TipoParametro,
+      TusuarioCaja,
+      TtipoWorldCity,
+      Tfecma,
+      Tfecdet,
+      Tusuarios,
     ]),
   ],
-  controllers: [ParametrosController],
-  providers: [ParametrosService],
-  exports: [ParametrosService],
+  controllers: [ParametrosController, FecController],
+  providers: [ParametrosService, FecService],
+  exports: [ParametrosService, FecService],
 })
 export class ParametrosModule {}

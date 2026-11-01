@@ -30,6 +30,10 @@ export class CreatePlPlaDetDto {
   @IsNumber() @IsOptional()
   importe_drtf?: number;
 
+  @ApiProperty({ required: false, description: 'Importe Impuesto Vecinal' })
+  @IsNumber() @IsOptional()
+  importe_drvc?: number;
+
   @ApiProperty({ required: false, description: 'Importe otras deducciones' })
   @IsNumber() @IsOptional()
   importe_dotras?: number;
@@ -83,6 +87,10 @@ export class UpdatePlPlaDetDto {
   @ApiProperty({ required: false, description: 'Importe RTF' })
   @IsNumber() @IsOptional()
   importe_drtf?: number;
+
+  @ApiProperty({ required: false, description: 'Importe Impuesto Vecinal' })
+  @IsNumber() @IsOptional()
+  importe_drvc?: number;
 
   @ApiProperty({ required: false, description: 'Importe otras deducciones' })
   @IsNumber() @IsOptional()

@@ -1,6 +1,7 @@
 import {
   Entity, PrimaryGeneratedColumn, Column,
 } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
 
 @Entity('cxcclientes')
 export class CxcCliente {
@@ -43,6 +44,10 @@ export class CxcCliente {
   @Column()
   diasplazo: number;
 
+  @ApiProperty({ required: false, description: 'Días de gracia después del vencimiento del plazo (mora)' })
+  @Column({ type: 'int', default: 0 })
+  diasgracia: number;
+
   @Column({ type: 'decimal', precision: 20, scale: 2 })
   interes: number;
 
@@ -55,13 +60,21 @@ export class CxcCliente {
   @Column({ type: 'enum', enum: ['A', 'B', 'C', 'D', 'E'], default: 'A' })
   categoria: string;
 
+  @Column({ type: 'int', default: 4 })
+  moduloId: number;
+
   @Column()
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  // Columna NOT NULL en BD (sin default) - sin este mapeo el INSERT la omitía
+  // y MySQL devolvía ER_NO_DEFAULT_FOR_FIELD (1364).
+  @Column({ type: 'int', default: 0 })
+  Idsucursal: number;
+
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

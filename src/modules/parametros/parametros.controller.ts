@@ -1,16 +1,20 @@
 import {
-  Controller, Get, Post, Put, Body, Param, Query,
-  UseGuards, ParseIntPipe,
+  Controller, Get, Post, Put, Delete, Body, Param, Query,
+  UseGuards, ParseIntPipe, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ParametrosService } from './parametros.service';
 import { CreateSimpleParamDto, UpdateSimpleParamDto } from './dto/simple-param.dto';
+import { CreateDeptoEmpresaDto, UpdateDeptoEmpresaDto } from './dto/depto-empresa.dto';
+import { CreateMesDto, UpdateMesDto } from './dto/mes.dto';
 import { CreateMonedaDto, UpdateMonedaDto } from './dto/moneda.dto';
 import { CreateGestorDto, UpdateGestorDto } from './dto/gestor.dto';
 import { CreateImpuestoDto, UpdateImpuestoDto } from './dto/impuesto.dto';
+import { CreateUsuarioCajaDto, UpdateUsuarioCajaDto } from './dto/usuario-caja.dto';
 
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Parámetros')
 @ApiBearerAuth()
@@ -154,7 +158,7 @@ export class ParametrosController {
   @Post('departamentos-empresa')
   @ApiOperation({ summary: 'Crear departamento de empresa' })
   @ApiResponse({ status: 201, description: 'Creado' })
-  createDeptoEmpresa(@Body() dto: CreateSimpleParamDto, @CurrentUser() user: any) {
+  createDeptoEmpresa(@Body() dto: CreateDeptoEmpresaDto, @CurrentUser() user: any) {
     return this.service.createDeptoEmpresa(dto, user.usuario);
   }
 
@@ -164,7 +168,7 @@ export class ParametrosController {
   updateDeptoEmpresa(
     @Param('id', ParseIntPipe) id: number,
     @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateSimpleParamDto,
+    @Body() dto: UpdateDeptoEmpresaDto,
     @CurrentUser() user: any,
   ) {
     return this.service.updateDeptoEmpresa(id, empresaId, dto, user.usuario);
@@ -315,7 +319,8 @@ export class ParametrosController {
   }
 
   @Get('tarjetas-credito')
-  @ApiOperation({ summary: 'Listar tarjetas de crédito' })
+  @Public()
+  @ApiOperation({ summary: 'Listar tarjetas de crédito. Público: catálogo para el checkout de la tienda online' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllTarjetasCredito(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllTarjetasCredito(empresaId);
@@ -455,6 +460,17 @@ export class ParametrosController {
     return this.service.updateGestor(id, empresaId, dto, user.usuario);
   }
 
+  @Delete('gestores/:id')
+  @ApiOperation({ summary: 'Eliminar gestor (inactiva)' })
+  @ApiResponse({ status: 200, description: 'Eliminado' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  removeGestor(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeGestor(id, empresaId);
+  }
+
   @Get('impuestos')
   @ApiOperation({ summary: 'Listar impuestos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -580,6 +596,44 @@ export class ParametrosController {
     return this.service.findPreciosVta(id, empresaId);
   }
 
+  // ── Usuarios de Caja (tusuarios_caja) ─────────────────────
+  // Debe declararse ANTES de `parametros/:id` para evitar conflicto de ruta
+  @Get('usuarios-caja')
+  @ApiOperation({ summary: 'Listar asignaciones de caja por usuario' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllUsuarioCaja(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllUsuarioCaja(empresaId);
+  }
+
+  @Get('usuarios-caja/:id')
+  @ApiOperation({ summary: 'Obtener asignación de caja por usuario' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findUsuarioCaja(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findUsuarioCaja(id, empresaId);
+  }
+
+  @Post('usuarios-caja')
+  @ApiOperation({ summary: 'Crear asignación de caja por usuario' })
+  @ApiResponse({ status: 201, description: 'Creado' })
+  createUsuarioCaja(@Body() dto: CreateUsuarioCajaDto, @CurrentUser() user: any) {
+    return this.service.createUsuarioCaja(dto, user.usuario);
+  }
+
+  @Put('usuarios-caja/:id')
+  @ApiOperation({ summary: 'Actualizar asignación de caja por usuario' })
+  @ApiResponse({ status: 200, description: 'Actualizado' })
+  updateUsuarioCaja(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateUsuarioCajaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateUsuarioCaja(id, empresaId, dto, user.usuario);
+  }
+
   // =============================================
   // PARÁMETROS UNIFICADOS (ttipoparametros)
   // =============================================
@@ -625,11 +679,12 @@ export class ParametrosController {
   upsertParametro(
     @Query('empresaId', ParseIntPipe) empresaId: number,
     @Query('moduloId', ParseIntPipe) moduloId: number,
-    @Body() body: { field: string; valor: string; tipo?: string },
+    @Body() body: { field: string; valor: string; tipo?: string; descripcion?: string; grupo?: string },
     @CurrentUser() user: any,
   ) {
     return this.service.upsertParametroModulo(
       empresaId, moduloId, body.field, body.valor, body.tipo || 'STRING', user.usuario,
+      body.descripcion, body.grupo,
     );
   }
 
@@ -638,7 +693,7 @@ export class ParametrosController {
   upsertParametrosLote(
     @Query('empresaId', ParseIntPipe) empresaId: number,
     @Query('moduloId', ParseIntPipe) moduloId: number,
-    @Body() body: { parametros: { field: string; valor: string; tipo?: string; sn_activo?: string }[] },
+    @Body() body: { parametros: { field: string; valor: string; tipo?: string; sn_activo?: string; descripcion?: string; grupo?: string }[] },
     @CurrentUser() user: any,
   ) {
     const items = body.parametros.map(p => ({
@@ -667,5 +722,90 @@ export class ParametrosController {
   @ApiOperation({ summary: 'Eliminar (desactivar) un parámetro' })
   deleteParametro(@Param('id', ParseIntPipe) id: number) {
     return this.service.deleteParametro(id);
+  }
+
+  // ── Meses ─────────────────────────────────────────────────
+  @Get('meses')
+  @ApiOperation({ summary: 'Listar meses' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllMeses() { return this.service.findAllMeses(); }
+
+  @Get('meses/:id')
+  @ApiOperation({ summary: 'Obtener mes' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findMes(@Param('id', ParseIntPipe) id: number) { return this.service.findMes(id); }
+
+  @Post('meses')
+  @ApiOperation({ summary: 'Crear mes' })
+  @ApiResponse({ status: 201, description: 'Creado' })
+  createMes(@Body() dto: CreateMesDto) { return this.service.createMes(dto); }
+
+  @Put('meses/:id')
+  @ApiOperation({ summary: 'Actualizar mes' })
+  @ApiResponse({ status: 200, description: 'Actualizado' })
+  updateMes(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMesDto) {
+    return this.service.updateMes(id, dto);
+  }
+
+  @Delete('meses/:id')
+  @ApiOperation({ summary: 'Eliminar mes' })
+  @ApiResponse({ status: 200, description: 'Eliminado' })
+  removeMes(@Param('id', ParseIntPipe) id: number) { return this.service.removeMes(id); }
+
+  // ── Ciudades del mundo (catálogo global, solo lectura) ────
+  // @Public(): catálogo sin datos sensibles, usado por el registro público
+  // (/auth/registro) para los selects de País/Departamento/Ciudad sin sesión.
+  @Public()
+  @Get('worldcities')
+  @ApiOperation({
+    summary: 'Buscar ciudades del mundo (paginado)',
+    description: 'Filtros: q (nombre), iso2, country, admin_name, capital. La colación spanish_ci hace la búsqueda insensible a acentos/mayúsculas. Ruta pública (sin JWT).',
+  })
+  @ApiResponse({ status: 200, description: '{ data, total, page, rows }' })
+  findAllWorldCities(
+    @Query('q') q?: string,
+    @Query('iso2') iso2?: string,
+    @Query('country') country?: string,
+    @Query('admin_name') admin_name?: string,
+    @Query('capital') capital?: string,
+    @Query('page') page?: string,
+    @Query('rows') rows?: string,
+  ) {
+    return this.service.findAllWorldCities({
+      q, iso2, country, admin_name, capital,
+      page: page ? Number(page) : undefined,
+      rows: rows ? Number(rows) : undefined,
+    });
+  }
+
+  @Public()
+  @Get('worldcities/paises')
+  @ApiOperation({ summary: 'Países distintos con conteo de ciudades (público, sin JWT)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findWorldCitiesPaises() { return this.service.findWorldCitiesPaises(); }
+
+  @Public()
+  @Get('worldcities/admin')
+  @ApiOperation({ summary: 'Departamentos/estados distintos de un país (iso2) — público, sin JWT' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findWorldCitiesAdmin(@Query('iso2') iso2: string) {
+    if (!iso2) throw new BadRequestException('El query param iso2 es requerido');
+    return this.service.findWorldCitiesAdmin(iso2);
+  }
+
+  @Public()
+  @Get('worldcities/capitales')
+  @ApiOperation({ summary: 'Capitales (primary/admin) de un país opcional — público, sin JWT' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findWorldCitiesCapitales(@Query('iso2') iso2?: string) {
+    return this.service.findWorldCitiesCapitales(iso2);
+  }
+
+  @Public()
+  @Get('worldcities/:id')
+  @ApiOperation({ summary: 'Obtener ciudad por id — público, sin JWT' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findWorldCity(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findWorldCity(id);
   }
 }

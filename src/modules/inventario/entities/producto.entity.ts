@@ -4,6 +4,10 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { TinvCategoria } from './categoria.entity';
+import { TinvDepto } from './deptos.entity';
+import { TinvMarca } from './marca.entity';
+import { TinvPasillo } from './pasillo.entity';
+
 
 @Entity('productos')
 export class Tproducto {
@@ -22,6 +26,10 @@ export class Tproducto {
   @ApiProperty({ required: false })
   @Column({ type: 'varchar', length: 50, nullable: true })
   descripcion_corta: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  codigo_sku: string;
 
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
@@ -49,13 +57,40 @@ export class Tproducto {
 
   @ApiProperty()
   @Column()
+  deptoId: number;
+ 
+  @ApiProperty()
+  @Column()
   categoriaId: number;
  
   @ApiProperty()
-  @Column() // se agrego para el manejo de impuestos por productos, sin embargo se podra obtener de forma preinicializada 
-  // de la ttipoparaminv por medio de impuestoventaId, ya que hay productos que pagan mas impuestos como por ejemplo los licores y cerverza 
+  @Column()
+  marcaId: number;
+
+  @ApiProperty()
+  @Column()
+  pasilloId: number;
+ 
+  @ApiProperty()
+  @Column() 
   impuestoId: number;
 
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_controlado: string; //PRODUCTOS CONTROLADOS COMO FARMACOS ESPECIFICOS, O MATERIAL AGROINDUSTRIAL CONTROLADO
+ 
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_droga: string; //PRODUCTOS CONTROLADOS COMO FARMACOS ESPECIFICOS, O MATERIAL AGROINDUSTRIAL CONTROLADO
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_valida_lote: string; //VA A VALIDAR EN EL FUTURO EL MANEJO DE LOTE DE VENCIMIENTO EN LOS PRODUCTOS
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_enviar_a_cocina: string; //PLATILLOS QUE SON SOLICITADO A COCINA
+  
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
@@ -64,22 +99,38 @@ export class Tproducto {
   @Column()
   empresaId: number;
 
-
-
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })
   @Column({ type: 'datetime', nullable: true })
   fechaUpdated: Date;
 
+  @ApiProperty({ type: () => TinvDepto })
+  @ManyToOne(() => TinvDepto)
+  @JoinColumn({ name: 'deptoId' })
+  departamento: TinvPasillo;
+
   @ApiProperty({ type: () => TinvCategoria })
   @ManyToOne(() => TinvCategoria)
   @JoinColumn({ name: 'categoriaId' })
   categoria: TinvCategoria;
+  
+  @ApiProperty({ type: () => TinvMarca })
+  @ManyToOne(() => TinvMarca)
+  @JoinColumn({ name: 'marcaId' })
+  marca: TinvMarca;
+ 
+  @ApiProperty({ type: () => TinvPasillo })
+  @ManyToOne(() => TinvPasillo)
+  @JoinColumn({ name: 'pasilloId' })
+  pasillo: TinvPasillo;
+  
+ 
+ 
 }

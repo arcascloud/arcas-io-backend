@@ -1,16 +1,24 @@
 import {
   Controller, Get, Post, Put, Body, Param, Query,
-  UseGuards, ParseIntPipe, NotFoundException,
+  UseGuards, ParseIntPipe, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ContabilidadService } from './contabilidad.service';
 import { ContabilidadLogicaService } from './contabilidad-logica.service';
+import { DashboardService } from './dashboard.service';
 import {
-  CreateTcoctacontablesDto, UpdateTcoctacontablesDto,
+  CreateCoctacontablesDto, UpdateCoctacontablesDto,
   CreateCopdamaeDto, UpdateCopdamaeDto,
   CreateCopdadetDto, UpdateCopdadetDto,
   ContabilizarPartidaDto, CierreContableDto, ReporteContableDto,
+  CrearPartidaInicialDto,
+  ReporteBalanceDinamicoDto,
+  ReporteEstadoResultadoDto,
   IntegracionModuloDto,
+  ReconstruirCoctamovDto,
+  CreateTcocarterasDto, UpdateTcocarterasDto,
+  CreateCocierredetDto, UpdateCocierredetDto,
+  CalcularSaldosCtaDto,
 } from './dto/contabilidad.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -23,7 +31,26 @@ export class ContabilidadController {
   constructor(
     private readonly service: ContabilidadService,
     private readonly logica: ContabilidadLogicaService,
+    private readonly dashboard: DashboardService,
   ) {}
+
+  // ===== Dashboard Módulo 7 =====
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Dashboard del módulo Contabilidad (6 widgets: patrimonio, nivel 2, ingresos, gastos, CxC, CxP)' })
+  @ApiResponse({ status: 200, description: 'Payload completo del dashboard' })
+  @ApiResponse({ status: 400, description: 'empresaId/anio/periodo inválidos' })
+  getDashboard(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('anio') anio?: string,
+    @Query('periodo') periodo?: string,
+  ) {
+    return this.dashboard.getDashboard(
+      empresaId,
+      anio != null && anio !== '' ? Number(anio) : undefined,
+      periodo != null && periodo !== '' ? Number(periodo) : undefined,
+    );
+  }
 
   // ===== Ctacontables =====
 
@@ -48,7 +75,7 @@ export class ContabilidadController {
   @Post('ctacontables')
   @ApiOperation({ summary: 'Crear cuenta contable' })
   @ApiResponse({ status: 201, description: 'Cuenta contable creada exitosamente' })
-  createCtacontable(@Body() dto: CreateTcoctacontablesDto, @CurrentUser() user: any) {
+  createCtacontable(@Body() dto: CreateCoctacontablesDto, @CurrentUser() user: any) {
     return this.service.createCtacontable(dto, user.usuario);
   }
 
@@ -58,7 +85,7 @@ export class ContabilidadController {
   updateCtacontable(
     @Param('id', ParseIntPipe) id: number,
     @Query('empresaId', ParseIntPipe) empresaId: number,
-    @Body() dto: UpdateTcoctacontablesDto,
+    @Body() dto: UpdateCoctacontablesDto,
     @CurrentUser() user: any,
   ) {
     return this.service.updateCtacontable(id, empresaId, dto, user.usuario);
@@ -67,12 +94,13 @@ export class ContabilidadController {
   @Put('ctacontables/:id/remove')
   @ApiOperation({ summary: 'Eliminar cuenta contable' })
   @ApiResponse({ status: 200, description: 'Cuenta contable eliminada exitosamente' })
-  removeCtacontable(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.removeCtacontable(id, empresaId);
-  }
+      removeCtacontable(
+        @Param('id', ParseIntPipe) id: number,
+        @Query('empresaId', ParseIntPipe) empresaId: number,
+        @CurrentUser() user: any,
+      ) {
+        return this.service.removeCtacontable(id, empresaId, user?.usuario);
+      }
 
   // ===== Grupo Contable =====
 
@@ -171,8 +199,11 @@ export class ContabilidadController {
   @Get('plantillapdadet')
   @ApiOperation({ summary: 'Listar plantillas pda detalle' })
   @ApiResponse({ status: 200, description: 'Lista de plantillas detalle obtenida exitosamente' })
-  findAllPlantillapdadet(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllPlantillapdadet(empresaId);
+  findAllPlantillapdadet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('tcoplantillapdamaeId') tcoplantillapdamaeId?: string,
+  ) {
+    return this.service.findAllPlantillapdadet(empresaId, tcoplantillapdamaeId ? Number(tcoplantillapdamaeId) : undefined);
   }
 
   @Get('plantillapdadet/:id')
@@ -254,6 +285,33 @@ export class ContabilidadController {
     return this.service.updateSaldoscta(id, empresaId, dto, user.usuario);
   }
 
+  @Get('saldoscta-detalle')
+  @ApiOperation({ summary: 'Estado de cuenta por partida (movimientos agrupados de una cuenta contable)' })
+  @ApiResponse({ status: 200, description: 'Detalle de movimientos agrupados por partida' })
+  findSaldosCtaDetalle(
+    @Query('ctacontable') ctacontable: string,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('anio') anio?: string,
+    @Query('periodo') periodo?: string,
+  ) {
+    return this.service.findSaldosCtaDetalle(
+      ctacontable,
+      anio ? Number(anio) : undefined,
+      empresaId,
+      periodo ? Number(periodo) : undefined,
+    );
+  }
+
+  @Post('saldoscta/calcular')
+  @ApiOperation({
+    summary: 'Recalcula coctasaldos desde copdadet (neto firmado por período contable; crea filas faltantes)',
+  })
+  @ApiResponse({ status: 201, description: 'Saldos recalculados (resumen de filas/celdas)' })
+  @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
+  calcularSaldosCta(@Body() dto: CalcularSaldosCtaDto, @CurrentUser() user: any) {
+    return this.service.calcularSaldosCta(dto, user.usuario);
+  }
+
   // ===== Cierre Table =====
 
   @Get('cierrectable')
@@ -301,6 +359,58 @@ export class ContabilidadController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.removeCierrectable(id, empresaId);
+  }
+
+  // ===== Detalle de Cierre Contable (cocierredet) =====
+
+  @Get('cierredet')
+  @ApiOperation({ summary: 'Listar detalles de cierre contable' })
+  @ApiResponse({ status: 200, description: 'Lista de detalles de cierre obtenida exitosamente' })
+  findAllCierredet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('cocierremaeId') cocierremaeId?: string,
+  ) {
+    return this.service.findAllCierredet(empresaId, cocierremaeId ? Number(cocierremaeId) : undefined);
+  }
+
+  @Get('cierredet/:id')
+  @ApiOperation({ summary: 'Obtener detalle de cierre por ID' })
+  @ApiResponse({ status: 200, description: 'Detalle de cierre encontrado' })
+  @ApiResponse({ status: 404, description: 'Detalle de cierre no encontrado' })
+  findCierredet(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCierredet(id, empresaId);
+  }
+
+  @Post('cierredet')
+  @ApiOperation({ summary: 'Crear detalle de cierre contable' })
+  @ApiResponse({ status: 201, description: 'Detalle de cierre creado exitosamente' })
+  createCierredet(@Body() dto: CreateCocierredetDto, @CurrentUser() user: any) {
+    return this.service.createCierredet(dto, user.usuario);
+  }
+
+  @Put('cierredet/:id')
+  @ApiOperation({ summary: 'Actualizar detalle de cierre contable' })
+  @ApiResponse({ status: 200, description: 'Detalle de cierre actualizado exitosamente' })
+  updateCierredet(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCocierredetDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCierredet(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('cierredet/:id/remove')
+  @ApiOperation({ summary: 'Eliminar detalle de cierre contable (eliminación física)' })
+  @ApiResponse({ status: 200, description: 'Detalle de cierre eliminado exitosamente' })
+  removeCierredet(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCierredet(id, empresaId);
   }
 
   // ===== Repliquidez =====
@@ -434,8 +544,11 @@ export class ContabilidadController {
   @Get('plantillabalancesdet')
   @ApiOperation({ summary: 'Listar plantillas de balances detalle' })
   @ApiResponse({ status: 200, description: 'Lista de plantillas de balances detalle obtenida exitosamente' })
-  findAllPlantillabalancesdet(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllPlantillabalancesdet(empresaId);
+  findAllPlantillabalancesdet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('cocdefbalmaId') cocdefbalmaId?: string,
+  ) {
+    return this.service.findAllPlantillabalancesdet(empresaId, cocdefbalmaId ? Number(cocdefbalmaId) : undefined);
   }
 
   @Get('plantillabalancesdet/:id')
@@ -653,13 +766,37 @@ export class ContabilidadController {
     return this.service.removeCopdamae(id, empresaId);
   }
 
+  @Post('copdamae/:id/contra')
+  @ApiOperation({
+    summary: 'Contra partida: crea una partida espejo en el período vigente y marca la original (S/S + contrapdaId)',
+  })
+  @ApiResponse({ status: 201, description: 'Contra partida creada y postea al mayor' })
+  @ApiResponse({ status: 400, description: 'Período cerrado/inexistente, partida de cierre o no contabilizada' })
+  @ApiResponse({ status: 409, description: 'La partida ya fue contraedida' })
+  contraPartida(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { empresaId?: number },
+    @CurrentUser() user: any,
+  ) {
+    // El frontend (ApiService.post) inyecta empresaId en el BODY;
+    // fallback al empresaId del JWT si viene vacío.
+    const empresaId = Number(body?.empresaId ?? user?.empresaId);
+    if (!empresaId) {
+      throw new BadRequestException('empresaId es requerido');
+    }
+    return this.logica.contraPartida(id, empresaId, user.usuario);
+  }
+
   // ===== Copdadet =====
 
   @Get('copdadet')
   @ApiOperation({ summary: 'Listar copdadet' })
   @ApiResponse({ status: 200, description: 'Lista de copdadet obtenida exitosamente' })
-  findAllCopdadet(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllCopdadet(empresaId);
+  findAllCopdadet(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('copdamaeId') copdamaeId?: string,
+  ) {
+    return this.service.findAllCopdadet(empresaId, copdamaeId ? +copdamaeId : undefined);
   }
 
   @Get('copdadet/:id')
@@ -707,8 +844,17 @@ export class ContabilidadController {
   @Get('movcta')
   @ApiOperation({ summary: 'Listar movimientos de cuenta' })
   @ApiResponse({ status: 200, description: 'Lista de movimientos de cuenta obtenida exitosamente' })
-  findAllMovcta(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllMovcta(empresaId);
+  findAllMovcta(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('anio') anio?: string,
+    @Query('periodo') periodo?: string,
+    @Query('descripcion') descripcion?: string,
+  ) {
+    return this.service.findAllMovcta(empresaId, {
+      anio: anio != null && anio !== '' ? Number(anio) : undefined,
+      periodo: periodo != null && periodo !== '' ? Number(periodo) : undefined,
+      descripcion: descripcion || undefined,
+    });
   }
 
   @Get('movcta/:id')
@@ -739,6 +885,16 @@ export class ContabilidadController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateMovcta(id, empresaId, dto, user.usuario);
+  }
+
+  @Post('movcta/reclasificar')
+  @ApiOperation({ summary: 'Reclasificar cuenta contable masivamente en 6 tablas' })
+  @ApiResponse({ status: 200, description: 'Cuenta reclasificada exitosamente' })
+  reclasificarCuenta(
+    @Body() dto: { ctacontableAnterior: string; ctacontableNueva: string; empresaId: number },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.reclasificarCuenta(dto.ctacontableAnterior, dto.ctacontableNueva, dto.empresaId, user.usuario);
   }
 
   // ===== Nivel Cta =====
@@ -878,6 +1034,55 @@ export class ContabilidadController {
     return this.service.removeImpuestovecinal(id, empresaId);
   }
 
+  // ===== ISR (Retención en la Fuente) =====
+
+  @Get('isr')
+  @ApiOperation({ summary: 'Listar rangos de ISR' })
+  @ApiResponse({ status: 200, description: 'Lista de rangos de ISR obtenida exitosamente' })
+  findAllIsr(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllIsr(empresaId);
+  }
+
+  @Get('isr/:id')
+  @ApiOperation({ summary: 'Obtener rango de ISR por ID' })
+  @ApiResponse({ status: 200, description: 'Rango de ISR encontrado' })
+  @ApiResponse({ status: 404, description: 'Rango de ISR no encontrado' })
+  findIsr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findIsr(id, empresaId);
+  }
+
+  @Post('isr')
+  @ApiOperation({ summary: 'Crear rango de ISR' })
+  @ApiResponse({ status: 201, description: 'Rango de ISR creado exitosamente' })
+  createIsr(@Body() dto: any, @CurrentUser() user: any) {
+    return this.service.createIsr(dto, user.usuario);
+  }
+
+  @Put('isr/:id')
+  @ApiOperation({ summary: 'Actualizar rango de ISR' })
+  @ApiResponse({ status: 200, description: 'Rango de ISR actualizado exitosamente' })
+  updateIsr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateIsr(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('isr/:id/remove')
+  @ApiOperation({ summary: 'Eliminar rango de ISR' })
+  @ApiResponse({ status: 200, description: 'Rango de ISR eliminado exitosamente' })
+  removeIsr(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeIsr(id, empresaId);
+  }
+
   // ===== Tipos Doc Fiscal =====
 
   @Get('tipos-doc-fiscal')
@@ -930,6 +1135,27 @@ export class ContabilidadController {
     return this.logica.contabilizarPartida(dto, user.usuario);
   }
 
+  // ===== PARTIDA INICIAL DE OPERACIONES =====
+
+  @Post('partida-inicial')
+  @ApiOperation({ summary: 'Crear la partida inicial de operaciones en el período contable abierto' })
+  @ApiResponse({ status: 201, description: 'Partida inicial creada y contabilizada en el período abierto' })
+  @ApiResponse({ status: 400, description: 'Sin período abierto, partida no cuadrada o cuenta inexistente/no operable' })
+  @ApiResponse({ status: 409, description: 'La partida inicial ya fue cargada para ese período' })
+  crearPartidaInicial(
+    @Body() dto: CrearPartidaInicialDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.crearPartidaInicial(
+      {
+        ...dto,
+        empresaId: user.empresaId,
+        Idsucursal: dto.Idsucursal ?? 1,
+      },
+      user.usuario,
+    );
+  }
+
   // ===== CIERRE CONTABLE =====
 
   @Post('cierrectable/realizar')
@@ -943,6 +1169,17 @@ export class ContabilidadController {
     return this.logica.realizarCierre(dto, user.usuario);
   }
 
+  @Post('cierrectable/revertir')
+  @ApiOperation({ summary: 'Revertir cierre de per�odo contable (reapertura)' })
+  @ApiResponse({ status: 201, description: 'Cierre revertido y per�odo reabierto' })
+  @ApiResponse({ status: 400, description: 'Per�odo no cerrado, o existen per�odos/partidas posteriores' })
+  revertirCierre(
+    @Body() dto: CierreContableDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.logica.revertirCierre(dto, user.usuario);
+  }
+
   // ===== REPORTES CONTABLES =====
 
   @Post('reportes/balance-comprobacion')
@@ -950,6 +1187,17 @@ export class ContabilidadController {
   @ApiResponse({ status: 200, description: 'Balance generado exitosamente' })
   generarBalanceComprobacion(@Body() dto: ReporteContableDto) {
     return this.logica.generarBalanceComprobacion(dto);
+  }
+
+  @Post('reportes/estado-resultado')
+  @ApiOperation({
+    summary:
+      'Generar Estado de Resultado (UNA variante por vez: P=período, A=acumulado, N=año anterior)',
+  })
+  @ApiResponse({ status: 200, description: 'Estado de resultado generado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Período o año inválidos' })
+  generarEstadoResultado(@Body() dto: ReporteEstadoResultadoDto) {
+    return this.logica.generarEstadoResultado(dto);
   }
 
   @Post('reportes/libro-diario')
@@ -964,6 +1212,22 @@ export class ContabilidadController {
   @ApiResponse({ status: 200, description: 'Libro mayor generado exitosamente' })
   generarLibroMayor(@Body() dto: ReporteContableDto) {
     return this.logica.generarLibroMayor(dto);
+  }
+
+  @Post('reportes/balance-dinamico')
+  @ApiOperation({ summary: 'Generar Reporte de Balances Dinámico (parametrizado por plantilla)' })
+  @ApiResponse({ status: 200, description: 'Reporte de balances dinámico generado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Plantilla de balance no encontrada' })
+  generarBalanceDinamico(@Body() dto: ReporteBalanceDinamicoDto) {
+    return this.service.generarBalanceDinamico(dto);
+  }
+
+  @Post('reportes/balance-financiero')
+  @ApiOperation({ summary: 'Generar Balance Financiero (jerárquico con parciales y acumulados)' })
+  @ApiResponse({ status: 200, description: 'Balance financiero generado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Período o año inválidos' })
+  generarBalanceFinanciero(@Body() dto: ReporteContableDto) {
+    return this.service.generarBalanceFinanciero(dto);
   }
 
   // ===== INTEGRACIÓN CON MÓDULOS =====
@@ -1053,5 +1317,55 @@ export class ContabilidadController {
     @CurrentUser() user: any,
   ) {
     return this.logica.contabilizarBanco({ bcomovimientosId: dto.documentoId }, empresaId, Idsucursal, user.usuario);
+  }
+
+  @Post('reconstruir-coctamov')
+  @ApiOperation({ summary: 'Truncar y reconstruir coctamov desde fuentes (facturas, CxC, CxP, bancos)' })
+  @ApiResponse({ status: 201, description: 'Reconstrucción ejecutada con resumen de fases' })
+  reconstruirCoctamov(@Body() dto: ReconstruirCoctamovDto, @CurrentUser() user: any) {
+    return this.logica.reconstruirCoctamov(dto.empresaId, dto.Idsucursal || 1, user.usuario);
+  }
+
+  // ===== Carteras Contables =====
+
+  @Get('carteras')
+  @ApiOperation({ summary: 'Listar carteras contables' })
+  @ApiResponse({ status: 200, description: 'Lista de carteras obtenida exitosamente' })
+  findAllCarteras(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCarteras(empresaId);
+  }
+
+  @Get('carteras/:id')
+  @ApiOperation({ summary: 'Obtener cartera contable por ID' })
+  @ApiResponse({ status: 200, description: 'Cartera encontrada' })
+  @ApiResponse({ status: 404, description: 'Cartera no encontrada' })
+  findCartera(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findCartera(id, empresaId);
+  }
+
+  @Post('carteras')
+  @ApiOperation({ summary: 'Crear cartera contable' })
+  @ApiResponse({ status: 201, description: 'Cartera creada exitosamente' })
+  createCartera(@Body() dto: CreateTcocarterasDto, @CurrentUser() user: any) {
+    return this.service.createCartera(dto, user.usuario);
+  }
+
+  @Put('carteras/:id')
+  @ApiOperation({ summary: 'Actualizar cartera contable' })
+  @ApiResponse({ status: 200, description: 'Cartera actualizada exitosamente' })
+  updateCartera(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateTcocarterasDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCartera(id, empresaId, dto, user.usuario);
+  }
+
+  @Put('carteras/:id/remove')
+  @ApiOperation({ summary: 'Eliminar cartera contable (soft delete)' })
+  @ApiResponse({ status: 200, description: 'Cartera eliminada exitosamente' })
+  removeCartera(@Param('id', ParseIntPipe) id: number, @Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.removeCartera(id, empresaId);
   }
 }

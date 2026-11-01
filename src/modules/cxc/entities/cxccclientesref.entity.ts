@@ -58,10 +58,10 @@ export class CxccClientesRef {
   @Column({ nullable: true })
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

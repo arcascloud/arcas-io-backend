@@ -7,9 +7,11 @@ import { InventarioService } from './inventario.service';
 import { KardexService, KardexEntradaDto, KardexSalidaDto } from './kardex.service';
 import { CreateProductoDto, UpdateProductoDto } from './dto/producto.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
+import { CreateDeptoDto, UpdateDeptoDto } from './dto/depto.dto';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Inventario')
 @ApiBearerAuth()
@@ -39,10 +41,15 @@ export class InventarioController {
   }
 
   @Get('tienda/productos')
-  @ApiOperation({ summary: 'Productos para tienda virtual (con imagen y existencia)' })
+  @Public()
+  @ApiOperation({ summary: 'Productos para tienda virtual (con imagen y existencia). Público: sin sesión usa la empresa default' })
   @ApiResponse({ status: 200, description: 'Productos con imagen y stock' })
-  findProductosTienda(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findProductosTienda(empresaId);
+  findProductosTienda(
+    @Query('empresaId') empresaId?: string,
+    @Query('origen') origen?: string,
+  ) {
+    const emp = empresaId ? parseInt(empresaId, 10) : undefined;
+    return this.service.findProductosTienda(emp, origen);
   }
 
   @Get('productos/paginado')
@@ -90,6 +97,7 @@ export class InventarioController {
   }
 
   @Get('categorias')
+  @Public()
   @ApiOperation({ summary: 'Listar categorías' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllCategorias(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -123,6 +131,43 @@ export class InventarioController {
     @CurrentUser() user: any,
   ) {
     return this.service.updateCategoria(id, empresaId, dto, user.usuario);
+  }
+
+  @Get('deptos')
+  @Public()
+  @ApiOperation({ summary: 'Listar departamentos de inventario' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllDeptos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllDeptosInv(empresaId);
+  }
+
+  @Get('deptos/:id')
+  @ApiOperation({ summary: 'Obtener departamento de inventario' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findDepto(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findDepto(id, empresaId);
+  }
+
+  @Post('deptos')
+  @ApiOperation({ summary: 'Crear departamento de inventario' })
+  @ApiResponse({ status: 201, description: 'Creado' })
+  createDepto(@Body() dto: CreateDeptoDto, @CurrentUser() user: any) {
+    return this.service.createDepto(dto, user.usuario);
+  }
+
+  @Put('deptos/:id')
+  @ApiOperation({ summary: 'Actualizar departamento de inventario' })
+  @ApiResponse({ status: 200, description: 'Actualizado' })
+  updateDepto(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateDeptoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateDepto(id, empresaId, dto, user.usuario);
   }
 
   @Get('marcas')
@@ -528,6 +573,17 @@ export class InventarioController {
     return this.service.findAllProveedores(empresaId);
   }
 
+  @Get('proveedores/dni-existe')
+  @ApiOperation({ summary: 'Verificar si el DNI ya existe en proveedores de la empresa (llave maestra)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  verificarDniProveedor(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('dni') dni: string,
+    @Query('excluirId') excluirId?: string,
+  ) {
+    return this.service.verificarDniProveedor(empresaId, dni, excluirId ? Number(excluirId) : undefined);
+  }
+
   @Get('proveedores/:id')
   @ApiOperation({ summary: 'Obtener proveedor' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -755,6 +811,7 @@ export class InventarioController {
   // ===== ProductoImg =====
 
   @Get('productos-img')
+  @Public()
   @ApiOperation({ summary: 'Listar imágenes de productos' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllProdImg(

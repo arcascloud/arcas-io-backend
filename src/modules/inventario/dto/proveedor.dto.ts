@@ -2,9 +2,9 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsDateString } from
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProveedorDto {
-  @ApiProperty({ description: 'Número de proveedor' })
-  @IsString() @IsNotEmpty()
-  nroproveedor: string;
+  @ApiProperty({ required: false, description: 'Numero de proveedor (lo asigna el backend desde ttipoparametros)' })
+  @IsString() @IsOptional()
+  nroproveedor?: string;
 
   @ApiProperty({ description: 'Nombres del proveedor' })
   @IsString() @IsNotEmpty()

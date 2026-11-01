@@ -24,12 +24,8 @@ export class TCoTipoDocumentoFiscal {
   moduloId: number;
 
   @ApiProperty()
-  @Column()  // va ser para vincular la cuenta contable que va afectar el documento
-  cuentacontableId: number;
-
-  @ApiProperty()
-  @Column() // en el caso de las facturacion, se puede usar ticket para llever un correlativo de preregistro
-  nrocorrelativo: number;
+  @Column()  // va ser para vincular la plantilla contable que va afectar el documento
+  plantillapdamaeId: number;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
@@ -40,11 +36,11 @@ export class TCoTipoDocumentoFiscal {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

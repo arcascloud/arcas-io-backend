@@ -1,13 +1,41 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as express from 'express';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { cargarEnvTodoPago } from './modules/todopago/todopago.env';
+
+/**
+ * Límite del cuerpo de la petición (JSON / urlencoded / raw / text).
+ *
+ * El default de Express es 100 KB, y el ERP sube imágenes de productos en
+ * base64 y fotos para el OCR que pesan varios megas: esas peticiones se
+ * rechazaban con `PayloadTooLargeError: entity.too.large` (413).
+ */
+const BODY_LIMIT = '15mb';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `bodyParser: false` desinstala los parsers por defecto (100 KB) para que
+  // podamos registrar los mismos con el límite ampliado. Si no, Express los
+  // instala antes que nosotros y el primer parser se queda con el stream.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  // Variables TODOPAGO_*/PUBLIC_URL del .env — DESPUÉS de crear la app para no
+  // alterar el secreto JWT (JwtModule/JwtStrategy ya capturaron el suyo).
+  cargarEnvTodoPago();
+
+  app.use(cookieParser());
+  app.use(express.json({ limit: BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+  app.use(express.raw({ limit: BODY_LIMIT }));
+  app.use(express.text({ limit: BODY_LIMIT }));
 
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: '*' });
+  app.enableCors({
+    origin: ['http://localhost:4200', 'http://localhost:3000'],
+    credentials: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()
@@ -39,3 +67,4 @@ async function bootstrap() {
   console.log(`Swagger UI: http://localhost:${port}/api/docs`);
 }
 bootstrap();
+

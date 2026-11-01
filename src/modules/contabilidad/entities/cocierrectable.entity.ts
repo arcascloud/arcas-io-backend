@@ -1,10 +1,10 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('cocierrectable')
+@Entity('cocierremae')
 export class Cocierrectable {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'cierrectableId' })
+  @PrimaryGeneratedColumn({ name: 'cierremaeId' })
   cierrectableId: number;
 
   @ApiProperty({ required: false })
@@ -32,11 +32,11 @@ export class Cocierrectable {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

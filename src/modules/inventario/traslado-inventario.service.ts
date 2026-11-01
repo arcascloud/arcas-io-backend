@@ -1,12 +1,15 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { TInvTrasladoMae } from './entities/invtrasladomae.entity';
 import { TInvTrasladoDet } from './entities/invtrasladodet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { TinvExistencia } from './entities/existencia.entity';
 import { KardexService } from './kardex.service';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
+import { CorrelativosService } from '../../shared/correlativos.service';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { Tusuarios } from '../users/entities/usuario.entity';
 
 @Injectable()
 export class TrasladoInventarioService {
@@ -15,9 +18,24 @@ export class TrasladoInventarioService {
     @InjectRepository(TInvTrasladoDet) private readonly detRepo: Repository<TInvTrasladoDet>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    @InjectRepository(Tusuarios) private readonly usuariosRepo: Repository<Tusuarios>,
+    private readonly dataSource: DataSource,
     private readonly kardexService: KardexService,
     private readonly fechaSistema: FechaSistemaService,
+    private readonly correlativos: CorrelativosService,
   ) {}
+
+  /**
+   * Correlativo de traslado: ttipoparametros (field='nrotraslado'),
+   * localizado por Idsucursal + empresaId del usuario logueado, incrementando
+   * valor = valor + 1 de forma atómica (UPDATE + LAST_INSERT_ID en la misma
+   * conexión) y devolviendo el nuevo número como string (nroreferencia varchar).
+   */
+  private async siguienteNroReferencia(usuario: string, empresaId: number): Promise<string> {
+    // Sin pad: la columna varchar guarda el número tal cual (compatibilidad con datos existentes)
+    return String(await this.correlativos.siguiente('nrotraslado', empresaId, usuario));
+  }
 
   async findAllMae(empresaId: number) {
     return this.maeRepo.find({ where: { empresaId } as any, order: { fecharegistro: 'DESC' } as any });
@@ -44,7 +62,8 @@ export class TrasladoInventarioService {
   }
 
   async createMae(dto: any, usuario: string) {
-    const nroreferencia = dto.nroreferencia || this.generarNroReferencia();
+    // Correlativo automático desde ttipoparametros (field='nrotraslado')
+    const nroreferencia = await this.siguienteNroReferencia(usuario, dto.empresaId);
     const mae = this.maeRepo.create({
       bodegaOrigenId: dto.bodegaOrigenId,
       bodegaDestinoId: dto.bodegaDestinoId,
@@ -54,6 +73,8 @@ export class TrasladoInventarioService {
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: fecha impuesta por el backend (no el reloj de MySQL)
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.maeRepo.save(mae);
   }
@@ -118,6 +139,8 @@ export class TrasladoInventarioService {
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: misma fecha que el maestro del traslado
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.detRepo.save(det);
   }
@@ -189,15 +212,5 @@ export class TrasladoInventarioService {
     await this.maeRepo.save(mae);
 
     return { message: 'Traslado anulado' };
-  }
-
-  private generarNroReferencia(): string {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    const ms = String(now.getMilliseconds()).padStart(3, '0');
-    return `${y}${m}${d}${s}${ms}`;
   }
 }

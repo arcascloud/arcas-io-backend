@@ -3,22 +3,14 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('proveedordir')
-export class TCxpProveedorDir {
+@Entity('tpltipoempleado')
+export class TplTipoEmpleado {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'proveedordireccionId' })
-  proveedordireccionId: number;
-
-  @ApiProperty()
-  @Column()
-  proveedorId: number;
-
-  @ApiProperty()
-  @Column({ type: 'int' })
-  direccionId: number;
+  @PrimaryGeneratedColumn({ name: 'tipoempleadoId' })
+  tipoempleadoId: number;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   descripcion: string;
 
   @ApiProperty()
@@ -29,12 +21,12 @@ export class TCxpProveedorDir {
   @Column()
   empresaId: number;
 
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

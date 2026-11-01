@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FechaSistemaModule } from './shared/fecha-sistema.module';
+import { CorrelativosModule } from './shared/correlativos.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CompaniesModule } from './modules/companies/companies.module';
@@ -14,6 +15,8 @@ import { PlanillaModule } from './modules/planilla/planilla.module';
 import { CxcModule } from './modules/cxc/cxc.module';
 import { CxpModule } from './modules/cxp/cxp.module';
 import { FacturacionModule } from './modules/facturacion/facturacion.module';
+import { TodopagoModule } from './modules/todopago/todopago.module';
+import { CxcMovimientoSubscriber } from './modules/cxc/entities/cxcmovimiento.subscriber';
 
 @Module({
   imports: [
@@ -26,8 +29,11 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
       database: 'arcasdb',
       autoLoadEntities: true,
       synchronize: false,
+      // Correlativo de movimientos CxC (ttipoparametros cxc_nromovimiento)
+      subscribers: [CxcMovimientoSubscriber],
     }),
     FechaSistemaModule,
+    CorrelativosModule,
     AuthModule,
     UsersModule,
     CompaniesModule,
@@ -41,6 +47,7 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
     CxcModule,
     CxpModule,
     FacturacionModule,
+    TodopagoModule,
   ],
 })
 export class AppModule {}

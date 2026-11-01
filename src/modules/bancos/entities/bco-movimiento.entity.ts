@@ -17,7 +17,7 @@ export class TbcoMovimiento {
   @Column()
   moduloId: number;
 
-  @Column({ type: 'enum', enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], default: 'DEPOSITO' })
+  @Column({ type: 'enum', enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], default: 'DEPOSITO' })
   tipomov: string;
 
   @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
@@ -56,10 +56,10 @@ export class TbcoMovimiento {
   @Column()
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

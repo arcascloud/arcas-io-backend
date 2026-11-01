@@ -3,8 +3,8 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('plplempleados')
-export class PlPlEmpleados {
+@Entity('plempleados')
+export class PlEmpleados {
   @ApiProperty()
   @PrimaryGeneratedColumn({ name: 'empleadoId' })
   empleadoId: number;
@@ -27,7 +27,7 @@ export class PlPlEmpleados {
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 20 })
-  dni: string;
+  nrodocumento: string;
 
   @ApiProperty({ required: false })
   @Column({ type: 'datetime', nullable: true })
@@ -62,7 +62,7 @@ export class PlPlEmpleados {
   celular: string;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 20 })
+  @Column({ type: 'varchar', length: 30 })
   email: string;
 
   @ApiProperty({ required: false })
@@ -72,6 +72,14 @@ export class PlPlEmpleados {
   @ApiProperty({ required: false })
   @Column({ type: 'int', nullable: true })
   puestoId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'int', nullable: true })
+  deptoId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'int', nullable: true })
+  jefeId: number;
 
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
@@ -97,9 +105,21 @@ export class PlPlEmpleados {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
 
+  @ApiProperty({ description: 'Jornada: D=Diurna (8h), M=Mixta (7h), N=Nocturna (6h)' })
+  @Column({ type: 'enum', enum: ['D', 'M', 'N'], default: 'D' })
+  sn_jornada: string;
+
   @ApiProperty()
   @Column({ type: 'int' })
   tipoempId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fecha_alta: Date;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fecha_baja: Date;
 
   @ApiProperty()
   @Column({ type: 'int' })
@@ -110,11 +130,11 @@ export class PlPlEmpleados {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

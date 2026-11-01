@@ -1,8 +1,8 @@
-﻿import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { TPosCorrelativos } from './entities/poscorrelativos.entity';
+import { TCaiAutorizado } from './entities/cai-autorizado.entity';
 import { TPosFacMae } from './entities/posfacmae.entity';
 import { TPosFacDet } from './entities/posfacdet.entity';
 import { TPosFacMaeAnul } from './entities/posfacmaeanul.entity';
@@ -18,7 +18,6 @@ import { TPosDescuentos } from './entities/tposdescuentos.entity';
 import { TPosFacCaja } from './entities/posfaccaja.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { CxcCliente } from '../cxc/entities/cxccliente.entity';
-import { CxccClientesDir } from '../cxc/entities/cxccclientesdir.entity';
 import {
   CreatePosFacMaeDto, UpdatePosFacMaeDto,
   CreatePosCotMaeDto, UpdatePosCotMaeDto,
@@ -35,13 +34,23 @@ import { TImpresora } from '../companies/entities/impresoras.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
-import { FechaSistemaService } from '../../shared/fecha-sistema.service';
+import { TtipoImpuesto } from '../parametros/entities/impuesto.entity';
+import { Tusuarios } from '../users/entities/usuario.entity';
+import { TusuarioInfo } from '../users/entities/usuario-info.entity';
+import { TusuarioCaja } from '../parametros/entities/usuario-caja.entity';
+import { Tsucursal } from '../sucursales/entities/sucursal.entity';
+import { TCai } from '../companies/entities/tcai.entity';
+import { FechaSistemaService, TABLAS_FECHAREGISTRO } from '../../shared/fecha-sistema.service';
+import { CorrelativosService } from '../../shared/correlativos.service';
 import { getTransporter, getMailFrom } from '../../config/mail';
+
+/** ttipoformapago.formapagoId de 'TodoPagoLink' (pago por link — se confirma vía /todopago/confirmar) */
+const FORMAPAGO_TODOPAGO = 6;
 
 @Injectable()
 export class FacturacionService {
   constructor(
-    @InjectRepository(TPosCorrelativos) private readonly correlativosRepo: Repository<TPosCorrelativos>,
+    @InjectRepository(TCaiAutorizado) private readonly correlativosRepo: Repository<TCaiAutorizado>,
     @InjectRepository(TPosFacMae) private readonly facMaeRepo: Repository<TPosFacMae>,
     @InjectRepository(TPosFacDet) private readonly facDetRepo: Repository<TPosFacDet>,
     @InjectRepository(TPosFacMaeAnul) private readonly facMaeAnulRepo: Repository<TPosFacMaeAnul>,
@@ -57,18 +66,24 @@ export class FacturacionService {
     @InjectRepository(TPosFacCaja) private readonly facCajaRepo: Repository<TPosFacCaja>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
     @InjectRepository(CxcCliente) private readonly clienteRepo: Repository<CxcCliente>,
-    @InjectRepository(CxccClientesDir) private readonly clienteDirRepo: Repository<CxccClientesDir>,
     @InjectRepository(Tempresas) private readonly empresaRepo: Repository<Tempresas>,
     @InjectRepository(TempresasDet) private readonly empresaDetRepo: Repository<TempresasDet>,
     @InjectRepository(TImpresora) private readonly impRepo: Repository<TImpresora>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
     @InjectRepository(TproductoImg) private readonly productoImgRepo: Repository<TproductoImg>,
+    @InjectRepository(TtipoImpuesto) private readonly impuestoRepo: Repository<TtipoImpuesto>,
+    @InjectRepository(Tusuarios) private readonly usuariosRepo: Repository<Tusuarios>,
+    @InjectRepository(TusuarioInfo) private readonly usuarioInfoRepo: Repository<TusuarioInfo>,
+    @InjectRepository(TusuarioCaja) private readonly usuarioCajaRepo: Repository<TusuarioCaja>,
+    @InjectRepository(Tsucursal) private readonly sucursalRepo: Repository<Tsucursal>,
+    @InjectRepository(TCai) private readonly caiRepo: Repository<TCai>,
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     @Inject(forwardRef(() => ContabilidadLogicaService)) private readonly contabilidadService: ContabilidadLogicaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly fechaSistema: FechaSistemaService,
+    private readonly correlativos: CorrelativosService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -102,10 +117,20 @@ export class FacturacionService {
     dto: any,
     currentUser: string,
   ): Promise<T> {
-    const entity = repo.create({
-      ...dto,
-      usuarioCreated: currentUser,
-    });
+    const datos: any = { ...dto, usuarioCreated: currentUser };
+    // Reglas 1 y 4: en las tablas afectadas (posfacmae, posfacdet,
+    // posfacdetanul, posfaccaja, posfacmov, posfacmaeanul, poscotmae,
+    // poscotdet, pospedmae, pospeddet), `fecharegistro` lo impone el backend
+    // (snapshot tfecma.fechasistema con rango vigente, o tempresas.fechasistema
+    // sin él). tcai_autorizado, poscbomae/det, tpospreciovtas, tposdescuentos
+    // no están en la lista → el if no entra.
+    if (TABLAS_FECHAREGISTRO.has(repo.metadata.tableName)) {
+      datos.fecharegistro = await this.fechaSistema.obtenerFechaRegistro(
+        currentUser,
+        dto.empresaId,
+      );
+    }
+    const entity = repo.create(datos);
     const saved = await repo.save(entity);
     return Array.isArray(saved) ? saved[0] : saved;
   }
@@ -120,8 +145,9 @@ export class FacturacionService {
     entityName: string,
   ) {
     const entity = await this.findOneById(repo, idField, id, empresaId, entityName);
+    const { fecharegistro, ...cambios } = dto ?? {}; // nunca se re-estampa en un PUT
     const now = await this.fechaSistema.getFecha(empresaId);
-    Object.assign(entity, dto, {
+    Object.assign(entity, cambios, {
       usuarioUpdated: currentUser,
       fechaUpdated: now,
     });
@@ -148,20 +174,34 @@ export class FacturacionService {
     return this.findAllByEmpresa(this.correlativosRepo, empresaId);
   }
 
-  async findCorrelativo(poscorrelativosId: number, empresaId: number) {
-    return this.findOneById(this.correlativosRepo, 'poscorrelativosId', poscorrelativosId, empresaId, 'Correlativo');
+  async findCorrelativo(caiAutorizadoId: number, empresaId: number) {
+    return this.findOneById(this.correlativosRepo, 'caiAutorizadoId', caiAutorizadoId, empresaId, 'Correlativo');
   }
 
   async createCorrelativo(dto: any, currentUser: string) {
+    // tcai_autorizado.caiId es NOT NULL: asignar el CAI activo de la empresa si no viene
+    if (dto && !dto.caiId && dto.empresaId) {
+      const caiActivo = await this.caiRepo.findOne({
+        where: { empresaId: dto.empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<TCai>,
+        order: { caiId: 'DESC' } as any,
+      });
+      if (!caiActivo) throw new BadRequestException('La empresa no tiene un CAI activo (tcai)');
+      dto.caiId = caiActivo.caiId;
+    }
     return this.createEntity(this.correlativosRepo, dto, currentUser);
   }
 
-  async updateCorrelativo(poscorrelativosId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.correlativosRepo, 'poscorrelativosId', poscorrelativosId, empresaId, dto, currentUser, 'Correlativo');
+  async updateCorrelativo(caiAutorizadoId: number, empresaId: number, dto: any, currentUser: string) {
+    return this.updateEntity(this.correlativosRepo, 'caiAutorizadoId', caiAutorizadoId, empresaId, dto, currentUser, 'Correlativo');
   }
 
-  async findAllFacturas(empresaId: number) {
-    return this.findAllByEmpresaOrdered(this.facMaeRepo, empresaId, 'fecharegistro');
+  async findAllFacturas(empresaId: number, usuario?: string) {
+    const qb = this.facMaeRepo.createQueryBuilder('f')
+      .where('f.empresaId = :empresaId', { empresaId });
+    if (usuario) {
+      qb.andWhere('f.usuarioCreated = :usuario', { usuario });
+    }
+    return qb.orderBy('f.fecharegistro', 'DESC').getMany();
   }
 
   async findFactura(facturaId: number, empresaId: number) {
@@ -176,13 +216,6 @@ export class FacturacionService {
       }
     }
 
-    if (!factura.direccion && (factura as any).clienteId) {
-      const dirs = await this.clienteDirRepo.find({
-        where: { clienteid: (factura as any).clienteId, empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<CxccClientesDir>,
-      });
-      (factura as any).direccion = dirs.length > 0 ? dirs[0].descripcion || 'N/A' : 'N/A';
-    }
-
     return factura;
   }
 
@@ -195,12 +228,45 @@ export class FacturacionService {
     const productos = productoIds.length
       ? await this.productoRepo.find({ where: productoIds.map((id) => ({ produtoId: id, empresaId } as any)) })
       : [];
-    const productosMap = new Map(productos.map((p) => [p.produtoId, p.descripcion]));
+    const productosMap = new Map(productos.map((p) => [p.produtoId, p]));
 
     const detalles = detallesRaw.map((d) => ({
       ...d,
-      descripcion: productosMap.get(d.productoId) || d.codbarra || `#${d.productoId}`,
+      descripcion: productosMap.get(d.productoId)?.descripcion || d.codbarra || `#${d.productoId}`,
     }));
+
+    // ----- Desglose fiscal por tasa (tproducto.impuestoId -> ttipoimpuestos.porcentaje) -----
+    // Regla (2026-10): gravado15/gravado18 = SUMA DEL ISV cobrado por tasa (cuadra con
+    // Subtotal + gravado = Total); excento = base (subTotal - impuesto) de líneas con tasa 0;
+    // exonerado = IVA calculado NO cobrado cuando sn_excenta='S'.
+    const catImpuestos = await this.impuestoRepo.find({
+      where: { empresaId } as unknown as FindOptionsWhere<TtipoImpuesto>,
+    });
+    const tasaPorImpuesto = new Map<number, number>(
+      catImpuestos.map((i) => [i.impuestoId, Number(i.porcentaje) || 0]),
+    );
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    const excenta = factura.sn_excenta === 'S';
+    let exonerado = 0;
+    let excento = 0;
+    let gravado15 = 0;
+    let gravado18 = 0;
+    for (const d of detallesRaw) {
+      const imp = Number(d.impuesto) || 0;
+      const base = (Number(d.subTotal) || 0) - imp;
+      const impId = productosMap.get(d.productoId)?.impuestoId;
+      let tasa = impId != null && tasaPorImpuesto.has(Number(impId)) ? tasaPorImpuesto.get(Number(impId))! : -1;
+      if (tasa < 0) tasa = imp > 0 ? 15 : 0; // sin catálogo: clasificar por el ISV de la línea
+      if (tasa === 0) {
+        excento += base;
+      } else if (excenta) {
+        exonerado += (base * tasa) / 100;
+      } else if (Math.round(tasa) >= 18) {
+        gravado18 += imp;
+      } else {
+        gravado15 += imp;
+      }
+    }
 
     const empresa = await this.empresaRepo.findOne({ where: { empresaId } });
     const empresaDet = await this.empresaDetRepo.find({ where: { empresaId, sn_activo: 'S' } });
@@ -208,46 +274,163 @@ export class FacturacionService {
     const rtn = empresaDet.find((d) => d.tipo === 'RTN')?.descripcion || null;
     const telefono = empresaDet.find((d) => d.tipo === 'TELEFONO')?.descripcion || null;
     const direccion = empresaDet.find((d) => d.tipo === 'DIRECCION')?.descripcion || null;
+    const correo = empresaDet.find((d) => d.tipo === 'CORREO')?.descripcion || null;
 
-    // Buscar correlativo CAI para esta factura/sucursal
-    const corr = await this.correlativosRepo.findOne({
-      where: { empresaId, Idsucursal: factura.Idsucursal || 0 } as unknown as FindOptionsWhere<TPosCorrelativos>,
-      order: { poscorrelativosId: 'DESC' },
-    });
+    // Buscar correlativo CAI (tcai_autorizado): PRIMERO por el ID congelado en la
+    // factura (trazabilidad exacta del rango usado al emitir); fallback al vigente de la sucursal
+    let corr: TCaiAutorizado | null = null;
+    if (factura.caiAutorizadoId) {
+      corr = await this.correlativosRepo.findOne({
+        where: { caiAutorizadoId: factura.caiAutorizadoId } as unknown as FindOptionsWhere<TCaiAutorizado>,
+      });
+    }
+    if (!corr) {
+      corr = await this.correlativosRepo.findOne({
+        where: { empresaId, Idsucursal: factura.Idsucursal || 0 } as unknown as FindOptionsWhere<TCaiAutorizado>,
+        order: { caiAutorizadoId: 'DESC' },
+      });
+    }
 
-    // CAI desde tempresasdet (tipo='CAI')
-    const caiDet = empresaDet.find((d) => d.tipo === 'CAI');
-    const caiCodigo = caiDet?.descripcion || null;
+    // CAI desde tcai (control independiente; fallback tempresasdet legacy tipo='CAI')
+    let caiCodigo: string | null = null;
+    if (corr?.caiId) {
+      const caiRow = await this.caiRepo.findOne({ where: { caiId: corr.caiId } as unknown as FindOptionsWhere<TCai> });
+      caiCodigo = caiRow?.cai || null;
+    }
+    if (!caiCodigo) {
+      const caiActivo = await this.caiRepo.findOne({
+        where: { empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<TCai>,
+        order: { caiId: 'DESC' } as any,
+      });
+      caiCodigo = caiActivo?.cai || null;
+    }
+    if (!caiCodigo) {
+      caiCodigo = empresaDet.find((d) => d.tipo === 'CAI')?.descripcion || null;
+    }
+
+    // ----- Cajero (tusuarios) + TPV (tusuarios_caja.codigo) del usuario que emitió -----
+    const usuarioTicket = factura.usuarioCreated || null;
+    const cajeroRow = usuarioTicket
+      ? await this.usuariosRepo.findOne({ where: { usuario: usuarioTicket } as unknown as FindOptionsWhere<Tusuarios> })
+      : null;
+    const cajaRow = usuarioTicket
+      ? await this.usuarioCajaRepo.findOne({
+          where: { usuario: usuarioTicket, empresaId } as unknown as FindOptionsWhere<TusuarioCaja>,
+          order: { id: 'ASC' } as any,
+        })
+      : null;
+
+    // ----- Sucursal de la factura (tsucursal: descripción, dirección, teléfonos) -----
+    const sucursalRow = factura.Idsucursal
+      ? await this.sucursalRepo.findOne({
+          where: { idsucursal: factura.Idsucursal, empresaId } as unknown as FindOptionsWhere<Tsucursal>,
+        })
+      : null;
 
     return {
       factura,
       detalles,
       pagos,
+      cajero: cajeroRow
+        ? {
+            usuario: cajeroRow.usuario,
+            nombre: cajeroRow.nombre || '',
+            apellidos: cajeroRow.apellidos || '',
+          }
+        : null,
+      tpv: cajaRow?.codigo ?? null,
+      impuestos: {
+        exonerado: r2(exonerado),
+        excento: r2(excento),
+        gravado15: r2(gravado15),
+        gravado18: r2(gravado18),
+      },
       empresa: {
         nombre: empresa?.descripcion || 'EMPRESA',
         rtn,
         telefono,
         direccion,
+        correo,
         mensajeFactura: empresa?.msjfactura || '',
         mensajeDevolucion: empresa?.msjdevfactura || '',
       },
+      sucursal: sucursalRow
+        ? {
+            descripcion: sucursalRow.descripcion || '',
+            direccion: sucursalRow.direccion || '',
+            telefono1: sucursalRow.telefono1 || '',
+            telefono2: sucursalRow.telefono2 || '',
+          }
+        : null,
       correlativo: corr ? {
         cai: caiCodigo || '',
         rangoDesde: corr.rangoDesde || '',
         rangoHasta: corr.rangoHasta || '',
+        fechaLimite: corr.fechaLimite || null,
       } : (caiCodigo ? {
         cai: caiCodigo,
         rangoDesde: '',
         rangoHasta: '',
+        fechaLimite: null,
       } : null),
     };
   }
 
+  /**
+   * Parámetro por defecto de facturación (bodega/caja) desde ttipoparametros.
+   * Busca primero en módulo 3 (facturación); si no existe, en cualquier módulo
+   * de la empresa (bodegaId vive en módulo 1, cajaId en módulo 4). Fallback numérico.
+   */
+  private async getParamDefecto(empresaId: number, field: string, def: number): Promise<number> {
+    try {
+      const base = { empresaId, field, sn_activo: 'S' } as any;
+      let row = await this.tipoParametroRepo.findOne({ where: { ...base, moduloId: 3 } });
+      if (!row) row = await this.tipoParametroRepo.findOne({ where: base });
+      return row ? Number(row.valor) || def : def;
+    } catch {
+      return def;
+    }
+  }
+
+  /**
+   * Bodega por defecto del usuario (regla de negocio):
+   * tusuario (usuario + empresaId) → Idsucursal → tsucursal (Idsucursal + empresaId) → bodegaId
+   */
+  private async getBodegaPorUsuario(usuario: string, empresaId: number): Promise<number | null> {
+    try {
+      const user = await this.usuariosRepo.findOne({ where: { usuario, empresaId } as any });
+      if (!user?.Idsucursal) return null;
+      const suc = await this.sucursalRepo.findOne({
+        where: { idsucursal: user.Idsucursal, empresaId } as any,
+      });
+      return suc?.bodegaId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
+    // Validar que el período esté abierto
+    const fechaDoc = await this.fechaSistema.getFecha(dto.empresaId);
+    await this.contabilidadService.validarPeriodoAbierto(dto.empresaId, fechaDoc);
+
+    // Bodega por defecto: la sucursal del usuario (tsucursal.bodegaId); si no, parámetro con fallback
+    if (!dto.bodegaId) {
+      dto.bodegaId =
+        (await this.getBodegaPorUsuario(currentUser, dto.empresaId)) ??
+        (await this.getParamDefecto(dto.empresaId, 'bodegaId', 1));
+    }
+    // Caja por defecto: parámetro de facturación con fallback (checkout hace lo mismo)
+    if (!dto.cajaId) dto.cajaId = await this.getParamDefecto(dto.empresaId, 'cajaId', 1);
+
     let caiInfo: { rangoDesde?: string; rangoHasta?: string; disponible?: number; alerta?: string } | undefined;
     if (!dto.nrofactura) {
       const result = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
       dto.nrofactura = result.nrofactura;
+      // Trazabilidad: registrar el correlativo CAI del que proviene el número
+      if (result.caiAutorizadoId != null) {
+        dto.caiAutorizadoId = result.caiAutorizadoId;
+      }
       caiInfo = { rangoDesde: result.rangoDesde, rangoHasta: result.rangoHasta, disponible: result.disponible, alerta: result.alerta };
     }
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
@@ -361,34 +544,46 @@ export class FacturacionService {
 
   /**
    * Asigna el número de factura siguiente y retorna info del CAI.
-   * - Valida rango: bloquea si siguiente > hasta, alerta si quedan ≤30
-   * - Si NO hay correlativo → usa nrocorrelativo de tcotipodocumentofiscal (FAC)
-   * - Si modo manual → retorna { nrofactura: 0 }
+   * - Modo automático ('A'): usa correlativo de tcai_autorizado (valida rango, alerta ≤30)
+   * - Modo manual ('M'): incrementa ttipoparametros (field='nroticket') en la columna `valor`.
+   *   Usa el contador de TICKET y no el de factura para no contradecer los correlativos
+   *   fiscales secuestrados de la SAR.
+   * - Sin CAI (rango agotado o modo automático sin autorización) → contador de
+   *   ttipoparametros (field='nrofactura'). TODOS los correlativos del ERP se
+   *   administran desde ttipoparametros; tcotipodocumentofiscal.nrocorrelativo se eliminó.
    */
   private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<{
     nrofactura: number;
+    caiAutorizadoId?: number;
     rangoDesde?: string;
     rangoHasta?: string;
     disponible?: number;
     alerta?: string;
   }> {
-    // 1. Leer modo_correlativo desde ttipoparametros (moduloId=3: facturación)
+    // 1. Leer modo_correlativo desde ttipoparametros (field='modo_correlativo', empresa)
     const paramModo = await this.tipoParametroRepo.findOne({
-      where: { empresaId, moduloId: 3, field: 'modo_correlativo', sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
+      where: { empresaId, field: 'modo_correlativo', sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
     });
 
     const modo = paramModo?.valor || 'A'; // Default: automático
 
-    // 2. Si modo manual ('M') → no auto-asignar
+    // 2. Modo manual ('M') → contador incremental atómico en ttipoparametros (field='nroticket')
+    //    (CorrelativosService: UPDATE + LAST_INSERT_ID en la misma conexión.
+    //     Se usa el contador de TICKET y no el de factura para no contradecir
+    //     los correlativos fiscales secuestrados de la SAR.)
     if (modo === 'M') {
-      console.log(`[asignarCorrelativo] Modo manual (ttipoparametros). empresaId=${empresaId}`);
-      return { nrofactura: 0 };
+      const siguiente = await this.correlativos.siguiente('nroticket', empresaId, currentUser);
+
+      console.log(`[asignarCorrelativo] Modo manual: ttipoparametros.nroticket → ${siguiente} (empresaId=${empresaId})`);
+
+      // Sin caiAutorizadoId: el número NO proviene de tcai_autorizado
+      return { nrofactura: siguiente };
     }
 
-    // 3. Buscar correlativo (CAI) en poscorrelativos para esta empresa/sucursal
+    // 3. Buscar correlativo (CAI) en tcai_autorizado para esta empresa/sucursal
     const corr = await this.correlativosRepo.findOne({
-      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TPosCorrelativos>,
-      order: { poscorrelativosId: 'DESC' },
+      where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TCaiAutorizado>,
+      order: { caiAutorizadoId: 'DESC' },
     });
 
     // 4. SI hay correlativo (CAI) → usar nrofactura del CAI
@@ -426,6 +621,7 @@ export class FacturacionService {
 
       return {
         nrofactura: siguiente,
+        caiAutorizadoId: corr.caiAutorizadoId,
         rangoDesde: corr.rangoDesde,
         rangoHasta: corr.rangoHasta,
         disponible,
@@ -433,25 +629,11 @@ export class FacturacionService {
       };
     }
 
-    // 5. NO hay correlativo (CAI) → usar nrocorrelativo de tcotipodocumentofiscal (FAC)
-    const tipoDocFAC = await this.tipoDocFiscalRepo.findOne({
-      where: { empresaId, tipodocumentofiscalId: 1 } as unknown as FindOptionsWhere<TCoTipoDocumentoFiscal>,
-    });
-
-    if (!tipoDocFAC) {
-      console.warn(`[asignarCorrelativo] No hay correlativo CAI ni tipo doc fiscal FAC para empresaId=${empresaId}`);
-      return { nrofactura: 1 };
-    }
-
-    const nroCorrelativo = Number(tipoDocFAC.nrocorrelativo) || 0;
-    const siguiente = nroCorrelativo + 1;
-
-    tipoDocFAC.nrocorrelativo = siguiente;
-    tipoDocFAC.usuarioUpdated = currentUser;
-    tipoDocFAC.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
-    await this.tipoDocFiscalRepo.save(tipoDocFAC);
-
-    console.log(`[asignarCorrelativo] FAC (sin CAI): empresaId=${empresaId}, nrocorrelativo=${siguiente}`);
+    // 5. NO hay correlativo (CAI) → contador de ttipoparametros (field='nrofactura')
+    //    Todos los correlativos del ERP se administran desde ttipoparametros;
+    //    el fallback a tcotipodocumentofiscal.nrocorrelativo fue eliminado.
+    const siguiente = await this.correlativos.siguiente('nrofactura', empresaId, currentUser);
+    console.log(`[asignarCorrelativo] Sin CAI → ttipoparametros.nrofactura: empresaId=${empresaId}, nrofactura=${siguiente}`);
     return { nrofactura: siguiente };
   }
 
@@ -534,6 +716,8 @@ export class FacturacionService {
       }
 
       facturaOriginal.sn_anulada = 'S';
+      // Correlativo atómico nroanulacion (ttipoparametros)
+      facturaOriginal.nroanulacion = await this.correlativos.siguiente('nroanulacion', facturaOriginal.empresaId, currentUser);
       facturaOriginal.usuarioUpdated = currentUser;
       facturaOriginal.fechaUpdated = await this.fechaSistema.getFecha(facturaOriginal.empresaId);
       await this.facMaeRepo.save(facturaOriginal);
@@ -625,6 +809,9 @@ export class FacturacionService {
   }
 
   async createCotizacion(dto: CreatePosCotMaeDto, currentUser: string) {
+    // Canal público (carrito de visitante en tienda online): sin sesión no hay
+    // empresaId → se resuelve la empresa default del catálogo.
+    if (!dto.empresaId) dto.empresaId = await this.fechaSistema.empresaDefault();
     return this.createEntity(this.cotMaeRepo, dto, currentUser);
   }
 
@@ -639,14 +826,18 @@ export class FacturacionService {
     return { deleted: true };
   }
 
-  async findCotizacionDetByMaeId(poscotmaeId: number, empresaId: number) {
+  async findCotizacionDetByMaeId(poscotmaeId: number, empresaId?: number) {
+    // Canal público (tienda online): visitante sin sesión → empresa default
+    if (!empresaId) empresaId = await this.fechaSistema.empresaDefault();
     return this.cotDetRepo.find({
       where: { poscotmaeId, empresaId } as unknown as FindOptionsWhere<TPosCotDet>,
       order: { poscotdetId: 'ASC' } as any,
     });
   }
 
-  async deleteCotizacionDet(poscotdetId: number, empresaId: number) {
+  async deleteCotizacionDet(poscotdetId: number, empresaId?: number) {
+    // Canal público (tienda online): visitante sin sesión → empresa default
+    if (!empresaId) empresaId = await this.fechaSistema.empresaDefault();
     const entity = await this.findOneById(this.cotDetRepo, 'poscotdetId', poscotdetId, empresaId, 'Detalle Cotizacion');
     await this.cotDetRepo.remove(entity);
     return { deleted: true };
@@ -674,8 +865,19 @@ export class FacturacionService {
         return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
       } catch { return def; }
     };
-    const bodegaId = await getParam('bodegaId', 1);
+    // Bodega: sucursal del usuario (tsucursal.bodegaId) → fallback parámetro
+    const bodegaId = (await this.getBodegaPorUsuario(currentUser, empresaId)) ?? (await getParam('bodegaId', 1));
     const cajaId = await getParam('cajaId', 1);
+
+    // Sucursal de la factura: la del usuario autenticado
+    // (posfacmae.Idsucursal es NOT NULL sin default — mismo criterio que checkoutPedido)
+    let idsucursal = 0;
+    try {
+      const u = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+      idsucursal = Number(u?.Idsucursal) || 1;
+    } catch {
+      idsucursal = 1;
+    }
 
     let subTotal = 0;
     let impuestoTotal = 0;
@@ -705,13 +907,16 @@ export class FacturacionService {
         categoria: 'A',
         empresaId,
         usuarioCreated: currentUser,
+        // Reglas 1 y 4: cxcclientes está en la lista → fecha del backend
+        fecharegistro: await this.fechaSistema.obtenerFechaRegistro(currentUser, empresaId),
       })) as CxcCliente;
     }
 
     const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
 
     const facturaPayload: any = {
-      nrofactura,
+      nrofactura: nrofactura.nrofactura,
+      caiAutorizadoId: nrofactura.caiAutorizadoId ?? null,
       tipofactura: 'E',
       clienteId: clienteTienda.clienteId,
       nrocliente: clienteTienda.nrocliente,
@@ -733,6 +938,7 @@ export class FacturacionService {
       sn_anulada: 'N',
       sn_contabilizada: 'N',
       empresaId,
+      Idsucursal: idsucursal,
     };
 
     const factura = await this.createEntity(this.facMaeRepo, facturaPayload, currentUser);
@@ -771,6 +977,7 @@ export class FacturacionService {
       importe_otros: 0,
       importe_cambio: (dto.efectivo_recibido || total) - total,
       cajaId,
+      Idsucursal: idsucursal,
       empresaId,
     }, currentUser);
 
@@ -789,7 +996,9 @@ export class FacturacionService {
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
 
-    return { facturaId: factura.facturaId, nrofactura, total };
+    // nrofactura.numérico: los 3 consumidores (ERP, tienda, CRM) lo interpolan
+    // como "Factura #n" — antes devolvía el objeto de asignarCorrelativo.
+    return { facturaId: factura.facturaId, nrofactura: nrofactura.nrofactura, total };
   }
 
   async findAllCotizacionDet(empresaId: number) {
@@ -801,6 +1010,9 @@ export class FacturacionService {
   }
 
   async createCotizacionDet(dto: any, currentUser: string) {
+    // Canal público (carrito de visitante en tienda online): sin sesión no hay
+    // empresaId → se resuelve la empresa default del catálogo.
+    if (!dto.empresaId) dto.empresaId = await this.fechaSistema.empresaDefault();
     return this.createEntity(this.cotDetRepo, dto, currentUser);
   }
 
@@ -808,101 +1020,36 @@ export class FacturacionService {
     return this.updateEntity(this.cotDetRepo, 'poscotdetId', poscotdetId, empresaId, dto, currentUser, 'Detalle Cotizacion');
   }
 
-  async findAllPedidos(empresaId: number) {
+  async findAllPedidos(empresaId: number, currentUser?: string) {
+    if (currentUser && currentUser !== 'SYSTEM' && currentUser !== 'admin') {
+      const userInfo = await this.usuarioInfoRepo.findOne({ where: { usuario: currentUser } });
+      if (userInfo && userInfo.sn_cliente === 'S') {
+        return this.pedMaeRepo.find({
+          where: { empresaId, usuarioCreated: currentUser } as any,
+          order: { fecharegistro: 'DESC' },
+        });
+      }
+    }
     return this.findAllByEmpresaOrdered(this.pedMaeRepo, empresaId, 'fecharegistro');
   }
 
-  async findPedido(pospedmaeId: number, empresaId: number) {
-    return this.findOneById(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, 'Pedido');
-  }
-
-  async createPedido(dto: CreatePosPedMaeDto, currentUser: string) {
-    return this.createEntity(this.pedMaeRepo, dto, currentUser);
-  }
-
-  async updatePedido(pospedmaeId: number, empresaId: number, dto: UpdatePosPedMaeDto, currentUser: string) {
-    return this.updateEntity(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, dto, currentUser, 'Pedido');
-  }
-
-  async findAllPedidoDet(empresaId: number) {
-    return this.findAllByEmpresa(this.pedDetRepo, empresaId);
-  }
-
-  async findPedidoDet(pospeddetId: number, empresaId: number) {
-    return this.findOneById(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, 'Detalle Pedido');
-  }
-
-  async createPedidoDet(dto: any, currentUser: string) {
-    return this.createEntity(this.pedDetRepo, dto, currentUser);
-  }
-
-  async updatePedidoDet(pospeddetId: number, empresaId: number, dto: any, currentUser: string) {
-    return this.updateEntity(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, dto, currentUser, 'Detalle Pedido');
-  }
-
-  async findPedidoDetByPedidoId(pospedmaeId: number, empresaId: number) {
-    const detalles = await this.pedDetRepo.find({
-      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
-    });
-    return detalles;
-  }
-
-  async deletePedido(pospedmaeId: number, empresaId: number) {
-    const detalles = await this.pedDetRepo.find({
-      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
-    });
-    for (const det of detalles) {
-      await this.pedDetRepo.remove(det);
+  async findPedido(pospedmaeId: number, empresaId: number, currentUser?: string) {
+    const pedido = await this.findOneById(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, 'Pedido');
+    if (currentUser && currentUser !== 'SYSTEM' && currentUser !== 'admin') {
+      const userInfo = await this.usuarioInfoRepo.findOne({ where: { usuario: currentUser } });
+      if (userInfo && userInfo.sn_cliente === 'S' && pedido.usuarioCreated !== currentUser) {
+        throw new ForbiddenException('No tiene permiso para consultar pedidos de otros clientes');
+      }
     }
-    const entity = await this.findOneById(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, 'Pedido');
-    await this.pedMaeRepo.remove(entity);
-    return { deleted: true };
+    return pedido;
   }
 
-  async deletePedidoDet(pospeddetId: number, empresaId: number) {
-    const entity = await this.findOneById(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, 'Detalle Pedido');
-    await this.pedDetRepo.remove(entity);
-    return { deleted: true };
-  }
-
-  async checkoutPedido(dto: CheckoutPedidoDto, currentUser: string) {
-    const pedido = await this.pedMaeRepo.findOne({
-      where: { pospedmaeId: dto.pospedmaeId } as unknown as FindOptionsWhere<TPosPedMae>,
-    });
-    if (!pedido) throw new NotFoundException('Pedido no encontrado');
-    if (pedido.sn_facturado === 'S') throw new BadRequestException('El pedido ya fue facturado');
-
-    const empresaId = pedido.empresaId;
-
-    const detalles = await this.pedDetRepo.find({
-      where: { pospedmaeId: dto.pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
-    });
-    if (detalles.length === 0) throw new BadRequestException('El pedido está vacío');
-
-    const getParamPedido = async (field: string, def: any) => {
-      try {
-        const row = await this.tipoParametroRepo.findOne({
-          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
-        });
-        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
-      } catch { return def; }
-    };
-    const bodegaId = await getParamPedido('bodegaId', 1);
-    const cajaId = await getParamPedido('cajaId', 1);
-
-    let subTotal = 0;
-    let impuestoTotal = 0;
-    let descuentoTotal = 0;
-    for (const det of detalles) {
-      const precio = Number(det.precioventa);
-      const cantidad = Number(det.cantidad);
-      const lineaSubTotal = precio * cantidad;
-      subTotal += lineaSubTotal;
-      impuestoTotal += Number(det.impuesto);
-      descuentoTotal += Number(det.descuento);
-    }
-    const total = subTotal + impuestoTotal - descuentoTotal;
-
+  /**
+   * Cliente TIENDA genérico (cxcclientes), creado bajo demanda.
+   * Lo usan el checkout de tienda y createPedido cuando el pedido no trae
+   * clienteId (CRM / pedidos-virtual no envían cliente).
+   */
+  private async obtenerClienteTienda(empresaId: number, currentUser: string): Promise<CxcCliente> {
     let clienteTienda = await this.clienteRepo.findOne({
       where: { nrocliente: 'TIENDA', empresaId } as unknown as FindOptionsWhere<CxcCliente>,
     });
@@ -923,37 +1070,371 @@ export class FacturacionService {
         categoria: 'A',
         empresaId,
         usuarioCreated: currentUser,
+        // Reglas 1 y 4: cxcclientes está en la lista → fecha del backend
+        fecharegistro: await this.fechaSistema.obtenerFechaRegistro(currentUser, empresaId),
       })) as CxcCliente;
     }
+    return clienteTienda;
+  }
 
-    const nrofactura = await this.asignarCorrelativo(empresaId, 1, currentUser);
+  /**
+   * Recalcula los totales del maestro desde el detalle: la cabecera SIEMPRE
+   * es Σ de sus líneas (cabecera = detalle).
+   *   subTotal = Σ bruto (det.subtotal) · descuento = Σ monto · impuesto = Σ ISV
+   *   total = subTotal + impuesto − descuento  (misma fórmula que checkoutPedido)
+   * Se usa QueryBuilder().update().set(): los decimals llegan como string y
+   * repository.save() no detecta el cambio (lección TypeORM/MySQL).
+   */
+  private async recalcularTotalesPedido(pospedmaeId: number, empresaId: number, currentUser: string): Promise<void> {
+    const dets = await this.pedDetRepo.find({
+      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    let subTotal = 0;
+    let impuesto = 0;
+    let descuento = 0;
+    for (const det of dets) {
+      subTotal += Number(det.subtotal) || 0;
+      impuesto += Number(det.impuesto) || 0;
+      descuento += Number(det.descuento) || 0;
+    }
+    const red2 = (n: number) => Math.round(n * 100) / 100;
+    subTotal = red2(subTotal);
+    impuesto = red2(impuesto);
+    descuento = red2(descuento);
+    const total = red2(subTotal + impuesto - descuento);
+
+    const fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+    await this.pedMaeRepo.createQueryBuilder()
+      .update()
+      .set({ subTotal, impuesto, descuento, total, usuarioUpdated: currentUser, fechaUpdated })
+      .where('pospedmaeId = :pospedmaeId AND empresaId = :empresaId', { pospedmaeId, empresaId })
+      .execute();
+  }
+
+  /** Pedido bloqueado para edición si ya fue facturado. */
+  private async exigirPedidoModificable(pospedmaeId: number, empresaId: number): Promise<TPosPedMae> {
+    const pedido = await this.findOneById(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, 'Pedido');
+    if (pedido.sn_facturado === 'S') {
+      throw new BadRequestException('El pedido ya fue facturado y no se puede modificar');
+    }
+    return pedido;
+  }
+
+  /**
+   * Restaurante: una mesa no puede tener dos órdenes abiertas el mismo día.
+   * Solo aplica a pedidos con mesa real (nromesa >= 1); ignora los pedidos
+   * huérfanos con mesa 0 heredados de versiones anteriores.
+   */
+  private async validarMesaLibre(dto: CreatePosPedMaeDto): Promise<void> {
+    const nromesa = Number(dto.nromesa) || 0;
+    if (nromesa < 1) return;
+
+    const empresaId = dto.empresaId;
+    const inicioDia = (await this.fechaSistema.getFecha(empresaId)) as Date;
+    inicioDia.setHours(0, 0, 0, 0);
+
+    const ocupada = await this.pedMaeRepo
+      .createQueryBuilder('p')
+      .where('p.empresaId = :empresaId', { empresaId })
+      .andWhere('p.nromesa = :nromesa', { nromesa })
+      .andWhere("p.sn_facturado = 'N'")
+      .andWhere('p.fecharegistro >= :inicioDia', { inicioDia })
+      .getOne();
+
+    if (ocupada) {
+      throw new BadRequestException(`La mesa ${nromesa} ya tiene una orden abierta (#${ocupada.pospedmaeId})`);
+    }
+  }
+
+  async createPedido(dto: CreatePosPedMaeDto, currentUser: string) {
+    await this.validarMesaLibre(dto);
+    try {
+      const empresaId = dto.empresaId;
+
+      // Si el cliente está logueado, debe tener nombre y teléfono sí o sí en tusuariosinfo
+      if (currentUser && currentUser !== 'SYSTEM' && currentUser !== 'admin') {
+        const userInfo = await this.usuarioInfoRepo.findOne({ where: { usuario: currentUser } });
+        const userEntity = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+
+        if (!userInfo || !userInfo.telefono || !userInfo.telefono.trim()) {
+          throw new BadRequestException('Su usuario logueado no tiene teléfono registrado en el sistema (tusuariosinfo). Es obligatorio para realizar pedidos.');
+        }
+        dto.nrotelefono = userInfo.telefono;
+        dto.nombrecliente = userEntity?.nombre || userInfo.usuario;
+      } else {
+        if (!dto.nombrecliente || !dto.nombrecliente.trim() || !dto.nrotelefono || !dto.nrotelefono.trim()) {
+          throw new BadRequestException('Nombre del cliente y teléfono son obligatorios.');
+        }
+      }
+
+      // Cliente: si no viene (CRM / pedidos-virtual), se resuelve el cliente TIENDA.
+      // Si viene, se valida que exista y se completa nrocliente.
+      if (!dto.clienteId) {
+        const tienda = await this.obtenerClienteTienda(empresaId, currentUser);
+        dto.clienteId = tienda.clienteId;
+        dto.nrocliente = dto.nrocliente || tienda.nrocliente;
+      } else {
+        const cliente = await this.clienteRepo.findOne({
+          where: { clienteId: dto.clienteId, empresaId } as unknown as FindOptionsWhere<CxcCliente>,
+        });
+        if (!cliente) throw new BadRequestException(`El cliente ${dto.clienteId} no existe en la empresa ${empresaId}`);
+        dto.nrocliente = dto.nrocliente || cliente.nrocliente;
+      }
+
+      // bodegaId/cajaId/nrotelefono/Idsucursal/empresaId son NOT NULL sin default
+      if (!dto.bodegaId) {
+        dto.bodegaId =
+          (await this.getBodegaPorUsuario(currentUser, empresaId)) ??
+          (await this.getParamDefecto(empresaId, 'bodegaId', 1));
+      }
+      if (!dto.cajaId) dto.cajaId = await this.getParamDefecto(empresaId, 'cajaId', 1);
+      if (!dto.Idsucursal) {
+        try {
+          const u = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+          dto.Idsucursal = Number(u?.Idsucursal) || 1;
+        } catch {
+          dto.Idsucursal = 1;
+        }
+      }
+
+      // Defaults de negocio: el pedido nace SIN facturar. La BD trae
+      // sn_facturado DEFAULT 'S' (peligroso) → se fuerza 'N' siempre.
+      dto.sn_facturado = 'N';
+      dto.sn_pagada = dto.sn_pagada ?? 'N';
+      dto.sn_enviogratis = dto.sn_enviogratis ?? 'N';
+      dto.tipofactura = dto.tipofactura ?? 'E';
+
+      const pedido = await this.createEntity(this.pedMaeRepo, dto, currentUser);
+      // Cabecera coherente con el detalle desde el primer momento
+      await this.recalcularTotalesPedido(pedido.pospedmaeId, empresaId, currentUser);
+      return pedido;
+    } catch (e) {
+      console.error('[createPedido ERROR]', e);
+      throw e;
+    }
+  }
+
+  async updatePedido(pospedmaeId: number, empresaId: number, dto: UpdatePosPedMaeDto, currentUser: string) {
+    await this.exigirPedidoModificable(pospedmaeId, empresaId);
+    // El flag sn_facturado lo pone ÚNICAMENTE checkoutPedido; un PUT no puede
+    // marcarlo como facturado (evita pedidos "fantasma" facturados sin factura).
+    if (dto.sn_facturado === 'S') {
+      throw new BadRequestException('El pedido se marca como facturado únicamente al facturarlo');
+    }
+    delete dto.sn_facturado;
+    const pedido = await this.updateEntity(this.pedMaeRepo, 'pospedmaeId', pospedmaeId, empresaId, dto, currentUser, 'Pedido');
+    // Los totales siempre se derivan del detalle, nunca del payload del cliente
+    await this.recalcularTotalesPedido(pospedmaeId, empresaId, currentUser);
+    return pedido;
+  }
+
+  async findAllPedidoDet(empresaId: number) {
+    return this.findAllByEmpresa(this.pedDetRepo, empresaId);
+  }
+
+  async findPedidoDet(pospeddetId: number, empresaId: number) {
+    return this.findOneById(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, 'Detalle Pedido');
+  }
+
+  async createPedidoDet(dto: any, currentUser: string) {
+    if (!dto?.pospedmaeId) throw new BadRequestException('pospedmaeId es requerido');
+    const mae = await this.pedMaeRepo.findOne({
+      where: { pospedmaeId: dto.pospedmaeId } as unknown as FindOptionsWhere<TPosPedMae>,
+    });
+    if (!mae) throw new BadRequestException(`Pedido ${dto.pospedmaeId} no encontrado`);
+    if (mae.sn_facturado === 'S') throw new BadRequestException('El pedido ya fue facturado y no se puede modificar');
+
+    // pospeddet.empresaId es NOT NULL y bodegaId viene de la cabecera si no llega
+    if (!dto.empresaId) dto.empresaId = mae.empresaId;
+    if (dto.empresaId !== mae.empresaId) {
+      throw new BadRequestException('El detalle no pertenece a la misma empresa que el pedido');
+    }
+    if (!dto.bodegaId) dto.bodegaId = mae.bodegaId;
+
+    const det = await this.createEntity(this.pedDetRepo, dto, currentUser);
+    await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    return det;
+  }
+
+  async updatePedidoDet(pospeddetId: number, empresaId: number, dto: any, currentUser: string) {
+    const det = await this.findOneById(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, 'Detalle Pedido');
+    const mae = await this.exigirPedidoModificable(det.pospedmaeId, empresaId);
+    if (dto?.empresaId != null && dto.empresaId !== mae.empresaId) {
+      throw new BadRequestException('El detalle no pertenece a la misma empresa que el pedido');
+    }
+    const actualizado = await this.updateEntity(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, dto, currentUser, 'Detalle Pedido');
+    await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    return actualizado;
+  }
+
+  async findPedidoDetByPedidoId(pospedmaeId: number, empresaId: number) {
+    const detalles = await this.pedDetRepo.find({
+      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    return detalles;
+  }
+
+  async deletePedido(pospedmaeId: number, empresaId: number) {
+    const pedido = await this.exigirPedidoModificable(pospedmaeId, empresaId);
+    const detalles = await this.pedDetRepo.find({
+      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    for (const det of detalles) {
+      await this.pedDetRepo.remove(det);
+    }
+    await this.pedMaeRepo.remove(pedido);
+    return { deleted: true };
+  }
+
+  async deletePedidoDet(pospeddetId: number, empresaId: number, currentUser?: string) {
+    const entity = await this.findOneById(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, 'Detalle Pedido');
+    const mae = await this.exigirPedidoModificable(entity.pospedmaeId, empresaId);
+    await this.pedDetRepo.remove(entity);
+    await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
+    return { deleted: true };
+  }
+
+  async checkoutPedido(dto: CheckoutPedidoDto, currentUser: string) {
+    const pedido = await this.pedMaeRepo.findOne({
+      where: { pospedmaeId: dto.pospedmaeId } as unknown as FindOptionsWhere<TPosPedMae>,
+    });
+    if (!pedido) throw new NotFoundException('Pedido no encontrado');
+    if (pedido.sn_facturado === 'S') throw new BadRequestException('El pedido ya fue facturado');
+
+    const empresaId = pedido.empresaId;
+
+    // Mismo criterio que createFactura: no facturar en período contable cerrado
+    const fechaDoc = await this.fechaSistema.getFecha(empresaId);
+    await this.contabilidadService.validarPeriodoAbierto(empresaId, fechaDoc);
+
+    const detalles = await this.pedDetRepo.find({
+      where: { pospedmaeId: dto.pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    if (detalles.length === 0) throw new BadRequestException('El pedido está vacío');
+
+    const getParamPedido = async (field: string, def: any) => {
+      try {
+        const row = await this.tipoParametroRepo.findOne({
+          where: { empresaId, moduloId: 3, field, sn_activo: 'S' } as any,
+        });
+        return row ? (row.tipo === 'NUMBER' ? Number(row.valor) : row.valor) : def;
+      } catch { return def; }
+    };
+    // Bodega/CAJA: las del pedido (ya resueltas en createPedido) → sucursal del
+    // usuario (tsucursal.bodegaId) → fallback parámetro
+    const bodegaId =
+      Number(pedido.bodegaId) ||
+      (await this.getBodegaPorUsuario(currentUser, empresaId)) ||
+      (await getParamPedido('bodegaId', 1));
+    const cajaId = Number(pedido.cajaId) || (await getParamPedido('cajaId', 1));
+
+    // Sucursal de la factura: la del usuario autenticado
+    // (posfacmae.Idsucursal es NOT NULL sin default — mismo criterio que createFactura)
+    let idsucursal = Number(dto.Idsucursal) || 0;
+    if (!idsucursal) {
+      try {
+        const u = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+        idsucursal = Number(u?.Idsucursal) || 1;
+      } catch {
+        idsucursal = 1;
+      }
+    }
+
+    let subTotal = 0;
+    let impuestoTotal = 0;
+    let descuentoTotal = 0;
+    for (const det of detalles) {
+      const precio = Number(det.precioventa);
+      const cantidad = Number(det.cantidad);
+      const lineaSubTotal = precio * cantidad;
+      subTotal += lineaSubTotal;
+      impuestoTotal += Number(det.impuesto);
+      descuentoTotal += Number(det.descuento);
+    }
+    const total = subTotal + impuestoTotal - descuentoTotal;
+
+    // Cliente de la factura: el del pedido si existe (ERP); si no viene o ya no
+    // existe en cxcclientes → cliente TIENDA (CRM / pedidos-virtual)
+    let clienteFactura: CxcCliente | null = null;
+    if (pedido.clienteId) {
+      clienteFactura = await this.clienteRepo.findOne({
+        where: { clienteId: pedido.clienteId, empresaId } as unknown as FindOptionsWhere<CxcCliente>,
+      });
+    }
+    if (!clienteFactura) clienteFactura = await this.obtenerClienteTienda(empresaId, currentUser);
+
+    const nrofactura = await this.asignarCorrelativo(empresaId, idsucursal, currentUser);
+
+    // Paridad con posfacmae: TODA la cabecera del pedido pasa a la factura
+    // (tipo, RTN, exenta/constancia, crédito, gestor, factor de cambio).
+    const esCredito = (pedido.tipofactura || 'E') === 'C';
+
+    // ── Pagos del checkout: detección de pago por link TodoPago ──────────
+    // TodoPagoLink (formapagoId=6): el pago por link NO se registra en
+    // posfaccaja al facturar — se inserta recién cuando el link se confirma
+    // (POST /todopago/confirmar). La factura nace sn_pagada='N' y el frontend
+    // genera el link tras el checkout (mismo flujo que Nueva Factura).
+    const pagosTabla = Array.isArray(dto.pagos)
+      ? dto.pagos.filter((p: any) => p && Number(p?.importe) > 0)
+      : [];
+    const pagosNoTP = pagosTabla.filter((p: any) => Number(p?.formapagoId) !== FORMAPAGO_TODOPAGO);
+    const conLink =
+      !esCredito &&
+      (pagosTabla.some((p: any) => Number(p?.formapagoId) === FORMAPAGO_TODOPAGO) ||
+        (pagosTabla.length === 0 && Number(dto.formapagoId) === FORMAPAGO_TODOPAGO));
+    const sumaPagosNoTP = pagosNoTP.reduce((s: number, p: any) => s + (Number(p?.importe) || 0), 0);
 
     const facturaPayload: any = {
-      nrofactura,
-      tipofactura: 'E',
-      clienteId: clienteTienda.clienteId,
-      nrocliente: clienteTienda.nrocliente,
-      nombrecliente: dto.nombrecliente,
-      direccion: '',
-      factordecambio: 1,
+      nrofactura: nrofactura.nrofactura,
+      caiAutorizadoId: nrofactura.caiAutorizadoId ?? null,
+      tipofactura: esCredito ? 'C' : 'E',
+      clienteId: clienteFactura.clienteId,
+      nrocliente: clienteFactura.nrocliente,
+      nombrecliente: dto.nombrecliente || pedido.nombrecliente,
+      direccion: pedido.direccion_entrega || '',
+      rtn_cliente: pedido.rtn_cliente || '',
+      factordecambio: Number(pedido.factordecambio) || 1,
       subTotal,
       impuesto: impuestoTotal,
       descuento: descuentoTotal,
       total,
-      efectivo_recibido: dto.efectivo_recibido || total,
-      importe_cambio: (dto.efectivo_recibido || total) - total,
-      diascredito: 0,
+      efectivo_recibido: esCredito ? 0 : (dto.efectivo_recibido || total),
+      importe_cambio: esCredito ? 0 : (dto.efectivo_recibido || total) - total,
+      diascredito: esCredito ? Number(pedido.diascredito) || 0 : 0,
+      fechavencimiento: esCredito ? pedido.fechavencimiento ?? null : null,
       bodegaId,
       cajaId,
-      gestorId: null,
-      sn_excenta: 'N',
-      sn_pagada: 'S',
+      gestorId: pedido.gestorId ?? null,
+      sn_excenta: pedido.sn_excenta || 'N',
+      tipoconstancia: pedido.tipoconstancia || 'FNE',
+      nroconstancia: pedido.nroconstancia || null,
+      importe_excento: Number(pedido.importe_excento) || 0,
+      // Con link TodoPago la factura queda pendiente hasta la confirmación
+      sn_pagada: esCredito || conLink ? 'N' : 'S',
       sn_anulada: 'N',
       sn_contabilizada: 'N',
       empresaId,
+      Idsucursal: idsucursal,
     };
 
+    // Ajuste de efectivo/cambio cuando hay pago por link (el efectivo real es
+    // lo no-TP; el link aún no se ha confirmado)
+    if (conLink) {
+      facturaPayload.efectivo_recibido = sumaPagosNoTP;
+      facturaPayload.importe_cambio = 0;
+    }
+
     const factura = await this.createEntity(this.facMaeRepo, facturaPayload, currentUser);
+
+    // Crédito: movimiento en CxC (mismo flujo que createFactura →
+    // procesarKardexFactura luego vincula el movimiento a la partida)
+    if (esCredito) {
+      try {
+        await this.cxcService.generarMovimientoDesdeFactura(factura, currentUser);
+      } catch (error) {
+        console.error('Error generando movimiento CXC desde pedido:', error);
+      }
+    }
 
     let nrofila = 1;
     for (const det of detalles) {
@@ -974,19 +1455,47 @@ export class FacturacionService {
       nrofila++;
     }
 
-    await this.createEntity(this.facCajaRepo, {
-      facturaId: factura.facturaId,
-      formapagoId: dto.formapagoId,
-      tarjetacreditoId: dto.tarjetacreditoId || null,
-      nrotarjeta: dto.nrotarjeta || null,
-      nroautorizacion: dto.nroautorizacion || null,
-      factordecambio: 1,
-      importe_efectivo: dto.efectivo_recibido || total,
-      importe_otros: 0,
-      importe_cambio: (dto.efectivo_recibido || total) - total,
-      cajaId,
-      empresaId,
-    }, currentUser);
+    // Formas de pago: SOLO en contado — las facturas a crédito no generan
+    // filas de posfaccaja (el abono futuro entra por caja de CxC). Si el
+    // frontend envía la tabla de múltiples pagos (igual que Nueva Factura),
+    // se crea una fila en posfaccaja por cada uno; si no se envía, se
+    // mantiene la fila única legacy (compatible con el CRM / pedidos-virtual).
+    // Los pagos TodoPagoLink quedan fuera (ver detección de conLink arriba).
+    if (!esCredito) {
+      if (pagosNoTP.length > 0) {
+        for (const p of pagosNoTP) {
+          const importePago = Number(p.importe) || 0;
+          await this.createEntity(this.facCajaRepo, {
+            facturaId: factura.facturaId,
+            formapagoId: Number(p.formapagoId),
+            tarjetacreditoId: p.tarjetacreditoId || null,
+            nrotarjeta: p.nrotarjeta || null,
+            nroautorizacion: p.nroautorizacion || null,
+            factordecambio: 1,
+            importe_efectivo: p.esEfectivo ? importePago : 0,
+            importe_otros: p.esEfectivo ? 0 : importePago,
+            importe_cambio: 0,
+            cajaId,
+            empresaId,
+          }, currentUser);
+        }
+      } else if (!conLink) {
+        await this.createEntity(this.facCajaRepo, {
+          facturaId: factura.facturaId,
+          formapagoId: dto.formapagoId,
+          tarjetacreditoId: dto.tarjetacreditoId || null,
+          nrotarjeta: dto.nrotarjeta || null,
+          nroautorizacion: dto.nroautorizacion || null,
+          factordecambio: 1,
+          importe_efectivo: dto.efectivo_recibido || total,
+          importe_otros: 0,
+          importe_cambio: (dto.efectivo_recibido || total) - total,
+          cajaId,
+          empresaId,
+        }, currentUser);
+      }
+      // conLink sin pagos no-TP → ninguna fila de caja hasta confirmar el link
+    }
 
     try {
       await this.procesarKardexFactura(factura.facturaId, currentUser);
@@ -994,15 +1503,37 @@ export class FacturacionService {
       console.error('Error procesando kardex desde pedido:', error);
     }
 
-    pedido.sn_facturado = 'S';
-    pedido.facturaId = factura.facturaId;
-    pedido.usuarioUpdated = currentUser;
-    pedido.fechaUpdated = await this.fechaSistema.getFecha(pedido.empresaId);
-    await this.pedMaeRepo.save(pedido);
+    const fechaUpd = await this.fechaSistema.getFecha(empresaId);
+    // El pedido queda facturado + trazabilidad del nro. de factura. Se actualiza
+    // por QueryBuilder para tocar SOLO columnas no decimales (subTotal/impuesto/
+    // descuento/total ya fueron recalculados y no deben re-escriturarse).
+    await this.pedMaeRepo.createQueryBuilder()
+      .update()
+      .set({
+        sn_facturado: 'S',
+        sn_pagada: esCredito || conLink ? 'N' : 'S',
+        facturaId: factura.facturaId,
+        nrofactura: nrofactura.nrofactura,
+        usuarioUpdated: currentUser,
+        fechaUpdated: fechaUpd,
+      })
+      .where('pospedmaeId = :id AND empresaId = :empresaId', { id: pedido.pospedmaeId, empresaId })
+      .execute();
+
+    // Trazabilidad en el detalle: cada línea queda vinculada a la factura
+    // generada (pospeddet.facturaId → posfacmae) y con su bodega definitiva.
+    await this.pedDetRepo.createQueryBuilder()
+      .update()
+      .set({ facturaId: factura.facturaId, bodegaId, usuarioUpdated: currentUser, fechaUpdated: fechaUpd })
+      .where('pospedmaeId = :id AND empresaId = :empresaId', { id: pedido.pospedmaeId, empresaId })
+      .execute();
 
     this.eventEmitter.emit('factura.creada', { factura, currentUser });
 
-    return { facturaId: factura.facturaId, nrofactura, total };
+    // nrofactura.numérico: los 3 consumidores (ERP, tienda, CRM) lo interpolan
+    // como "Factura #n" — antes devolvía el objeto de asignarCorrelativo.
+    // conLink: el frontend debe generar el link de pago TodoPago para esta factura.
+    return { facturaId: factura.facturaId, nrofactura: nrofactura.nrofactura, total, conLink };
   }
 
   async findAllComboMae(empresaId: number) {
@@ -1050,11 +1581,52 @@ export class FacturacionService {
     return dets;
   }
 
+  /**
+   * Un detalle de combo NUNCA puede venderse por debajo del costo unitario
+   * del producto × 1.03 (costo + 3%). Lanza BadRequestException (400).
+   */
+  private async validarPrecioMinimoCombo(
+    productoId: number,
+    precioventa: number,
+    empresaId: number,
+  ) {
+    if (!productoId || precioventa == null || !empresaId) return;
+    const prod = await this.productoRepo.findOne({
+      where: { produtoId: productoId, empresaId } as any,
+    });
+    if (!prod) return;
+    const minimo = Math.round((Number(prod.cstounit) || 0) * 1.03 * 100) / 100;
+    const precio = Number(precioventa);
+    if (precio < minimo - 0.009) {
+      throw new BadRequestException(
+        `El precio de venta L ${precio.toFixed(2)} está por debajo del mínimo permitido ` +
+          `(costo unitario × 1.03 = L ${minimo.toFixed(2)}) para "${prod.descripcion}"`,
+      );
+    }
+  }
+
   async createComboDet(dto: any, currentUser: string) {
+    await this.validarPrecioMinimoCombo(
+      dto.productoId,
+      dto.precioventa,
+      dto.empresaId,
+    );
     return this.createEntity(this.cboDetRepo, dto, currentUser);
   }
 
   async updateComboDet(poscbodetId: number, empresaId: number, dto: any, currentUser: string) {
+    if (dto.precioventa != null) {
+      let productoId = dto.productoId;
+      if (productoId == null) {
+        const actual = await this.cboDetRepo.findOne({
+          where: { poscbodetId, empresaId } as any,
+        });
+        productoId = actual?.productoId;
+      }
+      if (productoId) {
+        await this.validarPrecioMinimoCombo(productoId, dto.precioventa, empresaId);
+      }
+    }
     return this.updateEntity(this.cboDetRepo, 'poscbodetId', poscbodetId, empresaId, dto, currentUser, 'Detalle Combo');
   }
 

@@ -19,6 +19,14 @@ export class CxccajaMae {
   @Column({ type: 'varchar', length: 20 })
   nrocliente: string;
 
+  /** Destino del abono: 1 = Cuenta corriente (documentos), 2 = Préstamos (cuotas). */
+  @Column({ type: 'tinyint', default: 1 })
+  destinoabono: number;
+
+  /** Préstamo destino cuando destinoabono = 2. */
+  @Column({ type: 'int', nullable: true })
+  prestamoId: number | null;
+
   @Column()
   documentoId: number;
 
@@ -49,10 +57,10 @@ export class CxccajaMae {
   @Column()
   empresaId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

@@ -51,11 +51,11 @@ export class TinvKardex {
 
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  saldoAnterior: number;
+  existencia_anterior: number;
 
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
-  saldoActual: number;
+  exisencia_actual: number;
 
   @ApiProperty()
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
@@ -90,11 +90,11 @@ export class TinvKardex {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

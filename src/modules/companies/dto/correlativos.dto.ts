@@ -2,6 +2,11 @@ import { IsNumber, IsString, IsNotEmpty, IsOptional, IsDateString, MinLength } f
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCorrelativoDto {
+  @ApiProperty({ required: false, description: 'CAI que ampara el rango (tcai); se auto-asigna el activo si se omite' })
+  @IsNumber()
+  @IsOptional()
+  caiId?: number;
+
   @ApiProperty({ description: 'ID de la sucursal' })
   @IsNumber()
   @IsNotEmpty()
@@ -35,6 +40,11 @@ export class CreateCorrelativoDto {
 }
 
 export class UpdateCorrelativoDto {
+  @ApiProperty({ required: false, description: 'CAI que ampara el rango (tcai)' })
+  @IsNumber()
+  @IsOptional()
+  caiId?: number;
+
   @ApiProperty({ required: false })
   @IsNumber()
   @IsOptional()

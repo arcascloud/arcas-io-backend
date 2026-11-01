@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Body, Param, Query,
+  Controller, Get, Post, Put, Delete, Body, Param, Query,
   UseGuards, ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -50,5 +50,18 @@ export class ModulosController {
     @CurrentUser() user: any,
   ) {
     return this.service.update(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar módulo (solo admin; bloqueado si tiene registros con el moduloId)' })
+  @ApiResponse({ status: 200, description: 'Módulo eliminado' })
+  @ApiResponse({ status: 403, description: 'Solo un administrador puede eliminar módulos' })
+  @ApiResponse({ status: 409, description: 'El módulo tiene registros asociados' })
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.remove(id, empresaId, user?.usuario);
   }
 }

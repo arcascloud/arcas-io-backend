@@ -6,10 +6,14 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { Tusuarios } from '../users/entities/usuario.entity';
+import { TusuarioInfo } from '../users/entities/usuario-info.entity';
+import { PlEmpleados } from '../planilla/entities/plempleados.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tusuarios]),
+    TypeOrmModule.forFeature([Tusuarios, TusuarioInfo, PlEmpleados]),
+    UsersModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'arcas-software-secret-key-2026',

@@ -13,6 +13,18 @@ export class Tmodulos {
   @Column({ type: 'varchar', length: 20, nullable: true })
   descripcion: string;
 
+  @ApiProperty({ required: false, description: 'Abreviatura del módulo (ej: INV, FAC, CXC)' })
+  @Column({ type: 'varchar', length: 20, default: '' })
+  abreviatura: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  descripcion_contable: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_auxiliar_contable: string;
+
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
@@ -26,11 +38,11 @@ export class Tmodulos {
   zorden: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

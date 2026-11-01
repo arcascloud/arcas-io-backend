@@ -3,23 +3,23 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('proveedortel')
-export class TCxpProveedorTel {
+@Entity('tinvdeptos')
+export class TinvDepto {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'proveedorestelefonosId' })
-  proveedorestelefonosId: number;
+  @PrimaryGeneratedColumn({ name: 'deptoId' })
+  deptoId: number;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 50 })
+  descripcion: string;
 
   @ApiProperty()
   @Column()
-  proveedorId: number;
+  zorden: number;
 
-  @ApiProperty()
-  @Column({ type: 'int' })
-  telefonoId: number;
-
-  @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 10, nullable: true })
-  descripcion: string;
+  @ApiProperty({ enum: ['C', 'F', 'R'], description: 'Tipo de giro: Comercio / Farmacias / Restaurante' })
+  @Column({ type: 'enum', enum: ['C', 'F', 'R'], default: 'C' })
+  tipo_giro: string;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
@@ -30,11 +30,11 @@ export class TCxpProveedorTel {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

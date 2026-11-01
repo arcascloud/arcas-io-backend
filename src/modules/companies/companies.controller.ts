@@ -7,6 +7,7 @@ import { CompaniesService } from './companies.service';
 import { CreateEmpresaDto, UpdateEmpresaDto } from './dto/empresa.dto';
 import { CreateEmpresaDetDto, UpdateEmpresaDetDto } from './dto/empresasdet.dto';
 import { CreateCorrelativoDto, UpdateCorrelativoDto } from './dto/correlativos.dto';
+import { CreateCaiDto, UpdateCaiDto } from './dto/cai.dto';
 import { CreateEmpresaLogoDto, UpdateEmpresaLogoDto } from './dto/empresaslogo.dto';
 import { CreateImpresoraDto, UpdateImpresoraDto } from './dto/impresoras.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -52,6 +53,49 @@ export class CompaniesController {
     @CurrentUser() user: any,
   ) {
     return this.service.createDet(dto.empresaId!, dto, user.usuario);
+  }
+
+  // ===== CAIs (tcai) =====
+
+  @Get('cais')
+  @ApiOperation({ summary: 'Listar CAIs de una empresa (tcai)' })
+  findAllCai(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCai(empresaId);
+  }
+
+  @Post('cais')
+  @ApiOperation({ summary: 'Crear CAI (tcai)' })
+  createCai(@Body() dto: CreateCaiDto, @CurrentUser() user: any) {
+    return this.service.createCai(dto.empresaId!, dto, user.usuario);
+  }
+
+  @Get('cais/:id')
+  @ApiOperation({ summary: 'Obtener CAI por ID' })
+  findCai(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findOneCai(id, empresaId);
+  }
+
+  @Put('cais/:id')
+  @ApiOperation({ summary: 'Actualizar CAI' })
+  updateCai(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCaiDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCai(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('cais/:id')
+  @ApiOperation({ summary: 'Eliminar CAI (si no tiene rangos)' })
+  removeCai(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCai(id, empresaId);
   }
 
   // ===== Correlativos (CAI) =====

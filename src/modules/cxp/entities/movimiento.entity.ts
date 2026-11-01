@@ -90,6 +90,10 @@ export class TCxpMovimiento {
 
   @ApiProperty({ required: false })
   @Column({ type: 'int', nullable: true })
+  carteracontableId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'int', nullable: true })
   Idsucursal: number;
 
   @ApiProperty()
@@ -97,11 +101,11 @@ export class TCxpMovimiento {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

@@ -6,9 +6,11 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { UsersService } from './users.service';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './dto/usuario.dto';
 import { CreateUsuariosModuleDto, UpdateUsuariosModuleDto } from './dto/usuarios-module.dto';
-import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto } from './dto/usuarios-mnuitem.dto';
+import { CreateUsuarioMnuItemDto, UpdateUsuarioMnuItemDto, BulkCreateMnuItemsDto, ClonarMenuUsuarioDto } from './dto/usuarios-mnuitem.dto';
 import { CreateUsuariosScriptsDto, UpdateUsuariosScriptsDto } from './dto/usuarios-scripts.dto';
 import { CreateUsuarioModAuthDto, UpdateUsuarioModAuthDto } from './dto/usuario-modauth.dto';
+import { CreateUsuarioRolDto, UpdateUsuarioRolDto } from './dto/usuario-rol.dto';
+import { CreateUsuarioInfoDto, UpdateUsuarioInfoDto } from './dto/usuario-info.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -112,6 +114,13 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'Items importados exitosamente' })
   bulkCreateMnuItems(@Body() dto: BulkCreateMnuItemsDto, @CurrentUser() user: any) {
     return this.service.bulkCreateMnuItems(dto, user.usuario);
+  }
+
+  @Post('menu-items/clonar')
+  @ApiOperation({ summary: 'Clonar menú de la plantilla (admin) hacia un usuario' })
+  @ApiResponse({ status: 201, description: 'Menú clonado (solo items faltantes)' })
+  clonarMenuUsuario(@Body() dto: ClonarMenuUsuarioDto, @CurrentUser() user: any) {
+    return this.service.clonarMenuUsuario(dto, user.usuario);
   }
 
   @Post('menu-items')
@@ -241,6 +250,117 @@ export class UsersController {
     return this.service.removeModAuth(id, empresaId);
   }
 
+  // ===== Roles de usuario (tusuarios_rol) =====
+
+  @Get('roles/tipos')
+  @ApiOperation({ summary: 'Catálogo de roles disponibles (ttipo_rol)' })
+  @ApiResponse({ status: 200, description: 'Catálogo de roles obtenido exitosamente' })
+  findAllTiposRol(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllTiposRol(empresaId);
+  }
+
+  @Get('roles')
+  @ApiOperation({ summary: 'Listar asignaciones de rol de usuario' })
+  @ApiResponse({ status: 200, description: 'Lista de roles de usuario obtenida exitosamente' })
+  findAllRoles(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllRoles(empresaId);
+  }
+
+  @Get('roles/:id')
+  @ApiOperation({ summary: 'Obtener asignación de rol por ID' })
+  @ApiResponse({ status: 200, description: 'Asignación de rol encontrada' })
+  @ApiResponse({ status: 404, description: 'Asignación de rol no encontrada' })
+  findRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findRole(id, empresaId);
+  }
+
+  @Post('roles')
+  @ApiOperation({ summary: 'Asignar rol a usuario' })
+  @ApiResponse({ status: 201, description: 'Rol asignado exitosamente' })
+  @ApiResponse({ status: 409, description: 'El usuario ya tiene ese rol' })
+  createRole(@Body() dto: CreateUsuarioRolDto, @CurrentUser() user: any) {
+    return this.service.createRole(dto, user.usuario);
+  }
+
+  @Put('roles/:id')
+  @ApiOperation({ summary: 'Actualizar asignación de rol' })
+  @ApiResponse({ status: 200, description: 'Rol actualizado exitosamente' })
+  updateRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateUsuarioRolDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateRole(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('roles/:id')
+  @ApiOperation({ summary: 'Eliminar asignación de rol' })
+  @ApiResponse({ status: 200, description: 'Rol eliminado exitosamente' })
+  removeRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeRole(id, empresaId);
+  }
+
+  // ===== Info extendida del usuario (tusuariosinfoinfo) =====
+
+  @Get('info')
+  @ApiOperation({ summary: 'Listar info extendida de usuarios de la empresa' })
+  @ApiResponse({ status: 200, description: 'Lista de info de usuarios obtenida exitosamente' })
+  findAllInfo(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllInfo(empresaId);
+  }
+
+  @Get('info/:usuarioId')
+  @ApiOperation({ summary: 'Obtener info extendida de un usuario por usuarioId' })
+  @ApiResponse({ status: 200, description: 'Info de usuario encontrada' })
+  @ApiResponse({ status: 404, description: 'Info de usuario no encontrada' })
+  findInfo(
+    @Param('usuarioId', ParseIntPipe) usuarioId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findInfo(usuarioId, empresaId);
+  }
+
+  @Post('info')
+  @ApiOperation({ summary: 'Crear info extendida de un usuario' })
+  @ApiResponse({ status: 201, description: 'Info de usuario creada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado en la empresa' })
+  @ApiResponse({ status: 409, description: 'El usuario ya tiene info o el documento está duplicado' })
+  createInfo(@Body() dto: CreateUsuarioInfoDto, @CurrentUser() user: any) {
+    return this.service.createInfo(dto, user.usuario);
+  }
+
+  @Put('info/:usuarioId')
+  @ApiOperation({ summary: 'Actualizar info extendida de un usuario' })
+  @ApiResponse({ status: 200, description: 'Info de usuario actualizada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Info de usuario no encontrada' })
+  @ApiResponse({ status: 409, description: 'El documento está duplicado' })
+  updateInfo(
+    @Param('usuarioId', ParseIntPipe) usuarioId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateUsuarioInfoDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateInfo(usuarioId, empresaId, dto, user.usuario);
+  }
+
+  @Delete('info/:usuarioId')
+  @ApiOperation({ summary: 'Eliminar info extendida de un usuario' })
+  @ApiResponse({ status: 200, description: 'Info de usuario eliminada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Info de usuario no encontrada' })
+  removeInfo(
+    @Param('usuarioId', ParseIntPipe) usuarioId: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeInfo(usuarioId, empresaId);
+  }
+
   // ===== Rutas parametrizadas de :usuario SIEMPRE al final =====
 
   @Get(':usuario')
@@ -252,6 +372,16 @@ export class UsersController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findOne(usuario, empresaId);
+  }
+
+  @Put('password/actualizar')
+  @ApiOperation({ summary: 'Cambiar contraseña del usuario actual' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada exitosamente' })
+  cambiarPassword(
+    @Body() dto: { passwordNueva: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.service.cambiarPassword(user.usuario, user.empresaId, dto.passwordNueva, user.usuario);
   }
 
   @Put(':usuario')

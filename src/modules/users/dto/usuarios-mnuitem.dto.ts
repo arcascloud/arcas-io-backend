@@ -141,3 +141,15 @@ export class BulkCreateMnuItemsDto {
   @ApiProperty({ description: 'Items del menu', type: [BulkMnuItemDto] })
   items: BulkMnuItemDto[];
 }
+
+// ===== Clonado de menú desde plantilla =====
+
+export class ClonarMenuUsuarioDto {
+  @ApiProperty({ description: 'ID de Empresa' })
+  @IsNumber()
+  empresaId: number;
+
+  @ApiProperty({ description: 'Usuario destino del clonado' })
+  @IsString() @IsNotEmpty()
+  usuario: string;
+}

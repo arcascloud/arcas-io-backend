@@ -1,7 +1,10 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Res, UseGuards, Get, Req } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -12,7 +15,50 @@ export class AuthController {
   @ApiOperation({ summary: 'Iniciar sesión' })
   @ApiResponse({ status: 200, description: 'Inicio de sesión exitoso' })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const resAuth = await this.authService.login(dto);
+
+    response.cookie('jwt_token', resAuth.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    return resAuth;
+  }
+
+  @Post('logout')
+  @ApiOperation({ summary: 'Cerrar sesión' })
+  async logout(@Res({ passthrough: true }) response: Response) {
+    response.clearCookie('jwt_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+    return { message: 'Sesión cerrada exitosamente' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiOperation({ summary: 'Obtener usuario autenticado actual' })
+  async getProfile(@Req() req: any) {
+    // ARFM20261030: perfil COMPLETO (usuarioId, roles, tipoPersona, sn_cliente)
+    // — no el objeto recortado de JwtStrategy, que el frontend sobreescribía
+    // sobre el usuario del login en cada navegación.
+    return this.authService.getPerfil(req.user.usuario);
+  }
+
+  @Post('registro')
+  @ApiOperation({ summary: 'Registro público de usuario (sin sesión)' })
+  @ApiResponse({ status: 201, description: 'Usuario creado correctamente' })
+  @ApiResponse({ status: 409, description: 'Usuario o correo ya registrado' })
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 }

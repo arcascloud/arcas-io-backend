@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, Not } from 'typeorm';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
 import { TtipoMoneda } from './entities/moneda.entity';
 import { TtipoPais } from './entities/pais.entity';
@@ -17,16 +17,21 @@ import { TtipoGestor } from './entities/gestor.entity';
 import { TtipoImpuesto } from './entities/impuesto.entity';
 import { TtipoProforma } from './entities/proforma.entity';
 import { TtipoZonaVtaCob } from './entities/zona-vta-cob.entity';
+import { TTipoMes } from './entities/tipo-mes.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
-import { PlPlEmpleados } from '../planilla/entities/plplempleados.entity';
+import { PlEmpleados } from '../planilla/entities/plempleados.entity';
 import { TPosPrecioVtas } from '../facturacion/entities/tpospreciovtas.entity';
-import { TipoParametro } from './entities/tipo-parametro.entity';
+import { TipoParametro, GrupoTipoParametro } from './entities/tipo-parametro.entity';
+import { TusuarioCaja } from './entities/usuario-caja.entity';
+import { TtipoWorldCity } from './entities/world-city.entity';
+import { Tusuarios } from '../users/entities/usuario.entity';
 
 @Injectable()
 export class ParametrosService {
   constructor(
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepoDup: Repository<TipoParametro>,
+    @InjectRepository(TTipoMes) private readonly mesRepo: Repository<TTipoMes>,
     @InjectRepository(TtipoMoneda) private readonly monedaRepo: Repository<TtipoMoneda>,
     @InjectRepository(TtipoPais) private readonly paisRepo: Repository<TtipoPais>,
     @InjectRepository(TtipoDeptoPais) private readonly deptoPaisRepo: Repository<TtipoDeptoPais>,
@@ -43,8 +48,11 @@ export class ParametrosService {
     @InjectRepository(TtipoProforma) private readonly proformaRepo: Repository<TtipoProforma>,
     @InjectRepository(TtipoZonaVtaCob) private readonly zonaVtaCobRepo: Repository<TtipoZonaVtaCob>,
     @InjectRepository(TCoTipoDocumentoFiscal) private readonly tipoDocFiscalRepo: Repository<TCoTipoDocumentoFiscal>,
-    @InjectRepository(PlPlEmpleados) private readonly empleadoRepo: Repository<PlPlEmpleados>,
+    @InjectRepository(PlEmpleados) private readonly empleadoRepo: Repository<PlEmpleados>,
     @InjectRepository(TPosPrecioVtas) private readonly posPrecioVtaRepo: Repository<TPosPrecioVtas>,
+    @InjectRepository(TusuarioCaja) private readonly usuarioCajaRepo: Repository<TusuarioCaja>,
+    @InjectRepository(TtipoWorldCity) private readonly worldCityRepo: Repository<TtipoWorldCity>,
+    @InjectRepository(Tusuarios) private readonly usuarioRepo: Repository<Tusuarios>,
     private readonly fechaSistema: FechaSistemaService,
   ) {}
 
@@ -142,10 +150,10 @@ export class ParametrosService {
 
   // ── Depto Empresa ────────────────────────────────────────
   async findAllDeptoEmpresa(empresaId: number) { return this.findAllByEmpresa(this.deptoEmpresaRepo, empresaId); }
-  async findDeptoEmpresa(id: number, empresaId: number) { return this.findOneById(this.deptoEmpresaRepo, 'departamentostempresasId', id, empresaId, 'Depto Empresa'); }
+  async findDeptoEmpresa(id: number, empresaId: number) { return this.findOneById(this.deptoEmpresaRepo, 'deptoId', id, empresaId, 'Depto Empresa'); }
   async createDeptoEmpresa(dto: any, user: string) { return this.createEntity(this.deptoEmpresaRepo, dto, user); }
-  async updateDeptoEmpresa(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, dto, user, 'Depto Empresa'); }
-  async removeDeptoEmpresa(id: number, eid: number) { return this.softDelete(this.deptoEmpresaRepo, 'departamentostempresasId', id, eid, 'Depto Empresa'); }
+  async updateDeptoEmpresa(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.deptoEmpresaRepo, 'deptoId', id, eid, dto, user, 'Depto Empresa'); }
+  async removeDeptoEmpresa(id: number, eid: number) { return this.softDelete(this.deptoEmpresaRepo, 'deptoId', id, eid, 'Depto Empresa'); }
 
   // ── Direcciones ──────────────────────────────────────────
   async findAllDirecciones(empresaId: number) { return this.findAllByEmpresa(this.direccionRepo, empresaId); }
@@ -198,16 +206,103 @@ export class ParametrosService {
 
   // ── Gestores ─────────────────────────────────────────────
   async findAllGestores(empresaId: number) {
-    return this.gestorRepo
+    // Shape PLANO (gestorId, moduloId, ...) + nombre del empleado: lo consumen
+    // el catálogo genérico (idKey 'gestorId'), factura, cotizaciones y
+    // nueva-factura (que busca por empresaId/usuarioId/gestorId).
+    const raw = await this.gestorRepo
       .createQueryBuilder('g')
-      .leftJoin(PlPlEmpleados, 'e', 'e.empleadoId = g.empleadoId')
+      .leftJoin(PlEmpleados, 'e', 'e.empleadoId = g.empleadoId')
       .addSelect("CONCAT(e.nombres, ' ', e.apellidos)", 'nombre')
       .where('g.empresaId = :empresaId', { empresaId })
       .getRawMany();
+    return raw.map((r) => ({
+      gestorId: r.g_gestorId,
+      moduloId: r.g_moduloId,
+      empleadoId: r.g_empleadoId,
+      usuarioId: r.g_usuarioId,
+      sn_activo: r.g_sn_activo,
+      sn_vendedor: r.g_sn_vendedor,
+      empresaId: r.g_empresaId,
+      usuarioCreated: r.g_usuarioCreated,
+      usuarioUpdated: r.g_usuarioUpdated,
+      fechaUpdated: r.g_fechaUpdated,
+      nombre: r.nombre,
+    }));
   }
   async findGestor(id: number, empresaId: number) { return this.findOneById(this.gestorRepo, 'gestorId', id, empresaId, 'Gestor'); }
-  async createGestor(dto: any, user: string) { return this.createEntity(this.gestorRepo, dto, user); }
-  async updateGestor(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.gestorRepo, 'gestorId', id, eid, dto, user, 'Gestor'); }
+
+  /**
+   * Mensaje de duplicado (empleado + empresa = único, clave `gestoresUnique(empleadoId, empresaId)`);
+   * se describe el rol que YA tiene el empleado (módulo del registro existente):
+   *  - módulo 3 (Facturación) → "… ya se encuentra registrada como vendedora"
+   *  - módulo 4 (CxC)         → "… ya se encuentra registrada como gestora de cobro"
+   * El género (vendedora/vendedor) sale del sexo del empleado en plplempleados.
+   * Si el módulo existente no está en la lista, se usa el módulo solicitado.
+   */
+  private async mensajeGestorDuplicado(moduloId: number, empleadoId: number): Promise<string> {
+    let nombre = `Empleado #${empleadoId}`;
+    let fem = false;
+    try {
+      const emp = await this.empleadoRepo.findOne({ where: { empleadoId } as any });
+      if (emp) {
+        nombre = `${emp.nombres} ${emp.apellidos}`.trim();
+        fem = emp.sexo === 'F';
+      }
+    } catch { /* sin empleado: se usa el fallback */ }
+    if (moduloId === 3) {
+      return `${nombre} ya se encuentra ${fem ? 'registrada como vendedora' : 'registrado como vendedor'}`;
+    }
+    if (moduloId === 4) {
+      return `${nombre} ya se encuentra ${fem ? 'registrada como gestora de cobro' : 'registrado como gestor de cobro'}`;
+    }
+    return `${nombre} ya se encuentra ${fem ? 'registrada' : 'registrado'} en el módulo ${moduloId}`;
+  }
+
+  /**
+   * Bloquea duplicado (empresaId, empleadoId) — activo o inactivo: la BD tiene la clave
+   * única `gestoresUnique(empleadoId, empresaId)` SIN módulo, así que un empleado solo
+   * puede ser gestor una vez por empresa (si no, el INSERT daría ER_DUP_ENTRY → 500).
+   * El 409 usa el módulo del registro existente (el rol que ya tiene).
+   * Si el registro existente está inactivo, se reactiva editándolo desde la lista.
+   */
+  private async validarGestorDuplicado(empresaId: number, empleadoId: number, excluirId?: number, moduloIdSolicitado?: number) {
+    if (!empresaId || !empleadoId) return;
+    const where: any = { empresaId, empleadoId };
+    if (excluirId) where.gestorId = Not(excluirId);
+    const dup = await this.gestorRepo.findOne({ where });
+    if (dup) {
+      throw new ConflictException(await this.mensajeGestorDuplicado(dup.moduloId ?? moduloIdSolicitado, empleadoId));
+    }
+  }
+
+  async createGestor(dto: any, user: string) {
+    // Empleado ya registrado como gestor (cualquier módulo) no puede repetirse
+    await this.validarGestorDuplicado(dto.empresaId, dto.empleadoId, undefined, dto.moduloId);
+    // ttipogestores.usuarioId es NOT NULL sin default: si no llega en el body
+    // (el form no lo pide), se resuelve desde el usuario autenticado.
+    let usuarioId = dto.usuarioId;
+    if (usuarioId == null) {
+      try {
+        const u = await this.usuarioRepo.findOne({
+          where: { usuario: user, empresaId: dto.empresaId } as any,
+        });
+        usuarioId = u?.usuarioId ?? 0;
+      } catch {
+        usuarioId = 0;
+      }
+    }
+    return this.createEntity(this.gestorRepo, { ...dto, usuarioId }, user);
+  }
+  async updateGestor(id: number, eid: number, dto: any, user: string) {
+    // Empleado ya registrado no puede repetirse en la edición (excluye el propio registro)
+    const actual = await this.gestorRepo.findOne({ where: { gestorId: id, empresaId: eid } as any });
+    if (actual) {
+      const moduloId = dto?.moduloId ?? actual.moduloId;
+      const empleadoId = dto?.empleadoId ?? actual.empleadoId;
+      await this.validarGestorDuplicado(eid, empleadoId, id, moduloId);
+    }
+    return this.updateEntity(this.gestorRepo, 'gestorId', id, eid, dto, user, 'Gestor');
+  }
   async removeGestor(id: number, eid: number) { return this.softDelete(this.gestorRepo, 'gestorId', id, eid, 'Gestor'); }
 
   // ── Impuestos ────────────────────────────────────────────
@@ -242,6 +337,45 @@ export class ParametrosService {
     return this.posPrecioVtaRepo.findOne({ where: { preciovtaId: id, empresaId } as any });
   }
 
+  // ── Usuarios de Caja (tusuarios_caja) ────────────────────
+  async findAllUsuarioCaja(empresaId: number) {
+    return this.usuarioCajaRepo.find({ where: { empresaId }, order: { usuario: 'ASC', codigo: 'ASC' } });
+  }
+
+  async findUsuarioCaja(id: number, empresaId: number) {
+    return this.findOneById(this.usuarioCajaRepo, 'id', id, empresaId, 'Usuario de Caja');
+  }
+
+  async createUsuarioCaja(dto: any, user: string) {
+    await this.validarUsuarioCaja(dto, undefined);
+    return this.createEntity(this.usuarioCajaRepo, dto, user);
+  }
+
+  async updateUsuarioCaja(id: number, eid: number, dto: any, user: string) {
+    await this.validarUsuarioCaja(dto, id);
+    return this.updateEntity(this.usuarioCajaRepo, 'id', id, eid, dto, user, 'Usuario de Caja');
+  }
+
+  /**
+   * Validaciones de negocio de tusuarios_caja:
+   * - El usuario debe existir en tunidades/tusuarios (FK fk_create_..._usuario)
+   * - UNIQUE (usuario, codigo) global — coincide con el índice tusuarioipaddressUnique
+   */
+  private async validarUsuarioCaja(dto: any, excludeId?: number) {
+    if (dto.usuario !== undefined && dto.usuario !== null && dto.usuario !== '') {
+      const existe = await this.usuarioRepo.findOne({ where: { usuario: dto.usuario } });
+      if (!existe) throw new BadRequestException(`El usuario ${dto.usuario} no existe`);
+    }
+
+    if (dto.usuario && dto.codigo !== undefined && dto.codigo !== null) {
+      const where: any = { usuario: dto.usuario, codigo: Number(dto.codigo) };
+      const dup = await this.usuarioCajaRepo.findOne({ where });
+      if (dup && dup.id !== excludeId) {
+        throw new ConflictException(`El usuario ${dto.usuario} ya tiene asignado el código ${dto.codigo}`);
+      }
+    }
+  }
+
   // ══════════════════════════════════════════════════════════
   // PARÁMETROS UNIFICADOS (ttipoparametros)
   // ══════════════════════════════════════════════════════════
@@ -264,29 +398,45 @@ export class ParametrosService {
     });
   }
 
-  async upsertParametroModulo(empresaId: number, moduloId: number, field: string, valor: string, tipo: string, currentUser: string) {
+  async upsertParametroModulo(
+    empresaId: number, moduloId: number, field: string, valor: string, tipo: string, currentUser: string,
+    descripcion?: string, grupo?: string,
+  ) {
     const existing = await this.tipoParametroRepo.findOne({
       where: { empresaId, moduloId, field } as any,
     });
     if (existing) {
       existing.valor = valor;
       existing.tipo = tipo;
+      // Solo se sobreescriben si vienen en el payload (los endpoints internos no los mandan)
+      if (descripcion !== undefined) existing.descripcion = descripcion;
+      if (grupo !== undefined) existing.grupo = grupo as TipoParametro['grupo'];
       existing.usuarioUpdate = currentUser;
       existing.fechaUpdate = await this.fechaSistema.getFecha(empresaId);
       return this.tipoParametroRepo.save(existing);
     }
     const entity = this.tipoParametroRepo.create({
       empresaId, moduloId, field, valor, tipo,
+      // Si no vienen → columnas ausentes en el INSERT → aplican defaults de la BD
+      ...(descripcion !== undefined ? { descripcion } : {}),
+      ...(grupo !== undefined ? { grupo: grupo as GrupoTipoParametro } : {}),
       sn_activo: 'S',
       usuarioCreated: currentUser,
     });
     return this.tipoParametroRepo.save(entity);
   }
 
-  async upsertParametrosLote(empresaId: number, moduloId: number, items: { field: string; valor: string; tipo: string; sn_activo?: string }[], currentUser: string) {
+  async upsertParametrosLote(
+    empresaId: number, moduloId: number,
+    items: { field: string; valor: string; tipo: string; sn_activo?: string; descripcion?: string; grupo?: string }[],
+    currentUser: string,
+  ) {
     const results: TipoParametro[] = [];
     for (const item of items) {
-      const result = await this.upsertParametroModulo(empresaId, moduloId, item.field, item.valor, item.tipo, currentUser);
+      const result = await this.upsertParametroModulo(
+        empresaId, moduloId, item.field, item.valor, item.tipo, currentUser,
+        item.descripcion, item.grupo,
+      );
       results.push(result);
     }
     return results;
@@ -323,5 +473,86 @@ export class ParametrosService {
     const actual = await this.getValor(empresaId, moduloId, field, '0');
     const nuevo = String(Number(actual) + incremento);
     return this.upsertParametroModulo(empresaId, moduloId, field, nuevo, 'NUMBER', currentUser);
+  }
+
+  // ── Meses (catálogo global, sin empresaId) ────────────────
+  async findAllMeses() { return this.mesRepo.find({ order: { ttipomesId: 'ASC' } }); }
+  async findMes(id: number) {
+    const found = await this.mesRepo.findOne({ where: { ttipomesId: id } });
+    if (!found) throw new NotFoundException(`Mes ${id} no encontrado`);
+    return found;
+  }
+  async createMes(dto: any) { const entity = this.mesRepo.create(dto); return this.mesRepo.save(entity); }
+  async updateMes(id: number, dto: any) {
+    const entity = await this.findMes(id);
+    Object.assign(entity, dto);
+    return this.mesRepo.save(entity);
+  }
+  async removeMes(id: number) { const entity = await this.findMes(id); return this.mesRepo.remove(entity); }
+
+  // ── Ciudades del mundo (catálogo global, solo lectura) ────
+  // NOTA: la colación utf8mb3_spanish_ci hace LIKE insensible a acentos
+  // y mayúsculas, por eso no se normaliza el texto de búsqueda.
+  async findAllWorldCities(params: {
+    q?: string; iso2?: string; country?: string; admin_name?: string;
+    capital?: string; page?: number; rows?: number;
+  }) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const rows = Math.min(500, Math.max(1, Number(params.rows) || 25));
+    const qb = this.worldCityRepo.createQueryBuilder('c');
+
+    const q = (params.q || '').trim();
+    if (q) {
+      qb.andWhere('(c.city LIKE :q OR c.city_ascii LIKE :q)', { q: `%${q}%` });
+    }
+    if (params.iso2) qb.andWhere('c.iso2 = :iso2', { iso2: params.iso2.trim() });
+    if (params.country) qb.andWhere('c.country LIKE :country', { country: `%${params.country.trim()}%` });
+    if (params.admin_name) qb.andWhere('c.admin_name LIKE :admin', { admin: `%${params.admin_name.trim()}%` });
+    if (params.capital) qb.andWhere('c.capital = :capital', { capital: params.capital.trim() });
+
+    qb.orderBy('c.city', 'ASC').addOrderBy('c.id', 'ASC')
+      .skip((page - 1) * rows).take(rows);
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data, total, page, rows };
+  }
+
+  async findWorldCity(id: number) {
+    const found = await this.worldCityRepo.findOne({ where: { id } });
+    if (!found) throw new NotFoundException(`Ciudad ${id} no encontrada`);
+    return found;
+  }
+
+  /** Países distintos (para filtros/select). Solo se consideran capitales válidas para el flag. */
+  async findWorldCitiesPaises() {
+    return this.worldCityRepo.createQueryBuilder('c')
+      .select('c.country', 'country')
+      .addSelect('c.iso2', 'iso2')
+      .addSelect('c.iso3', 'iso3')
+      .addSelect('COUNT(*)', 'total')
+      .groupBy('c.country').addGroupBy('c.iso2').addGroupBy('c.iso3')
+      .orderBy('c.country', 'ASC')
+      .getRawMany();
+  }
+
+  /** Departamentos/estados/provincias distintos de un país (iso2). */
+  async findWorldCitiesAdmin(iso2: string) {
+    return this.worldCityRepo.createQueryBuilder('c')
+      .select('DISTINCT c.admin_name', 'admin_name')
+      .where('c.iso2 = :iso2', { iso2: iso2.trim() })
+      .andWhere("c.admin_name <> ''")
+      .orderBy('admin_name', 'ASC')
+      .getRawMany();
+  }
+
+  /** Capitales de un país (capital = 'primary' | 'admin'), para selects. */
+  async findWorldCitiesCapitales(iso2?: string) {
+    const qb = this.worldCityRepo.createQueryBuilder('c')
+      .where("c.capital IN ('primary', 'admin')");
+    if (iso2) qb.andWhere('c.iso2 = :iso2', { iso2: iso2.trim() });
+    // Case-insensitive y acento-insensitive por la colación spanish_ci
+    qb.orderBy("CASE WHEN c.capital = 'primary' THEN 0 ELSE 1 END", 'ASC')
+      .addOrderBy('c.city', 'ASC');
+    return qb.getMany();
   }
 }

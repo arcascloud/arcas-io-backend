@@ -2,12 +2,23 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { ApiProperty } from '@nestjs/swagger';
 import { Tempresas } from '../../companies/entities/empresa.entity';
 import { Tsucursal } from '../../sucursales/entities/sucursal.entity';
+import { TCai } from '../../companies/entities/tcai.entity';
 
-@Entity('poscorrelativos')
-export class TPosCorrelativos {
+/** Rango de facturación autorizado bajo un CAI (tcai.caiId) */
+@Entity('tcai_autorizado')
+export class TCaiAutorizado {
   @ApiProperty()
-  @PrimaryGeneratedColumn({ name: 'poscorrelativosId' })
-  poscorrelativosId: number;
+  @PrimaryGeneratedColumn({ name: 'caiautorizadoId' })
+  caiAutorizadoId: number;
+
+  @ApiProperty({ description: 'CAI que ampara el rango (tcai)' })
+  @Column()
+  caiId: number;
+
+  @ApiProperty({ type: () => TCai, required: false })
+  @ManyToOne(() => TCai)
+  @JoinColumn({ name: 'caiId' })
+  cai: TCai;
 
   @ApiProperty()
   @Column()
@@ -16,23 +27,23 @@ export class TPosCorrelativos {
   @ApiProperty()
   @Column()
   empresaId: number;
-  
-  @ApiProperty()
-  @Column({ type: 'varchar', length: 30 })
-  rangoDesde;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 30 })
-  rangoHasta;
-  
+  rangoDesde: string;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 30 })
+  rangoHasta: string;
+
   @ApiProperty({ required: true })
   @Column({ type: 'datetime', nullable: false })
-  fechaLimite;
+  fechaLimite: Date;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
-  
+
   @ApiProperty()
   @Column({ type: 'int' })
   Idsucursal: number;
@@ -40,13 +51,13 @@ export class TPosCorrelativos {
   @ManyToOne(() => Tsucursal)
   @JoinColumn({ name: 'Idsucursal' })
   sucursal: Tsucursal;
-  
+
   @ManyToOne(() => Tempresas)
   @JoinColumn({ name: 'empresaId' })
   empresa: Tempresas;
-  
+
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

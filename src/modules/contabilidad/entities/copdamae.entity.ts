@@ -43,13 +43,42 @@ export class Copdamae {
   @Column({ type: 'varchar', length: 2000 })
   descripcion: string;
 
+  @ApiProperty({ description: "Anulada: 'S' = anulada, 'N' = vigente" })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_anulada: string;
+
   @ApiProperty()
-  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
-  sn_activo: string;
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_contabilizada: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_cerrada: string;
 
   @ApiProperty()
   @Column()
   nropartida: number;
+
+  @ApiProperty({
+    required: false,
+    description: 'Partida origen de la contra partida (solo en la contra)',
+  })
+  @Column({ type: 'int', nullable: true })
+  partidaOrigenId: number | null;
+
+  @ApiProperty({
+    required: false,
+    description: 'Partida contra generada sobre esta partida (solo en la original)',
+  })
+  @Column({ type: 'int', nullable: true })
+  contrapdaId: number | null;
+
+  @ApiProperty({
+    required: false,
+    description: 'Fecha en que se generó la contra partida (solo en la original)',
+  })
+  @Column({ type: 'datetime', nullable: true })
+  feccontrapda: Date | null;
 
   @ApiProperty()
   @Column()
@@ -60,11 +89,11 @@ export class Copdamae {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

@@ -7,10 +7,6 @@ export class CreateCxcClienteDto {
   @IsString() @IsOptional()
   nrocliente?: string;
 
-  @ApiProperty({ description: 'Fecha de Registro', required: false })
-  @IsOptional()
-  fecharegistro?: string;
-
   @ApiProperty({ description: 'Fecha de Nacimiento', required: false })
   @IsOptional()
   fechanacimiento?: string;
@@ -63,9 +59,17 @@ export class CreateCxcClienteDto {
   @IsEnum(['A', 'B', 'C', 'D', 'E']) @IsOptional()
   categoria?: string;
 
+  @ApiProperty({ description: 'ID de Módulo', required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
   @ApiProperty({ description: 'ID de Empresa' })
   @IsNumber()
   empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de Sucursal (lo inyecta el ApiService del usuario logueado)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }
 
 export class UpdateCxcClienteDto {
@@ -128,13 +132,13 @@ export class UpdateCxcClienteDto {
   @ApiProperty({ description: 'Activo', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_activo?: string;
+
+  @ApiProperty({ required: false, description: 'ID de Sucursal (lo inyecta el ApiService del usuario logueado)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }
 
 export class CreateCxcMovimientoDto {
-  @ApiProperty({ description: 'Fecha de Registro' })
-  @IsDateString()
-  fecharegistro: string;
-
   @ApiProperty({ description: 'ID de Cliente' })
   @IsNumber()
   clienteId: number;
@@ -175,6 +179,14 @@ export class CreateCxcMovimientoDto {
   @IsString() @IsOptional()
   concepto?: string;
 
+  @ApiProperty({ description: 'ID de Cartera Contable', required: false })
+  @IsNumber() @IsOptional()
+  carteracontableId?: number;
+
+  @ApiProperty({ description: 'Documento capturado manualmente (S) o generado por el sistema (N)', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_doc_manual?: string;
+
   @ApiProperty({ description: 'ID de Empresa' })
   @IsNumber()
   empresaId: number;
@@ -203,21 +215,25 @@ export class UpdateCxcMovimientoDto {
 
   @ApiProperty({ description: 'Contabilizada', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
-  sn_contabilizada?: string;
+  sn_cotabilizada?: string;
 
   @ApiProperty({ description: 'Documento Anulado', enum: ['S', 'N'], required: false })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_doc_anulado?: string;
+
+  @ApiProperty({ description: 'Documento capturado manualmente (S) o generado por el sistema (N)', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_doc_manual?: string;
+
+  @ApiProperty({ description: 'ID de Cartera Contable', required: false })
+  @IsNumber() @IsOptional()
+  carteracontableId?: number;
 }
 
 export class CreateCxcPrestamoDto {
-  @ApiProperty({ description: 'Fecha de Registro' })
-  @IsDateString()
-  fecharegistro: string;
-
   @ApiProperty({ description: 'Número de Préstamo' })
-  @IsString()
-  nroprestamo: string;
+  @IsString() @IsOptional()
+  nroprestamo?: string;
 
   @ApiProperty({ description: 'ID de Cliente' })
   @IsNumber()
@@ -234,6 +250,10 @@ export class CreateCxcPrestamoDto {
   @ApiProperty({ description: 'Capital Neto', required: false })
   @IsNumber() @IsOptional()
   capitalneto?: number;
+
+  @ApiProperty({ description: 'Valor de la cuota pactada', required: false })
+  @IsNumber() @IsOptional()
+  vlrcuota?: number;
 
   @ApiProperty({ description: 'Tasa', required: false })
   @IsNumber() @IsOptional()
@@ -263,6 +283,30 @@ export class CreateCxcPrestamoDto {
   @IsNumber() @IsOptional()
   gracia?: number;
 
+  @ApiProperty({ description: 'Fecha de aprobación del préstamo (default = fecha del sistema)', required: false })
+  @IsOptional()
+  fecha_aprobacion?: Date | string;
+
+  @ApiProperty({ description: 'Fecha de última cuota pagada', required: false })
+  @IsOptional()
+  fechaUltPago?: Date | string;
+
+  @ApiProperty({ description: 'Fecha efectiva del préstamo', required: false })
+  @IsOptional()
+  fechaEfectiva?: Date | string;
+
+  @ApiProperty({ description: 'Saldo de capital pendiente', required: false })
+  @IsNumber() @IsOptional()
+  saldoactual?: number;
+
+  @ApiProperty({ description: 'Pre-aprobado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_preaprobado?: string;
+
+  @ApiProperty({ description: 'Aprobado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_aprobado?: string;
+
   @ApiProperty({ description: 'Activo', required: false })
   @IsString() @IsOptional()
   sn_activo?: string;
@@ -271,9 +315,25 @@ export class CreateCxcPrestamoDto {
   @IsString() @IsOptional()
   sn_contabilizado?: string;
 
+  @ApiProperty({ description: 'ID partida contable (copdamae)', required: false })
+  @IsOptional()
+  partidaId?: number;
+
+  @ApiProperty({ description: 'Anulado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_anulado?: string;
+
+  @ApiProperty({ description: 'ID de Módulo', required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
   @ApiProperty({ description: 'ID de Empresa' })
   @IsNumber()
   empresaId: number;
+
+  @ApiProperty({ required: false, description: 'ID de Sucursal (lo inyecta el ApiService del usuario logueado)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }
 
 export class UpdateCxcPrestamoDto {
@@ -288,6 +348,10 @@ export class UpdateCxcPrestamoDto {
   @ApiProperty({ description: 'Capital Neto', required: false })
   @IsNumber() @IsOptional()
   capitalneto?: number;
+
+  @ApiProperty({ description: 'Valor de la cuota pactada', required: false })
+  @IsNumber() @IsOptional()
+  vlrcuota?: number;
 
   @ApiProperty({ description: 'Tasa', required: false })
   @IsNumber() @IsOptional()
@@ -321,6 +385,30 @@ export class UpdateCxcPrestamoDto {
   @IsNumber() @IsOptional()
   ultcuotapagada?: number;
 
+  @ApiProperty({ description: 'Fecha de aprobación del préstamo', required: false })
+  @IsOptional()
+  fecha_aprobacion?: Date | string;
+
+  @ApiProperty({ description: 'Fecha de última cuota pagada', required: false })
+  @IsOptional()
+  fechaUltPago?: Date | string;
+
+  @ApiProperty({ description: 'Fecha efectiva del préstamo', required: false })
+  @IsOptional()
+  fechaEfectiva?: Date | string;
+
+  @ApiProperty({ description: 'Saldo de capital pendiente', required: false })
+  @IsNumber() @IsOptional()
+  saldoactual?: number;
+
+  @ApiProperty({ description: 'Pre-aprobado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_preaprobado?: string;
+
+  @ApiProperty({ description: 'Aprobado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_aprobado?: string;
+
   @ApiProperty({ description: 'Activo', required: false })
   @IsString() @IsOptional()
   sn_activo?: string;
@@ -328,4 +416,16 @@ export class UpdateCxcPrestamoDto {
   @ApiProperty({ description: 'Contabilizado', required: false })
   @IsString() @IsOptional()
   sn_contabilizado?: string;
+
+  @ApiProperty({ description: 'ID partida contable (copdamae)', required: false })
+  @IsOptional()
+  partidaId?: number;
+
+  @ApiProperty({ description: 'Anulado', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_anulado?: string;
+
+  @ApiProperty({ required: false, description: 'ID de Sucursal (lo inyecta el ApiService del usuario logueado)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
 }

@@ -39,16 +39,16 @@ export class CreateProveedorDto {
   limiteCredito?: number;
 
   @ApiProperty({ description: 'Días de Plazo' })
-  @IsNumber()
-  diasplazo: number;
+  @IsNumber() @IsOptional()
+  diasplazo?: number;
 
   @ApiProperty({ description: 'Interés' })
-  @IsNumber()
-  interes: number;
+  @IsNumber() @IsOptional()
+  interes?: number;
 
   @ApiProperty({ description: 'Moratorio' })
-  @IsNumber()
-  moratorio: number;
+  @IsNumber() @IsOptional()
+  moratorio?: number;
 
   @ApiProperty({ description: 'Categoría', enum: ['A', 'B', 'C', 'D', 'E'], required: false })
   @IsEnum(['A', 'B', 'C', 'D', 'E']) @IsOptional()

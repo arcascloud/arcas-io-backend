@@ -18,23 +18,23 @@ export class PlAsistencia {
   empleadoId: number;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'time', nullable: true })
   horaentrada: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'time', nullable: true })
   horaalmuerzo: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'time', nullable: true })
   horaretorno: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'time', nullable: true })
   horarealSalida: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'time', nullable: true })
   horasalida: string;
 
   @ApiProperty()
@@ -42,11 +42,11 @@ export class PlAsistencia {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -55,25 +55,37 @@ export class KardexService {
 
   async registrarEntrada(dto: KardexEntradaDto): Promise<TinvKardex> {
     const existencia = await this.obtenerOCrearExistencia(dto.bodegaId, dto.productoId, dto.empresaId, dto.usuarioCreated);
+    // DEFENSA OBLIGATORIA: los detalles decimal de MySQL llegan como string
+    // ("10.00"). Sin Number(), `saldo + cantidad` CONCATENA en vez de sumar
+    // (300 + "10.00" = "30010.00" → 3001010 en la siguiente entrada).
+    const cantidad = Number(dto.cantidad) || 0;
+    const costoUnitario = Number(dto.costoUnitario) || 0;
+    const factordecambio = Number(dto.factordecambio) || 1;
     const saldoAnterior = Number(existencia.existencia) || 0;
-    const saldoActual = saldoAnterior + dto.cantidad;
-    const costoTotal = dto.cantidad * dto.costoUnitario;
+    const saldoActual = saldoAnterior + cantidad;
+    const costoTotal = cantidad * costoUnitario;
 
     const kardex = this.kardexRepo.create({
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
+      // FechaIngreso: campo de negocio distinto, fuera del alcance de las
+      // 4 reglas → se conserva la compuerta (acepta valor del cliente).
       FechaIngreso: dto.FechaIngreso || await this.fechaSistema.getFecha(dto.empresaId),
-      factordecambio: dto.factordecambio || 1,
-      cantidad: dto.cantidad,
+      // Reglas 1 y 4: fecharegistro lo impone el backend (nunca el default
+      // CURRENT_TIMESTAMP de la columna en MySQL = reloj del servidor)
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
+      factordecambio,
+      cantidad,
       existencia: saldoActual,
-      costoUnitario: dto.costoUnitario,
+      costoUnitario,
       subTotal: costoTotal,
-      saldoAnterior,
-      saldoActual,
+      // 2 renombres kardex: los nombres de columna reales en invkardex
+      existencia_anterior: saldoAnterior,
+      exisencia_actual: saldoActual,
       costoTotal,
-      costoUSD: dto.factordecambio ? costoTotal / dto.factordecambio : 0,
-      subTotalUSD: dto.factordecambio ? costoTotal / dto.factordecambio : 0,
+      costoUSD: costoTotal / factordecambio,
+      subTotalUSD: costoTotal / factordecambio,
       nroreferencia: dto.nroreferencia,
       tipomov: 'E',
       moduloId: dto.moduloId,
@@ -83,7 +95,7 @@ export class KardexService {
 
     const saved = await this.kardexRepo.save(kardex);
 
-    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, dto.costoUnitario, dto.usuarioCreated);
+    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitario, dto.usuarioCreated);
 
     this.eventEmitter.emit('kardex.entrada.registrada', { kardex: saved, dto });
 
@@ -92,30 +104,41 @@ export class KardexService {
 
   async registrarSalida(dto: KardexSalidaDto): Promise<TinvKardex> {
     const existencia = await this.obtenerOCrearExistencia(dto.bodegaId, dto.productoId, dto.empresaId, dto.usuarioCreated);
+    // DEFENSA OBLIGATORIA: misma coerción que en registrarEntrada (decimal
+    // llega como string; la resta sí coerce, pero se unifica para no depender
+    // de esa particularidad de JS).
+    const cantidad = Number(dto.cantidad) || 0;
+    const costoUnitario = Number(dto.costoUnitario) || 0;
+    const factordecambio = Number(dto.factordecambio) || 1;
     const saldoAnterior = Number(existencia.existencia) || 0;
-    
-    if (saldoAnterior < dto.cantidad) {
-      throw new Error(`Stock insuficiente. Disponible: ${saldoAnterior}, Solicitado: ${dto.cantidad}`);
+
+    if (saldoAnterior < cantidad) {
+      // BadRequestException (y no Error plano): un Error plano lo devuelve Nest como 500
+      throw new BadRequestException(`Stock insuficiente. Disponible: ${saldoAnterior}, Solicitado: ${cantidad}`);
     }
 
-    const saldoActual = saldoAnterior - dto.cantidad;
-    const costoTotal = dto.cantidad * dto.costoUnitario;
+    const saldoActual = saldoAnterior - cantidad;
+    const costoTotal = cantidad * costoUnitario;
 
     const kardex = this.kardexRepo.create({
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
       codbarra: dto.codbarra || '',
       FechaIngreso: await this.fechaSistema.getFecha(dto.empresaId),
-      factordecambio: dto.factordecambio || 1,
-      cantidad: dto.cantidad,
+      // Reglas 1 y 4: fecharegistro lo impone el backend (nunca el default
+      // CURRENT_TIMESTAMP de la columna en MySQL = reloj del servidor)
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
+      factordecambio,
+      cantidad,
       existencia: saldoActual,
-      costoUnitario: dto.costoUnitario,
+      costoUnitario,
       subTotal: costoTotal,
-      saldoAnterior,
-      saldoActual,
+      // 2 renombres kardex: los nombres de columna reales en invkardex
+      existencia_anterior: saldoAnterior,
+      exisencia_actual: saldoActual,
       costoTotal,
-      costoUSD: dto.factordecambio ? costoTotal / dto.factordecambio : 0,
-      subTotalUSD: dto.factordecambio ? costoTotal / dto.factordecambio : 0,
+      costoUSD: costoTotal / factordecambio,
+      subTotalUSD: costoTotal / factordecambio,
       nroreferencia: dto.nroreferencia,
       tipomov: 'S',
       moduloId: dto.moduloId,
@@ -125,7 +148,7 @@ export class KardexService {
 
     const saved = await this.kardexRepo.save(kardex);
 
-    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, dto.costoUnitario, dto.usuarioCreated);
+    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitario, dto.usuarioCreated);
 
     this.eventEmitter.emit('kardex.salida.registrada', { kardex: saved, dto });
 
@@ -262,8 +285,8 @@ export class KardexService {
       await this.kardexRepo.createQueryBuilder()
         .update()
         .set({
-          saldoAnterior: saldoAnt,
-          saldoActual: Math.round(estado.existencia),
+          existencia_anterior: saldoAnt,
+          exisencia_actual: Math.round(estado.existencia),
           existencia: Math.round(estado.existencia),
         })
         .where('invkardexId = :id', { id: k.invkardexId })

@@ -1,10 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { TInvReqMae } from './entities/invreqmae.entity';
 import { TInvReqDet } from './entities/invreqdet.entity';
 import { Tproducto } from './entities/producto.entity';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
+import { CorrelativosService } from '../../shared/correlativos.service';
+import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
+import { Tusuarios } from '../users/entities/usuario.entity';
 
 @Injectable()
 export class RequisicionInventarioService {
@@ -12,8 +15,22 @@ export class RequisicionInventarioService {
     @InjectRepository(TInvReqMae) private readonly maeRepo: Repository<TInvReqMae>,
     @InjectRepository(TInvReqDet) private readonly detRepo: Repository<TInvReqDet>,
     @InjectRepository(Tproducto) private readonly productoRepo: Repository<Tproducto>,
+    @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
+    @InjectRepository(Tusuarios) private readonly usuariosRepo: Repository<Tusuarios>,
+    private readonly dataSource: DataSource,
     private readonly fechaSistema: FechaSistemaService,
+    private readonly correlativos: CorrelativosService,
   ) {}
+
+  /**
+   * Correlativo de requisición: ttipoparametros (field='nrorequisicion'),
+   * localizado por Idsucursal + empresaId del usuario logueado, incrementando
+   * valor = valor + 1 de forma atómica (UPDATE + LAST_INSERT_ID en la misma
+   * conexión) y devolviendo el nuevo número.
+   */
+  private async siguienteNroRequisicion(usuario: string, empresaId: number): Promise<number> {
+    return this.correlativos.siguiente('nrorequisicion', empresaId, usuario);
+  }
 
   async findAllMae(empresaId: number) {
     return this.maeRepo.find({ where: { empresaId } as any, order: { fecharegistro: 'DESC' } as any });
@@ -31,7 +48,8 @@ export class RequisicionInventarioService {
 
   async createMae(dto: any, usuario: string) {
     const mae = this.maeRepo.create({
-      nrorequisicion: dto.nrorequisicion || 0,
+      // Correlativo automático desde ttipoparametros (field='nrorequisicion')
+      nrorequisicion: await this.siguienteNroRequisicion(usuario, dto.empresaId),
       bodegaOrigenId: dto.bodegaOrigenId,
       bodegaDestinoId: dto.bodegaDestinoId,
       concepto: dto.concepto || '',
@@ -42,6 +60,8 @@ export class RequisicionInventarioService {
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: fecha impuesta por el backend (no el reloj de MySQL)
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.maeRepo.save(mae);
   }
@@ -51,7 +71,8 @@ export class RequisicionInventarioService {
     if (dto.fechaEntrega) {
       dto.fechaEntrega = new Date(dto.fechaEntrega).toISOString().slice(0, 10);
     }
-    Object.assign(mae, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
+    const { fecharegistro, ...cambios } = dto ?? {}; // nunca se re-estampa en un PUT
+    Object.assign(mae, cambios, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.maeRepo.save(mae);
   }
 
@@ -95,6 +116,8 @@ export class RequisicionInventarioService {
       sn_anulado: 'N',
       empresaId: dto.empresaId,
       usuarioCreated: usuario,
+      // Reglas 1 y 4: misma fecha que el maestro de la requisición
+      fecharegistro: await this.fechaSistema.obtenerFechaRegistro(usuario, dto.empresaId),
     });
     return this.detRepo.save(det);
   }
@@ -102,7 +125,8 @@ export class RequisicionInventarioService {
   async updateDet(invreqdetid: number, empresaId: number, dto: any, usuario: string) {
     const det = await this.detRepo.findOne({ where: { invreqdetid, empresaId } as any });
     if (!det) throw new BadRequestException('Detalle no encontrado');
-    Object.assign(det, dto, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
+    const { fecharegistro, ...cambios } = dto ?? {}; // nunca se re-estampa en un PUT
+    Object.assign(det, cambios, { usuarioUpdated: usuario, fechaUpdated: await this.fechaSistema.getFecha(empresaId) });
     return this.detRepo.save(det);
   }
 

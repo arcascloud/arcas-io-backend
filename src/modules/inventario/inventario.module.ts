@@ -39,12 +39,18 @@ import { TomaInventarioController } from './toma-inventario.controller';
 import { AjusteInventarioController } from './ajuste-inventario.controller';
 import { RequisicionInventarioController } from './requisicion-inventario.controller';
 import { TrasladoInventarioController } from './traslado-inventario.controller';
+import { TipoParametro } from "../parametros/entities/tipo-parametro.entity";
+import { Tusuarios } from "../users/entities/usuario.entity";
+import { TinvDepto } from "./entities/deptos.entity";
+import { TPosCboDet } from "../facturacion/entities/poscbodet.entity";
+import { TPosDescuentos } from "../facturacion/entities/tposdescuentos.entity";
 
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
     TypeOrmModule.forFeature([
       Tproducto,
+      TinvDepto,
       TinvCategoria,
       TinvMarca,
       TinvModelo,
@@ -71,10 +77,34 @@ import { TrasladoInventarioController } from './traslado-inventario.controller';
       TInvReqDet,
       TInvTrasladoMae,
       TInvTrasladoDet,
+      TipoParametro,
+      Tusuarios,
+      TPosCboDet,
+      TPosDescuentos,
     ]),
   ],
-  controllers: [InventarioController, TomaInventarioController, AjusteInventarioController, RequisicionInventarioController, TrasladoInventarioController],
-  providers: [InventarioService, KardexService, TomaInventarioService, AjusteInventarioService, RequisicionInventarioService, TrasladoInventarioService],
-  exports: [InventarioService, KardexService, TomaInventarioService, AjusteInventarioService, RequisicionInventarioService, TrasladoInventarioService],
+  controllers: [
+    InventarioController,
+    TomaInventarioController,
+    AjusteInventarioController,
+    RequisicionInventarioController,
+    TrasladoInventarioController,
+  ],
+  providers: [
+    InventarioService,
+    KardexService,
+    TomaInventarioService,
+    AjusteInventarioService,
+    RequisicionInventarioService,
+    TrasladoInventarioService,
+  ],
+  exports: [
+    InventarioService,
+    KardexService,
+    TomaInventarioService,
+    AjusteInventarioService,
+    RequisicionInventarioService,
+    TrasladoInventarioService,
+  ],
 })
 export class InventarioModule {}

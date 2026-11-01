@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
@@ -6,11 +6,13 @@ import { Tempresas } from './entities/empresa.entity';
 import { TempresasDet } from './entities/empresasdet.entity';
 import { TempresasLogo } from './entities/empresaslogo.entity';
 import { TImpresora } from './entities/impresoras.entity';
-import { TPosCorrelativos } from '../facturacion/entities/poscorrelativos.entity';
+import { TCaiAutorizado } from '../facturacion/entities/cai-autorizado.entity';
+import { TCai } from './entities/tcai.entity';
 import { Tsucursal } from '../sucursales/entities/sucursal.entity';
 import { CreateEmpresaDto, UpdateEmpresaDto } from './dto/empresa.dto';
 import { CreateEmpresaDetDto, UpdateEmpresaDetDto } from './dto/empresasdet.dto';
 import { CreateCorrelativoDto, UpdateCorrelativoDto } from './dto/correlativos.dto';
+import { CreateCaiDto, UpdateCaiDto } from './dto/cai.dto';
 import { CreateEmpresaLogoDto, UpdateEmpresaLogoDto } from './dto/empresaslogo.dto';
 import { CreateImpresoraDto, UpdateImpresoraDto } from './dto/impresoras.dto';
 
@@ -25,8 +27,10 @@ export class CompaniesService {
     private readonly logoRepo: Repository<TempresasLogo>,
     @InjectRepository(TImpresora)
     private readonly impRepo: Repository<TImpresora>,
-    @InjectRepository(TPosCorrelativos)
-    private readonly corrRepo: Repository<TPosCorrelativos>,
+    @InjectRepository(TCaiAutorizado)
+    private readonly corrRepo: Repository<TCaiAutorizado>,
+    @InjectRepository(TCai)
+    private readonly caiRepo: Repository<TCai>,
     @InjectRepository(Tsucursal)
     private readonly sucRepo: Repository<Tsucursal>,
     private readonly fechaSistema: FechaSistemaService,
@@ -97,24 +101,77 @@ export class CompaniesService {
     return { deleted: true };
   }
 
+  // ===== CAIs (tcai) — control independiente del CAI por empresa =====
+
+  async findAllCai(empresaId: number) {
+    return this.caiRepo.find({
+      where: { empresaId },
+      order: { caiId: 'ASC' },
+    });
+  }
+
+  async findOneCai(caiId: number, empresaId: number) {
+    const found = await this.caiRepo.findOne({ where: { caiId, empresaId } });
+    if (!found) throw new NotFoundException(`CAI ${caiId} no encontrado`);
+    return found;
+  }
+
+  async createCai(empresaId: number, dto: CreateCaiDto, currentUser: string) {
+    const entity = this.caiRepo.create({
+      ...dto,
+      empresaId,
+      usuarioCreated: currentUser,
+      fechaCreated: await this.fechaSistema.getFecha(empresaId),
+    });
+    return this.caiRepo.save(entity);
+  }
+
+  async updateCai(caiId: number, empresaId: number, dto: UpdateCaiDto, currentUser: string) {
+    const entity = await this.findOneCai(caiId, empresaId);
+    Object.assign(entity, dto, {
+      usuarioUpdated: currentUser,
+      fechaUpdated: await this.fechaSistema.getFecha(empresaId),
+    });
+    return this.caiRepo.save(entity);
+  }
+
+  async removeCai(caiId: number, empresaId: number) {
+    const entity = await this.findOneCai(caiId, empresaId);
+    const conRangos = await this.corrRepo.count({ where: { caiId } as any });
+    if (conRangos > 0) {
+      throw new BadRequestException('El CAI tiene rangos autorizados asociados y no puede eliminarse');
+    }
+    await this.caiRepo.remove(entity);
+    return { deleted: true };
+  }
+
   // ===== Correlativos (CAI) =====
 
   async findAllCorr(empresaId: number) {
     return this.corrRepo.find({
       where: { empresaId },
-      order: { poscorrelativosId: 'ASC' },
+      order: { caiAutorizadoId: 'ASC' },
     });
   }
 
-  async findOneCorr(poscorrelativosId: number, empresaId: number) {
+  async findOneCorr(caiAutorizadoId: number, empresaId: number) {
     const found = await this.corrRepo.findOne({
-      where: { poscorrelativosId, empresaId },
+      where: { caiAutorizadoId, empresaId },
     });
-    if (!found) throw new NotFoundException(`Correlativo ${poscorrelativosId} no encontrado`);
+    if (!found) throw new NotFoundException(`Correlativo ${caiAutorizadoId} no encontrado`);
     return found;
   }
 
   async createCorr(empresaId: number, dto: CreateCorrelativoDto, currentUser: string) {
+    // tcai_autorizado.caiId es NOT NULL: asignar el CAI activo de la empresa si no viene
+    if (!dto.caiId) {
+      const caiActivo = await this.caiRepo.findOne({
+        where: { empresaId, sn_activo: 'S' } as any,
+        order: { caiId: 'DESC' } as any,
+      });
+      if (!caiActivo) throw new BadRequestException('La empresa no tiene un CAI activo (tcai)');
+      dto.caiId = caiActivo.caiId;
+    }
     const entity = this.corrRepo.create({
       ...dto,
       empresaId,
@@ -123,8 +180,8 @@ export class CompaniesService {
     return this.corrRepo.save(entity);
   }
 
-  async updateCorr(poscorrelativosId: number, empresaId: number, dto: UpdateCorrelativoDto, currentUser: string) {
-    const entity = await this.findOneCorr(poscorrelativosId, empresaId);
+  async updateCorr(caiAutorizadoId: number, empresaId: number, dto: UpdateCorrelativoDto, currentUser: string) {
+    const entity = await this.findOneCorr(caiAutorizadoId, empresaId);
     Object.assign(entity, dto, {
       usuarioUpdated: currentUser,
       fechaUpdated: await this.fechaSistema.getFecha(empresaId),
@@ -132,8 +189,8 @@ export class CompaniesService {
     return this.corrRepo.save(entity);
   }
 
-  async removeCorr(poscorrelativosId: number, empresaId: number) {
-    const entity = await this.findOneCorr(poscorrelativosId, empresaId);
+  async removeCorr(caiAutorizadoId: number, empresaId: number) {
+    const entity = await this.findOneCorr(caiAutorizadoId, empresaId);
     await this.corrRepo.remove(entity);
     return { deleted: true };
   }
@@ -141,7 +198,7 @@ export class CompaniesService {
   async findNextNroFactura(empresaId: number, idsucursal: number) {
     const corr = await this.corrRepo.findOne({
       where: { empresaId, Idsucursal: idsucursal },
-      order: { poscorrelativosId: 'DESC' },
+      order: { caiAutorizadoId: 'DESC' },
     });
     return { nrofactura: corr ? corr.nrofactura + 1 : 1 };
   }
@@ -161,27 +218,35 @@ export class CompaniesService {
     return corr.map(c => {
       const desde = this.extractRangoNumero(c.rangoDesde);
       const hasta = this.extractRangoNumero(c.rangoHasta);
-      const usados = Number(c.nrofactura) || 0;
-      const total = hasta - desde + 1;
+      const nro = Number(c.nrofactura) || 0;
+      const total = Math.max(0, hasta - desde + 1);
+
+      // nrofactura = último número emitido (el siguiente es nrofactura+1, ver findNextNroFactura)
+      // → usados = cuántos números del rango ya se emitieron
+      // Ej: rango 00120001–00127000 (total 7000), nrofactura 120010 → usados 10
+      const usados = Math.min(Math.max(0, nro - desde + 1), total);
       const disponible = Math.max(0, total - usados);
-      const porcentaje = total > 0 ? Math.min(100, (usados / total) * 100) : 0;
+
+      // % DISPONIBLE: lo que queda por facturar.
+      // Ej: (6990/7000)*100 = 99.86% → verde; baja al acercarse al fin del rango
+      const porcentaje = total > 0 ? (disponible / total) * 100 : 0;
 
       let estado: 'OK' | 'ALERTA' | 'CRITICO' | 'AGOTADO' = 'OK';
-      if (usados >= total) estado = 'AGOTADO';
-      else if (porcentaje >= 90) estado = 'CRITICO';
-      else if (porcentaje >= 80) estado = 'ALERTA';
+      if (disponible <= 0) estado = 'AGOTADO';
+      else if (porcentaje < 10) estado = 'CRITICO';
+      else if (porcentaje < 20) estado = 'ALERTA';
 
       return {
-        poscorrelativosId: c.poscorrelativosId,
+        caiAutorizadoId: c.caiAutorizadoId,
         Idsucursal: c.Idsucursal,
         rangoDesde: c.rangoDesde,
         rangoHasta: c.rangoHasta,
-        nrofactura: usados,
+        nrofactura: nro,
         fechaLimite: c.fechaLimite,
         total,
         usados,
         disponible,
-        porcentaje: Math.round(porcentaje),
+        porcentaje: Math.round(porcentaje * 100) / 100,
         estado,
       };
     });

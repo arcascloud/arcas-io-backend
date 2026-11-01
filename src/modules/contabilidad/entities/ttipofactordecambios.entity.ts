@@ -12,11 +12,11 @@ export class Ttipofactordecambios {
   fecharegistro: Date;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
+  @Column({ type: 'decimal', precision: 20, scale: 4, default: 0.0000 })
   preciocompra: number;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0.00 })
+  @Column({ type: 'decimal', precision: 20, scale: 4, default: 0.0000 })
   precioventa: number;
 
   @ApiProperty()
@@ -28,11 +28,11 @@ export class Ttipofactordecambios {
   empresaId: number;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @ApiProperty({ required: false })

@@ -11,7 +11,7 @@ export class TusuarioMnuItem {
   @Column({ type: 'int' })
   moduloId: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuario: string;
 
   @Column({ type: 'int' })
@@ -44,10 +44,10 @@ export class TusuarioMnuItem {
   @Column({ type: 'int', default: 0 })
   zorden: number;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 20 })
   usuarioCreated: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioUpdated: string;
 
   @Column({ type: 'datetime', nullable: true })

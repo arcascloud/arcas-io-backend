@@ -1,7 +1,7 @@
 {
   "name": "arcas-backend",
   "version": "1.0.0",
-  "description": "Backend ERP Arcas Software",
+  "description": "Backend Dev Arcas Software ERP",
   "scripts": {
     "build": "nest build",
     "start": "nest start",
@@ -19,8 +19,11 @@
     "@nestjs/platform-express": "^11.2.0",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/typeorm": "^11.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "axios": "^1.20.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "dotenv-expand": "^1000.0.0",
     "mysql2": "^3.14.0",
