@@ -198,6 +198,13 @@ export class RolesGuard {
     ]);
     if (!requiredRoles) return true;
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user?.roles?.includes(role));
+    const roles: string[] = user?.roles ?? [];
+    if (!requiredRoles.some((role) => roles.includes(role))) {
+      // 403 explícito con mensaje (antes devolvía false → 403 genérico sin detalle)
+      throw new ForbiddenException(
+        `Requiere uno de los roles: ${requiredRoles.join(', ')}`,
+      );
+    }
+    return true;
   }
 }
