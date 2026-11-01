@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Backend Dev Arcas Software ERP",
   "scripts": {
-    "build": "nest build",
+    "build": "node --max-old-space-size=4096 ./node_modules/@nestjs/cli/bin/nest.js build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
