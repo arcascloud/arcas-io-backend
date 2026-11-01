@@ -33,7 +33,24 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors({
-    origin: ['http://localhost:4200', 'http://localhost:3000'],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowed = [
+        'http://localhost:4200',
+        'http://localhost:3000',
+        'https://hn.arcas-io.workers.dev',
+      ];
+      if (
+        allowed.includes(origin) ||
+        origin.endsWith('.arcas-io.workers.dev') ||
+        origin.endsWith('.pages.dev') ||
+        origin.endsWith('.vercel.app')
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
