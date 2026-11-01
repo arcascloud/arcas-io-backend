@@ -1,0 +1,93 @@
+2026-11-01T07:41:34.331810044Z ==> Downloading cache...
+2026-11-01T07:41:34.357111736Z ==> Cloning from https://github.com/arcascloud/arcas-io-backend
+2026-11-01T07:41:34.949994527Z ==> Checking out commit 3da99e340414e67845d624572d962349ad0318fa in branch master
+2026-11-01T07:41:43.803173581Z ==> Downloaded and extracted 74 MiB cache in 9s.
+2026-11-01T07:41:44.815906833Z ==> Using Node.js version 24.22.1 (default)
+2026-11-01T07:41:44.815919441Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-11-01T07:41:44.85022639Z ==> Running build command 'npm install; npm run build'...
+2026-11-01T07:41:45.953587628Z 
+2026-11-01T07:41:45.953608051Z up to date, audited 442 packages in 992ms
+2026-11-01T07:41:45.953616761Z 
+2026-11-01T07:41:45.953691781Z 111 packages are looking for funding
+2026-11-01T07:41:45.953762372Z   run `npm fund` for details
+2026-11-01T07:41:45.984165239Z 
+2026-11-01T07:41:45.984179987Z 17 vulnerabilities (1 low, 7 moderate, 8 high, 1 critical)
+2026-11-01T07:41:45.984182036Z 
+2026-11-01T07:41:45.984183707Z To address issues that do not require attention, run:
+2026-11-01T07:41:45.984185101Z   npm audit fix
+2026-11-01T07:41:45.984186402Z 
+2026-11-01T07:41:45.984188065Z To address all issues (including breaking changes), run:
+2026-11-01T07:41:45.984190398Z   npm audit fix --force
+2026-11-01T07:41:45.984191729Z 
+2026-11-01T07:41:45.984193364Z Run `npm audit` for details.
+2026-11-01T07:41:46.134335196Z 
+2026-11-01T07:41:46.13435268Z > arcas-backend@1.0.0 build
+2026-11-01T07:41:46.134355566Z > node --max-old-space-size=4096 ./node_modules/@nestjs/cli/bin/nest.js build
+2026-11-01T07:41:46.134356889Z 
+2026-11-01T07:41:54.821475476Z ==> Uploading build...
+2026-11-01T07:41:59.115851494Z ==> Uploaded in 2.5s. Compression took 1.8s
+2026-11-01T07:41:59.116752588Z ==> Build successful 🎉
+2026-11-01T07:41:59.77044122Z ==> Deploying...
+2026-11-01T07:41:59.823419069Z ==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+2026-11-01T07:42:17.052602401Z ==> Running 'npm run start'
+2026-11-01T07:42:18.24966667Z 
+2026-11-01T07:42:18.24969787Z > arcas-backend@1.0.0 start
+2026-11-01T07:42:18.24970566Z > node --max-old-space-size=4096 dist/main
+2026-11-01T07:42:18.2497091Z 
+2026-11-01T07:42:29.655230036Z [Nest] 84  - 11/01/2026, 7:42:29 AM     LOG [NestFactory] Starting Nest application...
+2026-11-01T07:42:31.247773164Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] AppModule dependencies initialized +1593ms
+2026-11-01T07:42:31.247809825Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] TypeOrmModule dependencies initialized +0ms
+2026-11-01T07:42:31.247908917Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] PassportModule dependencies initialized +0ms
+2026-11-01T07:42:31.340658686Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] JwtModule dependencies initialized +93ms
+2026-11-01T07:42:31.340935171Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] DiscoveryModule dependencies initialized +0ms
+2026-11-01T07:42:31.341108064Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] EventEmitterModule dependencies initialized +1ms
+2026-11-01T07:42:31.341163505Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] EventEmitterModule dependencies initialized +0ms
+2026-11-01T07:42:31.341248806Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] EventEmitterModule dependencies initialized +0ms
+2026-11-01T07:42:31.341416979Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] EventEmitterModule dependencies initialized +0ms
+2026-11-01T07:42:31.34146363Z [Nest] 84  - 11/01/2026, 7:42:31 AM     LOG [InstanceLoader] EventEmitterModule dependencies initialized +0ms
+2026-11-01T07:42:31.34547358Z [Nest] 84  - 11/01/2026, 7:42:31 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (1)...
+2026-11-01T07:42:31.345496851Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:31.345504641Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:34.356107924Z [Nest] 84  - 11/01/2026, 7:42:34 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (2)...
+2026-11-01T07:42:34.356516101Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:34.356528551Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:37.364539888Z [Nest] 84  - 11/01/2026, 7:42:37 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (3)...
+2026-11-01T07:42:37.364561818Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:37.364567098Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:40.366244912Z [Nest] 84  - 11/01/2026, 7:42:40 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (4)...
+2026-11-01T07:42:40.366276443Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:40.366283073Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:43.37189006Z [Nest] 84  - 11/01/2026, 7:42:43 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (5)...
+2026-11-01T07:42:43.371925861Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:43.371929841Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:46.376779274Z [Nest] 84  - 11/01/2026, 7:42:46 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (6)...
+2026-11-01T07:42:46.376807805Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:46.376813095Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:49.381906773Z [Nest] 84  - 11/01/2026, 7:42:49 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (7)...
+2026-11-01T07:42:49.381939273Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:49.381945034Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:52.385429963Z [Nest] 84  - 11/01/2026, 7:42:52 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (8)...
+2026-11-01T07:42:52.385464174Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:52.385469274Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:55.394501911Z [Nest] 84  - 11/01/2026, 7:42:55 AM   ERROR [TypeOrmModule] Unable to connect to the database. Retrying (9)...
+2026-11-01T07:42:55.394529042Z Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:55.394534472Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16)
+2026-11-01T07:42:55.441904726Z [Nest] 84  - 11/01/2026, 7:42:55 AM   ERROR [ExceptionHandler] Error: connect ECONNREFUSED 127.0.0.1:3306
+2026-11-01T07:42:55.441932087Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2083:16) {
+2026-11-01T07:42:55.441937997Z   errno: -111,
+2026-11-01T07:42:55.441987298Z   code: 'ECONNREFUSED',
+2026-11-01T07:42:55.441993668Z   syscall: 'connect',
+2026-11-01T07:42:55.441997838Z   address: '127.0.0.1',
+2026-11-01T07:42:55.442001928Z   port: 3306,
+2026-11-01T07:42:55.442005778Z   fatal: true
+2026-11-01T07:42:55.442009588Z }
+2026-11-01T07:42:57.62102865Z ==> Exited with status 1
+2026-11-01T07:42:57.62651533Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2026-11-01T07:43:02.731799535Z ==> No open ports detected, continuing to scan...
+2026-11-01T07:43:02.812143112Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-11-01T07:43:04.29504989Z ==> Running 'npm run start'
+2026-11-01T07:43:05.004968378Z ==> Instance srv-dbjedi49v7es739s9ea0-dbgvs restarted
+2026-11-01T07:43:05.38391502Z 
+2026-11-01T07:43:05.38394232Z > arcas-backend@1.0.0 start
+2026-11-01T07:43:05.383947871Z > node --max-old-space-size=4096 dist/main
+2026-11-01T07:43:05.383950801Z 
