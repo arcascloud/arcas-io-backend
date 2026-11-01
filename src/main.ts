@@ -31,6 +31,11 @@ async function bootstrap() {
   app.use(express.raw({ limit: BODY_LIMIT }));
   app.use(express.text({ limit: BODY_LIMIT }));
 
+  // Render (y la mayoría de PaaS) terminan TLS en un proxy delante del
+  // proceso Node. Sin trust proxy, req.secure es false aunque la petición
+  // llegue por HTTPS — y eso rompe la cookie SameSite=None (exige Secure).
+  (app as any).set('trust proxy', 1);
+
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: (origin, callback) => {
