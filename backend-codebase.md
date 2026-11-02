@@ -1,5 +1,5 @@
 # ERP backend - Código Fuente Completo
-> Generado automáticamente el 29/10/2026, 11:49:56 a. m.
+> Generado automáticamente el 1/11/2026, 10:59:19 a. m.
 
 ---
 
@@ -19,7 +19,7 @@ DB_NAME=${DB_NAME}
 
 # ===== JWT =====
 JWT_SECRET=${seed}
-JWT_EXPIRES_IN=8h
+JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
 
 # ===== CORS =====
 CORS_ORIGIN=${CORS_ORIGIN}
@@ -59,6 +59,8 @@ CHAT_MAX_HISTORY_MESSAGES=20
 # Rate limiting: ventana en ms y máx de peticiones por usuario dentro de la ventana
 CHAT_RATE_LIMIT_WINDOW_MS=60000
 CHAT_RATE_LIMIT_MAX=15
+
+VALIDAR_SESSION=S
 ```
 
 ---
@@ -120,11 +122,11 @@ CHAT_RATE_LIMIT_MAX=15
   "version": "1.0.0",
   "description": "Backend Dev Arcas Software ERP",
   "scripts": {
-    "build": "nest build",
-    "start": "nest start",
+    "build": "node --max-old-space-size=4096 ./node_modules/@nestjs/cli/bin/nest.js build",
+    "start": "node --max-old-space-size=4096 dist/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main"
+    "start:prod": "node --max-old-space-size=4096 dist/main"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.0",
@@ -136,9 +138,11 @@ CHAT_RATE_LIMIT_MAX=15
     "@nestjs/platform-express": "^11.2.0",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/typeorm": "^11.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "axios": "^1.20.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "dotenv-expand": "^1000.0.0",
     "mysql2": "^3.14.0",
@@ -168,6 +172,7 @@ CHAT_RATE_LIMIT_MAX=15
 
 ```typescript
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FechaSistemaModule } from './shared/fecha-sistema.module';
 import { CorrelativosModule } from './shared/correlativos.module';
@@ -189,17 +194,21 @@ import { CxcMovimientoSubscriber } from './modules/cxc/entities/cxcmovimiento.su
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: '127.0.0.1',
-      port: 3306,
-      username: 'root',
-      password: 'root.8',
-      database: 'arcasdb',
-      autoLoadEntities: true,
-      synchronize: false,
-      // Correlativo de movimientos CxC (ttipoparametros cxc_nromovimiento)
-      subscribers: [CxcMovimientoSubscriber],
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'mysql',
+        host: configService.get<string>('DB_HOST') || process.env.DB_HOST || '127.0.0.1',
+        port: Number(configService.get<string>('DB_PORT') || process.env.DB_PORT || 3306),
+        username: configService.get<string>('DB_USER') || process.env.DB_USER || 'root',
+        password: configService.get<string>('DB_PASSWORD') || process.env.DB_PASSWORD || 'root.8',
+        database: configService.get<string>('DB_NAME') || process.env.DB_NAME || 'arcasdb',
+        autoLoadEntities: true,
+        synchronize: false,
+        subscribers: [CxcMovimientoSubscriber],
+      }),
     }),
     FechaSistemaModule,
     CorrelativosModule,
@@ -433,7 +442,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     // tienen asignación en tusuariomnuitem. El catálogo/carrito son @Public().
     // Subrutas del canal cliente en pedidos-virtual:
     //   pedidos (maestro/checkout), pedidos-det (líneas), combos-ofertas (ofertas)
-    if (prefijo === 'facturacion' && ['tienda', 'pedidos', 'pedidos-det', 'combos-ofertas'].includes(sub)) return;
+    if (prefijo === 'facturacion' && ['tienda', 'pedidos', 'pedidos-det', 'combos-ofertas', 'facturas'].includes(sub)) return;
 
     const moduloId = MAPA_MODULOS[prefijo];
     if (moduloId == null) {
@@ -537,6 +546,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as express from 'express';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { cargarEnvTodoPago } from './modules/todopago/todopago.env';
 
@@ -559,13 +569,34 @@ async function bootstrap() {
   // alterar el secreto JWT (JwtModule/JwtStrategy ya capturaron el suyo).
   cargarEnvTodoPago();
 
+  app.use(cookieParser());
   app.use(express.json({ limit: BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
   app.use(express.raw({ limit: BODY_LIMIT }));
   app.use(express.text({ limit: BODY_LIMIT }));
 
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: '*' });
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowed = [
+        'http://localhost:4200',
+        'http://localhost:3000',
+        'https://hn.arcas-io.workers.dev',
+      ];
+      if (
+        allowed.includes(origin) ||
+        origin.endsWith('.arcas-io.workers.dev') ||
+        origin.endsWith('.pages.dev') ||
+        origin.endsWith('.vercel.app')
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
+    credentials: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()
@@ -606,11 +637,13 @@ bootstrap();
 ## 📄 src\modules\auth\auth.controller.ts
 
 ```typescript
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Res, UseGuards, Get, Req } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -621,8 +654,43 @@ export class AuthController {
   @ApiOperation({ summary: 'Iniciar sesión' })
   @ApiResponse({ status: 200, description: 'Inicio de sesión exitoso' })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const resAuth = await this.authService.login(dto);
+
+    response.cookie('jwt_token', resAuth.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    return resAuth;
+  }
+
+  @Post('logout')
+  @ApiOperation({ summary: 'Cerrar sesión' })
+  async logout(@Res({ passthrough: true }) response: Response) {
+    response.clearCookie('jwt_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+    return { message: 'Sesión cerrada exitosamente' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiOperation({ summary: 'Obtener usuario autenticado actual' })
+  async getProfile(@Req() req: any) {
+    // ARFM20261030: perfil COMPLETO (usuarioId, roles, tipoPersona, sn_cliente)
+    // — no el objeto recortado de JwtStrategy, que el frontend sobreescribía
+    // sobre el usuario del login en cada navegación.
+    return this.authService.getPerfil(req.user.usuario);
   }
 
   @Post('registro')
@@ -790,6 +858,55 @@ export class AuthService {
         tipoPersona,
         sn_cliente: info.sn_cliente,
       },
+    };
+  }
+
+  /**
+   * Perfil completo del usuario autenticado (mismo shape que `login`) para
+   * `GET /auth/me`. ARFM20261030: antes devolvía solo `{usuario, nombre,
+   * empresaId, idsucursal}` (el objeto de `JwtStrategy.validate`), y el
+   * frontend lo usaba para SOBRESCRIBIR el usuario completo del login → se
+   * perdían `usuarioId`, `roles` y `tipoPersona` en cada navegación (rompía
+   * la precarga de gestores en facturación, `esRolContabilidad` y el
+   * redirect de clientes tipo 'C').
+   */
+  async getPerfil(usuario: string) {
+    const user = await this.usersRepo.findOne({
+      where: { usuario, sn_activo: 'S' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Token no válido');
+    }
+
+    const info = await this.infoRepo.findOne({
+      where: { usuarioId: user.usuarioId },
+    });
+
+    let tipoPersona: 'C' | 'E' | null = null;
+    if (info?.empleadoId != null) {
+      const empleado = await this.empleadosRepo.findOne({
+        where: { empleadoId: info.empleadoId },
+      });
+      if (empleado && empleado.sn_activo === 'S') {
+        tipoPersona = 'E';
+      }
+    }
+    if (tipoPersona == null && info?.sn_cliente === 'S') {
+      tipoPersona = 'C';
+    }
+
+    const roles = await this.rolesService.getRoles(user.usuario, user.empresaId);
+
+    return {
+      usuarioId: user.usuarioId,
+      usuario: user.usuario,
+      nombre: user.nombre,
+      email: user.email,
+      empresaId: user.empresaId,
+      idsucursal: user.Idsucursal,
+      roles,
+      tipoPersona,
+      sn_cliente: info?.sn_cliente ?? 'N',
     };
   }
 
@@ -1138,7 +1255,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersRepo: Repository<Tusuarios>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (request: any) => {
+          return request?.cookies?.jwt_token || ExtractJwt.fromAuthHeaderAsBearerToken()(request);
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_SECRET || 'arcas-software-secret-key-2026',
     });
@@ -1174,7 +1295,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { BancosService } from './bancos.service';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto, CreateBcoCcdocsDto, UpdateBcoCcdocsDto } from './dto/banco.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -1459,6 +1580,55 @@ export class BancosController {
   ) {
     return this.service.realizarMatching(body.bcoctasId, body.empresaId, body.lineasCsv, user.usuario || user.sub);
   }
+
+  // ── Documentos de conciliación (bcosccdocs) ────────────────
+
+  @Get('ccdocs')
+  @ApiOperation({ summary: 'Listar documentos de conciliación bancaria' })
+  @ApiResponse({ status: 200, description: 'Lista de documentos obtenida exitosamente' })
+  findAllCcdocs(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCcdocs(empresaId);
+  }
+
+  @Get('ccdocs/:id')
+  @ApiOperation({ summary: 'Obtener documento de conciliación por ID' })
+  @ApiResponse({ status: 200, description: 'Documento encontrado' })
+  @ApiResponse({ status: 404, description: 'Documento no encontrado' })
+  findCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCcdoc(id, empresaId);
+  }
+
+  @Post('ccdocs')
+  @ApiOperation({ summary: 'Crear documento de conciliación' })
+  @ApiResponse({ status: 201, description: 'Documento creado exitosamente' })
+  createCcdoc(@Body() dto: CreateBcoCcdocsDto, @CurrentUser() user: any) {
+    return this.service.createCcdoc(dto, user.usuario);
+  }
+
+  @Put('ccdocs/:id')
+  @ApiOperation({ summary: 'Actualizar documento de conciliación' })
+  @ApiResponse({ status: 200, description: 'Documento actualizado exitosamente' })
+  updateCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateBcoCcdocsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCcdoc(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('ccdocs/:id')
+  @ApiOperation({ summary: 'Desactivar documento de conciliación (soft delete: sn_activo=N)' })
+  @ApiResponse({ status: 200, description: 'Documento desactivado' })
+  removeCcdoc(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCcdoc(id, empresaId);
+  }
 }
 
 ```
@@ -1474,6 +1644,7 @@ import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
+import { TbcoCcdocs } from './entities/bco-ccdocs.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
 import { TbcoMovimiento } from './entities/bco-movimiento.entity';
@@ -1490,6 +1661,7 @@ import { BancosController } from './bancos.controller';
       TbcoCta,
       TbcoConciliacion,
       TbcoConciliacionDet,
+      TbcoCcdocs,
       TbcoDireccion,
       TbcoTelefono,
       TbcoMovimiento,
@@ -1519,6 +1691,7 @@ import { Tbanco } from './entities/banco.entity';
 import { TbcoCta } from './entities/bco-cta.entity';
 import { TbcoConciliacion } from './entities/bco-conciliacion.entity';
 import { TbcoConciliacionDet } from './entities/bco-conciliacion-det.entity';
+import { TbcoCcdocs } from './entities/bco-ccdocs.entity';
 import { TbcoDireccion } from './entities/bco-direccion.entity';
 import { TbcoTelefono } from './entities/bco-telefono.entity';
 import { TbcoMovimiento } from './entities/bco-movimiento.entity';
@@ -1527,7 +1700,7 @@ import { TCxpMovimiento } from '../cxp/entities/movimiento.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { FechaSistemaService, TABLAS_FECHAREGISTRO } from '../../shared/fecha-sistema.service';
 import { CorrelativosService } from '../../shared/correlativos.service';
-import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto } from './dto/banco.dto';
+import { CreateBancoDto, UpdateBancoDto, CreateBcoCtaDto, UpdateBcoCtaDto, CreateBcoMovimientoDto, UpdateBcoMovimientoDto, EmitirChequeDto, EmitirChequeParticularDto, CreateConciliacionDto, CreateBcoCcdocsDto, UpdateBcoCcdocsDto } from './dto/banco.dto';
 
 @Injectable()
 export class BancosService {
@@ -1536,6 +1709,7 @@ export class BancosService {
     @InjectRepository(TbcoCta) private readonly bcoCtaRepo: Repository<TbcoCta>,
     @InjectRepository(TbcoConciliacion) private readonly bcoConciliacionRepo: Repository<TbcoConciliacion>,
     @InjectRepository(TbcoConciliacionDet) private readonly bcoConciliacionDetRepo: Repository<TbcoConciliacionDet>,
+    @InjectRepository(TbcoCcdocs) private readonly bcoCcdocsRepo: Repository<TbcoCcdocs>,
     @InjectRepository(TbcoDireccion) private readonly bcoDireccionRepo: Repository<TbcoDireccion>,
     @InjectRepository(TbcoTelefono) private readonly bcoTelefonoRepo: Repository<TbcoTelefono>,
     @InjectRepository(TbcoMovimiento) private readonly bcoMovimientoRepo: Repository<TbcoMovimiento>,
@@ -1704,6 +1878,28 @@ export class BancosService {
     return this.updateEntity(this.bcoConciliacionDetRepo, 'bcosdetconciliacionId', bcosdetconciliacionId, empresaId, dto, currentUser, 'Detalle Conciliacion');
   }
 
+  // ── Documentos de conciliación (bcosccdocs) ────────────────
+
+  async findAllCcdocs(empresaId: number) {
+    return this.findAllByEmpresa(this.bcoCcdocsRepo, empresaId);
+  }
+
+  async findCcdoc(bcosccdocsId: number, empresaId: number) {
+    return this.findOneById(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, 'Documento Conciliacion');
+  }
+
+  async createCcdoc(dto: CreateBcoCcdocsDto, currentUser: string) {
+    return this.createEntity(this.bcoCcdocsRepo, dto, currentUser);
+  }
+
+  async updateCcdoc(bcosccdocsId: number, empresaId: number, dto: UpdateBcoCcdocsDto, currentUser: string) {
+    return this.updateEntity(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, dto, currentUser, 'Documento Conciliacion');
+  }
+
+  async removeCcdoc(bcosccdocsId: number, empresaId: number) {
+    return this.softDelete(this.bcoCcdocsRepo, 'bcosccdocsId', bcosccdocsId, empresaId, 'Documento Conciliacion');
+  }
+
   async findAllDirecciones(empresaId: number) {
     return this.findAllByEmpresa(this.bcoDireccionRepo, empresaId);
   }
@@ -1781,12 +1977,12 @@ export class BancosService {
 
   // ── Saldo de cuenta y validación de salidas ────────────────
   // Convención D/C (perspectiva del cliente, sentido INVERSO al estado del banco):
-  //   DEPOSITO (entrada)                    → 'D' → suma al saldo
-  //   RETIRO / TRANSFERENCIA / PAGO (salida) → 'C' → resta al saldo
+  //   DEPOSITO / NOTA_CREDITO (entrada)       → 'D' → suma al saldo
+  //   RETIRO / TRANSFERENCIA / PAGO / NOTA_DEBITO (salida) → 'C' → resta al saldo
   // saldo = Σ Débitos − Σ Créditos, excluyendo movimientos anulados.
 
   private dcPorTipoMov(tipomov: string): 'D' | 'C' {
-    return tipomov === 'DEPOSITO' ? 'D' : 'C';
+    return tipomov === 'DEPOSITO' || tipomov === 'NOTA_CREDITO' ? 'D' : 'C';
   }
 
   private async calcularSaldoCta(
@@ -2519,8 +2715,8 @@ export class CreateBcoMovimientoDto {
   @IsNumber()
   moduloId: number;
 
-  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], description: 'Tipo de movimiento' })
-  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'])
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], description: 'Tipo de movimiento' })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'])
   tipomov: string;
 
   @ApiProperty({ enum: ['D', 'C'], required: false, description: 'Débito o crédito — se deriva del tipo (DEPOSITO=D; RETIRO/TRANSFERENCIA/PAGO=C)' })
@@ -2553,8 +2749,8 @@ export class CreateBcoMovimientoDto {
 }
 
 export class UpdateBcoMovimientoDto {
-  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], required: false })
-  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO']) @IsOptional()
+  @ApiProperty({ enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], required: false })
+  @IsEnum(['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO']) @IsOptional()
   tipomov?: string;
 
   @ApiProperty({ enum: ['D', 'C'], required: false })
@@ -2747,6 +2943,40 @@ export class UpdateConciliacionDto {
   detalles?: CreateConciliacionDetDto[];
 }
 
+// ── Documentos de conciliación (bcosccdocs) ────────────────
+
+export class CreateBcoCcdocsDto {
+  @ApiProperty({ description: 'Descripción del documento' })
+  @IsString() @IsNotEmpty()
+  descripcion: string;
+
+  @ApiProperty({ required: false, description: 'Abreviatura del documento' })
+  @IsString() @IsOptional()
+  abreviatura?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Activo (Sí/No)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateBcoCcdocsDto {
+  @ApiProperty({ required: false, description: 'Descripción del documento' })
+  @IsString() @IsOptional()
+  descripcion?: string;
+
+  @ApiProperty({ required: false, description: 'Abreviatura del documento' })
+  @IsString() @IsOptional()
+  abreviatura?: string;
+
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Activo (Sí/No)' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+}
+
 ```
 
 ---
@@ -2783,6 +3013,53 @@ export class Tbanco {
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 20 })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
+## 📄 src\modules\bancos\entities\bco-ccdocs.entity.ts
+
+```typescript
+import {
+  Entity, PrimaryGeneratedColumn, Column,
+} from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('bcosccdocs')
+export class TbcoCcdocs {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'bcosccdocsId' })
+  bcosccdocsId: number;
+
+  @ApiProperty({ required: false, description: 'Descripción del documento' })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  descripcion: string;
+
+  @ApiProperty({ required: false, description: 'Abreviatura del documento' })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  abreviatura: string;
+
+  @ApiProperty({ description: 'ID de la empresa' })
+  @Column()
+  empresaId: number;
+
+  @ApiProperty({ enum: ['S', 'N'], description: 'Activo (Sí/No)' })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_activo: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
   usuarioCreated: string;
 
   @ApiProperty({ required: false })
@@ -3076,7 +3353,7 @@ export class TbcoMovimiento {
   @Column()
   moduloId: number;
 
-  @Column({ type: 'enum', enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO'], default: 'DEPOSITO' })
+  @Column({ type: 'enum', enum: ['DEPOSITO', 'RETIRO', 'TRANSFERENCIA', 'PAGO', 'NOTA_DEBITO', 'NOTA_CREDITO'], default: 'DEPOSITO' })
   tipomov: string;
 
   @Column({ type: 'enum', enum: ['D', 'C'], default: 'D' })
@@ -8227,6 +8504,9 @@ export class ContabilidadLogicaService {
    *   RETIRO                → PDA 11 (retiro de cuenta bancaria)
    *   PAGO + proveedor      → PDA 12 (emisión de cheque a proveedor)
    *   PAGO + particular     → PDA 13 (emisión de cheque a particular)
+   *   TRANSFERENCIA         → PDA 10 (entrada al banco)
+   *   NOTA_CREDITO          → PDA 10 (entrada, como depósito)
+   *   NOTA_DEBITO           → PDA 11 (salida, como retiro)
    */
   @OnEvent('bancos.movimiento.creado')
   async handleBancoMovimientoCreado(payload: any) {
@@ -8252,6 +8532,10 @@ export class ContabilidadLogicaService {
       plantillaId = 13; // Emisión de cheque a particular
     } else if (tipomov === 'TRANSFERENCIA') {
       plantillaId = 10; // Transferencia = depósito (entrada al banco)
+    } else if (tipomov === 'NOTA_CREDITO') {
+      plantillaId = 10; // Nota de crédito = entrada (como depósito)
+    } else if (tipomov === 'NOTA_DEBITO') {
+      plantillaId = 11; // Nota de débito = salida (como retiro)
     } else {
       this.logger.debug(`[Bancos Event] Ignorado: tipomov=${tipomov}, origen=${origen}`);
       return;
@@ -16285,6 +16569,7 @@ import {
 } from './dto/cxc.dto';
 import { CreateCxcCarteraCtaDto, UpdateCxcCarteraCtaDto } from './dto/carteracta.dto';
 import { CreateCxcClientesInfoDto, UpdateCxcClientesInfoDto } from './dto/clientesinfo.dto';
+import { CreateCxcCategoriaDto, UpdateCxcCategoriaDto } from './dto/cxccategoria.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -16302,9 +16587,16 @@ export class CxcController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('q') q?: string
+    @Query('q') q?: string,
+    @Query('moduloId') moduloId?: string,
   ) {
-    return this.service.findAllClientes(empresaId, page ? Number(page) : 1, limit ? Number(limit) : 10, q);
+    return this.service.findAllClientes(
+      empresaId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 10,
+      q,
+      moduloId ? Number(moduloId) : undefined,
+    );
   }
 
   @Get('clientes/dni-existe')
@@ -16907,6 +17199,20 @@ export class CxcController {
     return this.service.getAntiguedadSaldos(empresaId);
   }
 
+  @Get('antiguedad-saldos-prestamos')
+  @ApiOperation({ summary: 'Antigüedad de saldos por préstamos (cuotas PP)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  getAntiguedadSaldosPrestamos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.getAntiguedadSaldosPrestamos(empresaId);
+  }
+
+  @Get('antiguedad-saldos-prestamos-cuotas')
+  @ApiOperation({ summary: 'Antigüedad de saldos por préstamos basada en cuotas (cxcprestamospp)' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  getAntiguedadSaldosPrestamosCuotas(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.getAntiguedadSaldosPrestamosCuotas(empresaId);
+  }
+
   @Get('clientes-con-saldo')
   @ApiOperation({ summary: 'Clientes con saldo pendiente' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -16917,8 +17223,14 @@ export class CxcController {
   @Get('clientes-con-prestamos')
   @ApiOperation({ summary: 'Clientes con préstamos activos (caja destino=Préstamos)' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
-  getClientesConPrestamos(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.getClientesConPrestamos(empresaId);
+  getClientesConPrestamos(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('moduloId') moduloId?: string,
+  ) {
+    return this.service.getClientesConPrestamos(
+      empresaId,
+      moduloId ? Number(moduloId) : undefined,
+    );
   }
 
   @Get('documentos-pendientes/cliente/:clienteId')
@@ -17044,6 +17356,54 @@ export class CxcController {
   ) {
     return this.service.removeClienteInfo(id, empresaId, user.usuario);
   }
+
+  // ========== Categorías de Clientes (cxccategorias) ==========
+  @Get('categorias')
+  @ApiOperation({ summary: 'Listar categorías de clientes' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findAllCategorias(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findAllCategorias(empresaId);
+  }
+
+  @Get('categorias/:id')
+  @ApiOperation({ summary: 'Obtener categoría de cliente por ID' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  @ApiResponse({ status: 404, description: 'No encontrado' })
+  findCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findCategoria(id, empresaId);
+  }
+
+  @Post('categorias')
+  @ApiOperation({ summary: 'Crear categoría de cliente' })
+  @ApiResponse({ status: 201, description: 'Creado exitosamente' })
+  createCategoria(@Body() dto: CreateCxcCategoriaDto, @CurrentUser() user: any) {
+    return this.service.createCategoria(dto, user.usuario);
+  }
+
+  @Put('categorias/:id')
+  @ApiOperation({ summary: 'Actualizar categoría de cliente' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  updateCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdateCxcCategoriaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateCategoria(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('categorias/:id')
+  @ApiOperation({ summary: 'Eliminar categoría de cliente' })
+  @ApiResponse({ status: 200, description: 'Eliminado exitosamente' })
+  removeCategoria(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removeCategoria(id, empresaId);
+  }
 }
 
 ```
@@ -17070,6 +17430,7 @@ import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
 import { CxcCarteraCta } from './entities/carteracta.entity';
 import { CxcClientesInfo } from './entities/cxccclientesinfo.entity';
+import { CxcCategoria } from './entities/cxccategoria.entity';
 import { Tcocarteras } from '../contabilidad/entities/tcocarteras.entity';
 import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { TPosFacMae } from '../facturacion/entities/posfacmae.entity';
@@ -17102,6 +17463,7 @@ import { CxcController } from './cxc.controller';
       CxcPariente,
       CxcCarteraCta,
       CxcClientesInfo,
+      CxcCategoria,
       Tcocarteras,
       TipoParametro,
       TPosFacMae,
@@ -17148,6 +17510,8 @@ import { CxcPrestamoPP } from './entities/cxcprestamopp.entity';
 import { CxcPariente } from './entities/cxcpariente.entity';
 import { CxcCarteraCta } from './entities/carteracta.entity';
 import { CxcClientesInfo } from './entities/cxccclientesinfo.entity';
+import { CxcCategoria } from './entities/cxccategoria.entity';
+import { CreateCxcCategoriaDto, UpdateCxcCategoriaDto } from './dto/cxccategoria.dto';
 import { Tcocarteras } from '../contabilidad/entities/tcocarteras.entity';
 import { TPosFacMae } from '../facturacion/entities/posfacmae.entity';
 import { Tempresas } from '../companies/entities/empresa.entity';
@@ -17189,6 +17553,7 @@ export class CxcService {
     @InjectRepository(CxcPariente) private readonly parienteRepo: Repository<CxcPariente>,
     @InjectRepository(CxcCarteraCta) private readonly carteraCtaRepo: Repository<CxcCarteraCta>,
     @InjectRepository(CxcClientesInfo) private readonly clienteInfoRepo: Repository<CxcClientesInfo>,
+    @InjectRepository(CxcCategoria) private readonly categoriaRepo: Repository<CxcCategoria>,
     @InjectRepository(Tcocarteras) private readonly cocarterasRepo: Repository<Tcocarteras>,
     @InjectRepository(TipoParametro) private readonly tipoParametroRepo: Repository<TipoParametro>,
     @InjectRepository(TPosFacMae) private readonly facMaeRepo: Repository<TPosFacMae>,
@@ -17301,8 +17666,11 @@ export class CxcService {
     return repo.save(entity);
   }
 
-  async findAllClientes(empresaId: number, page: number, limit: number, q?: string) {
-    const whereBase = { empresaId } as FindOptionsWhere<CxcCliente>;
+  async findAllClientes(empresaId: number, page: number, limit: number, q?: string, moduloId?: number) {
+    const whereBase: FindOptionsWhere<CxcCliente> = { empresaId };
+    if (moduloId != null) {
+      whereBase.moduloId = moduloId;
+    }
     
     const [data, total] = await this.clienteRepo.findAndCount({
       where: q 
@@ -17372,6 +17740,7 @@ export class CxcService {
     const payload: any = {
       ...dto,
       nrocliente,
+      moduloId: dto.moduloId ?? 4,
       // cxcclientes.Idsucursal es NOT NULL con FK a tsucursal (solo existen 1,2,3)
       // — fallback 1 (MATRIZ); 0 viola la FOREIGN KEY.
       Idsucursal: dto.Idsucursal ?? 1,
@@ -17932,36 +18301,60 @@ export class CxcService {
       return { cuotasPagadas: [] as number[], totalAplicado: 0, motivo: 'Préstamo sin saldo de capital' };
     }
 
-    // 2) Cuota pactada (validación mínima) e interés/mora devengados al día de hoy.
+    // 2) Cuota pactada e interés/mora devengados al día de hoy.
     const vlrcuota = this.calcularVlrcuotaPactada(prestamo);
-    if (efectivo < vlrcuota - 0.01) {
-      throw new BadRequestException(
-        `El efectivo recibido (L ${efectivo.toFixed(2)}) es menor a la cuota pactada (L ${vlrcuota.toFixed(2)})`,
-      );
-    }
-
-    const calc = this.calcularInteresesFactura({
+    const calc = this.calcularInteresesPrestamo({
       saldo: saldoAnterior,
       tasaAnual: Number(prestamo.tasa) || 0,
       tasaMoratoria: Number(prestamo.moratorio) || 0,
       diasPlazo: Number(prestamo.diascuotas) || 0,
       diasGracia: Number(prestamo.gracia) || 0,
+      vlrcuota,
       fechaUltAbono: fechaBase,
       hoy,
     });
 
-    const cargos = calc.totalCargos;
-    const abonoCapital = r2(Math.max(0, efectivo - cargos));
-    const saldoNuevo = r2(Math.max(0, saldoAnterior - abonoCapital));
+    // 3) Procesar cuotas (cxcprestamospp) con lógica FIFO (más antigua primero):
+    const cuotasPendientes = await this.prestamoPPRepo.find({
+      where: { prestamoId, empresaId, sn_pagada: 'N', sn_anulada: 'N' } as FindOptionsWhere<CxcPrestamoPP>,
+      order: { nrofila: 'ASC' },
+    });
 
-    // 3) Aplicar al préstamo: descuenta capital, resetea el reloj de interés
-    //    (fechaUltPago = hoy) y avanza el contador de cuotas en 1.
+    let efectivoRestante = efectivo;
+    let cuotasPagadasCount = 0;
+    let capitalAbonadoCuotas = 0;
+
+    for (const cuota of cuotasPendientes) {
+      const valorCuota = Number(cuota.vlrcuota || (Number(cuota.capital) + Number(cuota.interes)) || 0);
+      if (valorCuota <= 0) continue;
+
+      if (efectivoRestante >= valorCuota - 0.01) {
+        cuota.sn_pagada = 'S';
+        cuota.cxccajaId = cxccajaId;
+        cuota.usuarioUpdated = currentUser;
+        cuota.fechaUpdated = hoy;
+        await this.prestamoPPRepo.save(cuota);
+        efectivoRestante = r2(efectivoRestante - valorCuota);
+        cuotasPagadasCount++;
+        capitalAbonadoCuotas += Number(cuota.capital) || 0;
+      } else {
+        cuota.sn_pagada = 'N';
+        await this.prestamoPPRepo.save(cuota);
+        break;
+      }
+    }
+
+    const abonoCapital = r2(Math.max(0, capitalAbonadoCuotas > 0 ? capitalAbonadoCuotas : (efectivo - calc.totalCargos)));
+    const saldoNuevo = r2(Math.max(0, saldoAnterior - abonoCapital));
+    const nuevoUltPagada = ultAnterior + cuotasPagadasCount;
+
+    // 3) Aplicar al préstamo: descuenta capital, resetea fechaUltPago, avanza ultcuotapagada
     await this.prestamoRepo.createQueryBuilder()
       .update(CxcPrestamo)
       .set({
         saldoactual: saldoNuevo as any,
         fechaUltPago: hoy,
-        ultcuotapagada: ultAnterior + 1,
+        ultcuotapagada: nuevoUltPagada,
         usuarioUpdated: currentUser,
         fechaUpdated: hoy,
       } as any)
@@ -18073,6 +18466,12 @@ export class CxcService {
     currentUser: string,
     now: Date,
   ) {
+    await this.prestamoPPRepo.createQueryBuilder()
+      .update(CxcPrestamoPP)
+      .set({ sn_pagada: 'N', cxccajaId: null, usuarioUpdated: currentUser, fechaUpdated: now } as any)
+      .where('cxccajaId = :cxccajaId AND empresaId = :empresaId', { cxccajaId, empresaId })
+      .execute();
+
     const snap = this.prestamoSnapshots.get(cxccajaId);
     if (!snap) return;
     await this.prestamoRepo.createQueryBuilder()
@@ -18992,7 +19391,7 @@ export class CxcService {
 
   async getAntiguedadSaldos(empresaId: number) {
     const hoy = await this.fechaSistema.getFecha(empresaId);
-    const clientes = await this.clienteRepo.find({ where: { empresaId } as FindOptionsWhere<CxcCliente> });
+    const clientes = await this.clienteRepo.find({ where: { empresaId, moduloId: 4 } as FindOptionsWhere<CxcCliente> });
     const movimientos = await this.movimientoRepo.find({ where: { empresaId } as FindOptionsWhere<CxcMovimiento> });
 
     const mapaClientes = new Map<number, any>();
@@ -19043,6 +19442,106 @@ export class CxcService {
     return Array.from(mapaClientes.values()).filter(item => item.total > 0);
   }
 
+  async getAntiguedadSaldosPrestamos(empresaId: number) {
+    const hoy = await this.fechaSistema.getFecha(empresaId);
+
+    const clientes = await this.clienteRepo.find({
+      where: { empresaId, moduloId: 10 } as FindOptionsWhere<CxcCliente>,
+    });
+    if (!clientes.length) return [];
+    const clienteMap = new Map(clientes.map(c => [c.clienteId, c]));
+
+    const prestamos = await this.prestamoRepo.find({
+      where: { empresaId, sn_activo: 'S', sn_anulado: 'N' } as FindOptionsWhere<CxcPrestamo>,
+    });
+    const prestamoMap = new Map(prestamos.map(p => [p.prestamoId, p]));
+
+    const cuotas = await this.prestamoPPRepo.find({
+      where: {
+        empresaId,
+        sn_pagada: 'N',
+        sn_anulada: 'N',
+      } as FindOptionsWhere<CxcPrestamoPP>,
+    });
+
+    const cuotasFiltradas = cuotas.filter(cuota => clienteMap.has(cuota.clienteId));
+
+    const mapaSaldos = new Map<number, {
+      clienteId: number;
+      nroprestamos: string[];
+      cliente: string;
+      rtn: string;
+      total: number;
+      corriente: number;
+      vencido30: number;
+      vencido60: number;
+      vencido90: number;
+    }>();
+
+    clientes.forEach(c => {
+      mapaSaldos.set(c.clienteId, {
+        clienteId: c.clienteId,
+        nroprestamos: [],
+        cliente: `${c.nombres || ''} ${c.apellidos || ''}`.trim() || c.razonsocial || 'Sin nombre',
+        rtn: c.rtn || '',
+        total: 0,
+        corriente: 0,
+        vencido30: 0,
+        vencido60: 0,
+        vencido90: 0,
+      });
+    });
+
+    cuotasFiltradas.forEach(cuota => {
+      const item = mapaSaldos.get(cuota.clienteId);
+      if (!item) return;
+
+      const pres = prestamoMap.get(cuota.prestamoId);
+      const nroPrestamo = pres ? pres.nroprestamo : `P-${cuota.prestamoId}`;
+      if (!item.nroprestamos.includes(nroPrestamo)) {
+        item.nroprestamos.push(nroPrestamo);
+      }
+
+      const monto = Number(cuota.vlrcuota || 0);
+      if (monto <= 0) return;
+
+      const fechaPago = new Date(cuota.FechaPago);
+      if (fechaPago > hoy) return; // Omitir cuotas futuras
+      const diasDiff = Math.floor((hoy.getTime() - fechaPago.getTime()) / (1000 * 60 * 60 * 24));
+
+      item.total += monto;
+
+      if (diasDiff <= 0) {
+        item.corriente += monto;
+      } else if (diasDiff <= 30) {
+        item.vencido30 += monto;
+      } else if (diasDiff <= 60) {
+        item.vencido60 += monto;
+      } else {
+        item.vencido90 += monto;
+      }
+    });
+
+    return Array.from(mapaSaldos.values())
+      .filter(item => item.total > 0)
+      .map(item => ({
+        clienteId: item.clienteId,
+        nrocliente: item.nroprestamos.join(', '),
+        cliente: item.cliente,
+        dni: '',
+        rtn: item.rtn,
+        total: item.total,
+        corriente: item.corriente,
+        vencido30: item.vencido30,
+        vencido60: item.vencido60,
+        vencido90: item.vencido90,
+      }));
+  }
+
+  async getAntiguedadSaldosPrestamosCuotas(empresaId: number) {
+    return this.getAntiguedadSaldosPrestamos(empresaId);
+  }
+
   async getClientesConSaldo(empresaId: number) {
     const result = await this.getAntiguedadSaldos(empresaId);
 
@@ -19068,7 +19567,7 @@ export class CxcService {
    * Usado por caja con destino=Préstamos para filtrar el select de clientes.
    * Misma forma de respuesta que getClientesConSaldo (cliente, dni, rtn...).
    */
-  async getClientesConPrestamos(empresaId: number) {
+  async getClientesConPrestamos(empresaId: number, moduloId?: number) {
     const prestamos = await this.prestamoRepo.find({
       where: { empresaId, sn_activo: 'S', sn_anulado: 'N' } as FindOptionsWhere<CxcPrestamo>,
     });
@@ -19098,8 +19597,13 @@ export class CxcService {
       porCliente.set(p.clienteId, acc);
     }
 
+    const whereCliente: FindOptionsWhere<CxcCliente> = { empresaId };
+    if (moduloId != null) {
+      whereCliente.moduloId = moduloId;
+    }
+
     const clientes = await this.clienteRepo.find({
-      where: { empresaId } as FindOptionsWhere<CxcCliente>,
+      where: whereCliente,
     });
 
     return clientes
@@ -19185,6 +19689,51 @@ export class CxcService {
 
     const interes = o.saldo * tasaAnual * (diasInteres / 360);
     const mora = o.saldo * tasaMoratoria * (diasMora / 360);
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+
+    return {
+      proximoPago,
+      fechaMaxPago,
+      diasTranscurridos,
+      diasGraciaEfectiva,
+      diasInteres,
+      diasMora,
+      tasaAnual: o.tasaAnual,
+      tasaMoratoria: o.tasaMoratoria,
+      interes: r2(interes),
+      mora: r2(mora),
+      totalCargos: r2(interes + mora),
+    };
+  }
+
+  private calcularInteresesPrestamo(o: {
+    saldo: number;
+    tasaAnual: number;
+    tasaMoratoria: number;
+    diasPlazo: number;
+    diasGracia: number;
+    vlrcuota: number;
+    fechaUltAbono: Date;
+    hoy: Date;
+  }) {
+    const tasaAnual = (o.tasaAnual || 0) / 100;
+    const tasaMoratoria = (o.tasaMoratoria || 0) / 100;
+
+    const diasTranscurridos = this.diasEntre(o.fechaUltAbono, o.hoy);
+    const proximoPago = this.sumarDias(o.fechaUltAbono, o.diasPlazo || 0);
+    const fechaMaxPago = this.sumarDias(proximoPago, o.diasGracia || 0);
+
+    let diasGraciaEfectiva = 0;
+    let diasMora = 0;
+    const diasInteres = diasTranscurridos; // DiasGraciaEfectiva = 0
+
+    if (this.diasEntre(o.hoy, fechaMaxPago) < 0) {
+      diasMora = this.diasEntre(fechaMaxPago, o.hoy);
+    }
+
+    const interes = o.saldo * tasaAnual * (diasInteres / 360);
+    const saldoCapitalCuota = Math.max(0, (o.vlrcuota || 0) - interes);
+    const mora = saldoCapitalCuota * tasaMoratoria * (diasMora / 360);
     const r2 = (x: number) => Math.round(x * 100) / 100;
 
     return {
@@ -19577,6 +20126,34 @@ export class CxcService {
     });
     return this.clienteInfoRepo.save(entity);
   }
+
+  // ========== Categorías de Clientes (cxccategorias) ==========
+  async findAllCategorias(empresaId: number) {
+    return this.categoriaRepo.find({
+      where: { empresaId } as FindOptionsWhere<CxcCategoria>,
+      order: { cxccategoriaId: 'DESC' },
+    });
+  }
+
+  async findCategoria(id: number, empresaId: number) {
+    return this.findOneById(this.categoriaRepo, 'cxccategoriaId', id, empresaId, 'Categoría CXC');
+  }
+
+  async createCategoria(dto: CreateCxcCategoriaDto, currentUser: string) {
+    const payload: any = {
+      ...dto,
+      Idsucursal: dto.Idsucursal ?? 1,
+    };
+    return this.createEntity(this.categoriaRepo, payload, currentUser);
+  }
+
+  async updateCategoria(id: number, empresaId: number, dto: UpdateCxcCategoriaDto, currentUser: string) {
+    return this.updateEntity(this.categoriaRepo, 'cxccategoriaId', id, empresaId, dto, currentUser, 'Categoría CXC');
+  }
+
+  async removeCategoria(id: number, empresaId: number) {
+    return this.softDelete(this.categoriaRepo, 'cxccategoriaId', id, empresaId, 'Categoría CXC');
+  }
 }
 
 ```
@@ -19759,6 +20336,10 @@ export class CreateCxcClienteDto {
   @ApiProperty({ description: 'Categoría', enum: ['A', 'B', 'C', 'D', 'E'], required: false })
   @IsEnum(['A', 'B', 'C', 'D', 'E']) @IsOptional()
   categoria?: string;
+
+  @ApiProperty({ description: 'ID de Módulo', required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
 
   @ApiProperty({ description: 'ID de Empresa' })
   @IsNumber()
@@ -20020,6 +20601,10 @@ export class CreateCxcPrestamoDto {
   @IsEnum(['S', 'N']) @IsOptional()
   sn_anulado?: string;
 
+  @ApiProperty({ description: 'ID de Módulo', required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
   @ApiProperty({ description: 'ID de Empresa' })
   @IsNumber()
   empresaId: number;
@@ -20119,6 +20704,96 @@ export class UpdateCxcPrestamoDto {
   sn_anulado?: string;
 
   @ApiProperty({ required: false, description: 'ID de Sucursal (lo inyecta el ApiService del usuario logueado)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+}
+
+```
+
+---
+
+## 📄 src\modules\cxc\dto\cxccategoria.dto.ts
+
+```typescript
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateCxcCategoriaDto {
+  @ApiProperty({ description: 'Categoría', enum: ['A', 'B', 'C', 'D', 'E'], required: false })
+  @IsEnum(['A', 'B', 'C', 'D', 'E']) @IsOptional()
+  categoria?: string;
+
+  @ApiProperty({ description: 'Límite de Crédito', required: false })
+  @IsNumber() @IsOptional()
+  limiteCredito?: number;
+
+  @ApiProperty({ description: 'Días de Plazo' })
+  @IsNumber()
+  diasplazo: number;
+
+  @ApiProperty({ description: 'Días de Gracia' })
+  @IsNumber()
+  diasgracia: number;
+
+  @ApiProperty({ description: 'Interés' })
+  @IsNumber()
+  interes: number;
+
+  @ApiProperty({ description: 'Moratorio' })
+  @IsNumber()
+  moratorio: number;
+
+  @ApiProperty({ description: 'Activo', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
+  @ApiProperty({ description: 'ID de Módulo' })
+  @IsNumber()
+  moduloId: number;
+
+  @ApiProperty({ description: 'ID de Sucursal', required: false })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+
+  @ApiProperty({ description: 'ID de Empresa' })
+  @IsNumber()
+  empresaId: number;
+}
+
+export class UpdateCxcCategoriaDto {
+  @ApiProperty({ description: 'Categoría', enum: ['A', 'B', 'C', 'D', 'E'], required: false })
+  @IsEnum(['A', 'B', 'C', 'D', 'E']) @IsOptional()
+  categoria?: string;
+
+  @ApiProperty({ description: 'Límite de Crédito', required: false })
+  @IsNumber() @IsOptional()
+  limiteCredito?: number;
+
+  @ApiProperty({ description: 'Días de Plazo', required: false })
+  @IsNumber() @IsOptional()
+  diasplazo?: number;
+
+  @ApiProperty({ description: 'Días de Gracia', required: false })
+  @IsNumber() @IsOptional()
+  diasgracia?: number;
+
+  @ApiProperty({ description: 'Interés', required: false })
+  @IsNumber() @IsOptional()
+  interes?: number;
+
+  @ApiProperty({ description: 'Moratorio', required: false })
+  @IsNumber() @IsOptional()
+  moratorio?: number;
+
+  @ApiProperty({ description: 'Activo', enum: ['S', 'N'], required: false })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
+  @ApiProperty({ description: 'ID de Módulo', required: false })
+  @IsNumber() @IsOptional()
+  moduloId?: number;
+
+  @ApiProperty({ description: 'ID de Sucursal', required: false })
   @IsNumber() @IsOptional()
   Idsucursal?: number;
 }
@@ -20363,6 +21038,75 @@ export class Cxccajero {
 
 ---
 
+## 📄 src\modules\cxc\entities\cxccategoria.entity.ts
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+
+@Entity('cxccategorias')
+export class CxcCategoria {
+  @ApiProperty()
+  @PrimaryGeneratedColumn({ name: 'cxccategoriaId' })
+  cxccategoriaId: number;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['A', 'B', 'C', 'D', 'E'], default: 'A' })
+  categoria: string;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  limiteCredito: number;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  diasplazo: number;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  diasgracia: number;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', precision: 20, scale: 2 })
+  interes: number;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', precision: 20, scale: 2 })
+  moratorio: number;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
+  sn_activo: string;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  moduloId: number;
+
+  @ApiProperty()
+  @Column({ type: 'int', default: 1 })
+  Idsucursal: number;
+
+  @ApiProperty()
+  @Column({ type: 'int' })
+  empresaId: number;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  usuarioCreated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  usuarioUpdated: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  fechaUpdated: Date;
+}
+
+```
+
+---
+
 ## 📄 src\modules\cxc\entities\cxccclientesinfo.entity.ts
 
 ```typescript
@@ -20558,6 +21302,9 @@ export class CxcCliente {
 
   @Column({ type: 'enum', enum: ['A', 'B', 'C', 'D', 'E'], default: 'A' })
   categoria: string;
+
+  @Column({ type: 'int', default: 4 })
+  moduloId: number;
 
   @Column()
   empresaId: number;
@@ -21941,7 +22688,9 @@ export class CxpService {
     const subtotal = detalles.reduce((sum, d) => sum + Number(d.subtotal || 0), 0);
     const compra = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
     compra.subtotal = subtotal;
-    compra.total = subtotal;
+    const descuento = Number(compra.descuento || 0);
+    const impuesto = Number(compra.impuesto || 0);
+    compra.total = Math.max(0, Number(subtotal) - descuento + impuesto);
     await this.compraMaeRepo.save(compra);
   }
 
@@ -22056,9 +22805,16 @@ export class CxpService {
 
     await this.actualizarTotalCompra(compraId, empresaId);
 
+    const compraActualizada = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
+    const sumaDetalles = detalles.reduce((sum, d) => sum + Number(d.subtotal || 0), 0);
+    const totalEsperado = Math.max(0, sumaDetalles - Number(compraActualizada.descuento || 0) + Number(compraActualizada.impuesto || 0));
+    if (Math.abs(Number(compraActualizada.total) - totalEsperado) > 0.01) {
+      throw new BadRequestException(`El total del header (${compraActualizada.total}) no coincide con el total del detalle (${totalEsperado}). El total del detalle debe ser igual al total del header.`);
+    }
+
     // VALIDACIÓN COMPRA AL CONTADO: el saldo de la cuenta de HABER (Caja)
     // en coctamov debe cubrir el total de la compra. Ver detalle en el JSDoc.
-    await this.validarSaldoCompraContado(compra);
+    await this.validarSaldoCompraContado(compraActualizada);
 
     try {
       await this.registrarKardexEntrada(compraId, empresaId, currentUser);
@@ -22205,6 +22961,13 @@ export class CxpService {
   }
 
   async updateCompra(compraId: number, empresaId: number, dto: any, currentUser: string) {
+    if (dto.subtotal !== undefined || dto.descuento !== undefined || dto.impuesto !== undefined) {
+      const compra = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
+      const sub = dto.subtotal !== undefined ? Number(dto.subtotal) : Number(compra.subtotal || 0);
+      const desc = dto.descuento !== undefined ? Number(dto.descuento) : Number(compra.descuento || 0);
+      const imp = dto.impuesto !== undefined ? Number(dto.impuesto) : Number(compra.impuesto || 0);
+      dto.total = Math.max(0, sub - desc + imp);
+    }
     return this.updateEntity(this.compraMaeRepo, 'compraId', compraId, empresaId, dto, currentUser, 'Compra');
   }
 
@@ -26150,8 +26913,11 @@ export class FacturacionController {
   @Get('facturas')
   @ApiOperation({ summary: 'Listar facturas' })
   @ApiResponse({ status: 200, description: 'Lista de facturas obtenida exitosamente' })
-  findAllFacturas(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAllFacturas(empresaId);
+  findAllFacturas(
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('usuario') usuario?: string,
+  ) {
+    return this.service.findAllFacturas(empresaId, usuario);
   }
 
   @Get('facturas/:id')
@@ -27152,8 +27918,13 @@ export class FacturacionService {
     return this.updateEntity(this.correlativosRepo, 'caiAutorizadoId', caiAutorizadoId, empresaId, dto, currentUser, 'Correlativo');
   }
 
-  async findAllFacturas(empresaId: number) {
-    return this.findAllByEmpresaOrdered(this.facMaeRepo, empresaId, 'fecharegistro');
+  async findAllFacturas(empresaId: number, usuario?: string) {
+    const qb = this.facMaeRepo.createQueryBuilder('f')
+      .where('f.empresaId = :empresaId', { empresaId });
+    if (usuario) {
+      qb.andWhere('f.usuarioCreated = :usuario', { usuario });
+    }
+    return qb.orderBy('f.fecharegistro', 'DESC').getMany();
   }
 
   async findFactura(facturaId: number, empresaId: number) {
@@ -27821,6 +28592,16 @@ export class FacturacionService {
     const bodegaId = (await this.getBodegaPorUsuario(currentUser, empresaId)) ?? (await getParam('bodegaId', 1));
     const cajaId = await getParam('cajaId', 1);
 
+    // Sucursal de la factura: la del usuario autenticado
+    // (posfacmae.Idsucursal es NOT NULL sin default — mismo criterio que checkoutPedido)
+    let idsucursal = 0;
+    try {
+      const u = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+      idsucursal = Number(u?.Idsucursal) || 1;
+    } catch {
+      idsucursal = 1;
+    }
+
     let subTotal = 0;
     let impuestoTotal = 0;
     for (const det of detalles) {
@@ -27880,6 +28661,7 @@ export class FacturacionService {
       sn_anulada: 'N',
       sn_contabilizada: 'N',
       empresaId,
+      Idsucursal: idsucursal,
     };
 
     const factura = await this.createEntity(this.facMaeRepo, facturaPayload, currentUser);
@@ -27918,6 +28700,7 @@ export class FacturacionService {
       importe_otros: 0,
       importe_cambio: (dto.efectivo_recibido || total) - total,
       cajaId,
+      Idsucursal: idsucursal,
       empresaId,
     }, currentUser);
 
@@ -29383,6 +30166,22 @@ export class CreateProductoDto {
   @IsEnum(['S', 'N']) @IsOptional()
   sn_droga?: string;
 
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Valida manejo de lote de vencimiento',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_valida_lote?: string;
+
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Platillo solicitado a cocina',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_enviar_a_cocina?: string;
+
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber()
   empresaId: number;
@@ -29473,6 +30272,22 @@ export class UpdateProductoDto {
   })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_droga?: string;
+
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Valida manejo de lote de vencimiento',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_valida_lote?: string;
+
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Platillo solicitado a cocina',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_enviar_a_cocina?: string;
 }
 
 ```
@@ -30999,6 +31814,14 @@ export class Tproducto {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_droga: string; //PRODUCTOS CONTROLADOS COMO FARMACOS ESPECIFICOS, O MATERIAL AGROINDUSTRIAL CONTROLADO
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_valida_lote: string; //VA A VALIDAR EN EL FUTURO EL MANEJO DE LOTE DE VENCIMIENTO EN LOS PRODUCTOS
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_enviar_a_cocina: string; //PLATILLOS QUE SON SOLICITADO A COCINA
   
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })

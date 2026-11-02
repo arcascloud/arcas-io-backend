@@ -138,22 +138,26 @@ export class FechaSistemaService {
    */
   async getRangoActivo(usuario: string | undefined, empresaId: number): Promise<RangoActivo | null> {
     if (!usuario || !empresaId) return null;
-    const filas = await this.dataSource.query(
-      `SELECT m.tfecmaId,
-              DATE_FORMAT(m.fechasistema, '%Y-%m-%d') AS fechasistema,
-              DATE_FORMAT(m.fec_vig_desde, '%Y-%m-%d') AS desde,
-              DATE_FORMAT(m.fec_vig_hasta, '%Y-%m-%d') AS hasta
-         FROM tfecdet d
-         INNER JOIN tfecma m ON m.tfecmaId = d.fecmaeId
-        WHERE d.empresaId = ?
-          AND d.usuario = ?
-          AND d.sn_permitido = 'S'
-          AND CURDATE() >= DATE(m.fec_vig_desde)
-          AND CURDATE() <= DATE(m.fec_vig_hasta)
-        LIMIT 1`,
-      [empresaId, usuario],
-    );
-    return filas.length ? (filas[0] as RangoActivo) : null;
+    try {
+      const filas = await this.dataSource.query(
+        `SELECT m.tfecmaId,
+                DATE_FORMAT(m.fechasistema, '%Y-%m-%d') AS fechasistema,
+                DATE_FORMAT(m.fec_vig_desde, '%Y-%m-%d') AS desde,
+                DATE_FORMAT(m.fec_vig_hasta, '%Y-%m-%d') AS hasta
+           FROM tfecdet d
+           INNER JOIN tfecma m ON m.tfecmaId = d.fecmaeId
+          WHERE d.empresaId = ?
+            AND d.usuario = ?
+            AND d.sn_permitido = 'S'
+            AND CURDATE() >= DATE(m.fec_vig_desde)
+            AND CURDATE() <= DATE(m.fec_vig_hasta)
+          LIMIT 1`,
+        [empresaId, usuario],
+      );
+      return filas.length ? (filas[0] as RangoActivo) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** ¿El usuario está habilitado en `tfecdet` dentro de un rango VIGENTE? */

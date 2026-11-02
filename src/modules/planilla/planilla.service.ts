@@ -236,8 +236,15 @@ export class PlanillaService {
   }
 
   async createEmpleado(dto: CreatePlEmpleadosDto, currentUser: string) {
-    // Correlativo atómico nroempleado (ttipoparametros) — solo si no trae número propio
-    const nroempleado = dto.nroempleado || (await this.correlativos.siguienteString('nroempleado', dto.empresaId, currentUser, 6));
+    let nroempleado = dto.nroempleado;
+    if (!nroempleado) {
+      try {
+        nroempleado = await this.correlativos.siguienteString('nroempleado', dto.empresaId, currentUser, 6);
+      } catch {
+        const count = await this.empleadoRepo.count({ where: { empresaId: dto.empresaId } });
+        nroempleado = String(count + 1).padStart(6, '0');
+      }
+    }
 
     const payload: any = {
       ...dto,
@@ -1415,8 +1422,15 @@ export class PlanillaService {
   }
 
   async createPlanilla(dto: CreatePlPlaMaeDto, currentUser: string) {
-    // Correlativo atómico nroplanilla (ttipoparametros) — solo si no trae número propio
-    const nroplanilla = dto.nroplanilla || (await this.correlativos.siguienteString('nroplanilla', dto.empresaId, currentUser, 6));
+    let nroplanilla = dto.nroplanilla;
+    if (!nroplanilla) {
+      try {
+        nroplanilla = await this.correlativos.siguienteString('nroplanilla', dto.empresaId, currentUser, 6);
+      } catch {
+        const count = await this.plamaeRepo.count({ where: { empresaId: dto.empresaId } });
+        nroplanilla = String(count + 1).padStart(6, '0');
+      }
+    }
 
     const payload: any = {
       ...dto,
