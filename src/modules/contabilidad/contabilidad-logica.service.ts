@@ -879,8 +879,6 @@ export class ContabilidadLogicaService {
       .getMany();
 
     const ctasResultadoSet = new Set(cuentasResultado.map(c => c.ctacontable));
-    // Mapa ctacontable → naturaleza (para cerrar según D/C, nunca por signo)
-    const naturalezaResultadoMap = new Map(cuentasResultado.map(c => [c.ctacontable, c.naturaleza || 'D']));
 
     // 5. Construir líneas de la partida de cierre (inverso de cuentas de resultado)
     const lineasCierre: { ctacontable: string; descripcion: string; debito: number; credito: number }[] = [];
@@ -897,13 +895,14 @@ export class ContabilidadLogicaService {
       const saldo = Math.abs(Math.round(movimientoMes * 100) / 100);
       if (saldo === 0) continue;
 
-      // REGLA CONTABLE: saldo SIEMPRE positivo. La dirección la da la naturaleza:
-      // - Naturaleza D (deudora): normalmente saldo deudor → se cierra con Crédito
-      // - Naturaleza C (acreedora): normalmente saldo acreedor → se cierra con Débito
-      const naturaleza = naturalezaResultadoMap.get(mov.ctacontable) || 'D';
-
-      if (naturaleza === 'D') {
-        // Saldo deudor → Crédito para cerrar
+      // REGLA CONTABLE: el asiento de cierre es el INVERSO del movimiento del mes.
+      // - Movimiento deudor (debe > haber) → se cierra con Crédito
+      // - Movimiento acreedor (haber > debe) → se cierra con Débito
+      // La naturaleza NO define la dirección: si una cuenta de naturaleza C recibe
+      // un contra-movimiento deudor (devolución/anulación), cerrarla con Débito
+      // duplicaría el saldo en lugar de dejarlo en cero.
+      if (movimientoMes > 0) {
+        // Movimiento deudor → Crédito para cerrar
         lineasCierre.push({
           ctacontable: mov.ctacontable,
           descripcion: `Cierre ${dto.periodo}/${dto.anio}`,
@@ -912,7 +911,7 @@ export class ContabilidadLogicaService {
         });
         totalCredito += saldo;
       } else {
-        // Saldo acreedor → Débito para cerrar
+        // Movimiento acreedor → Débito para cerrar
         lineasCierre.push({
           ctacontable: mov.ctacontable,
           descripcion: `Cierre ${dto.periodo}/${dto.anio}`,
@@ -959,7 +958,8 @@ export class ContabilidadLogicaService {
       Idsucursal: dto.Idsucursal ?? 1,
       periodo: dto.periodo,
       anio: dto.anio,
-      moduloId: 1, // Contabilidad
+      // tmodulos: 7 = CONTABILIDAD (el moduloId 1 no existe en el catálogo → FK)
+      moduloId: 7, // Contabilidad
       documentoId: 0,
       fechadocumento: fecha,
       factordecambio: 0,
@@ -983,7 +983,7 @@ export class ContabilidadLogicaService {
         periodo: dto.periodo,
         anio: dto.anio,
         nropartida,
-        moduloId: 1,
+        moduloId: 7,
         nrofila: nrofila++,
         ctacontable: linea.ctacontable,
         descripcion: linea.descripcion,
@@ -1157,12 +1157,14 @@ export class ContabilidadLogicaService {
       );
     }
 
-    // 3. No puede haber partidas en períodos posteriores: sus acumulados en
-    //    coctamov dependen de este cierre y quedarían desfasados.
+    // 3. No puede haber partidas VIGENTES en períodos posteriores: sus acumulados
+    //    en coctamov dependen de este cierre y quedarían desfasados. Las partidas
+    //    anuladas no postean nada (no generan dependencia) → no bloquean.
     const partidasPosteriores = await this.copdamaeRepo
       .createQueryBuilder('m')
       .where('m.empresaId = :eid', { eid: empresaId })
       .andWhere('(m.anio > :anio OR (m.anio = :anio AND m.periodo > :periodo))', { anio, periodo })
+      .andWhere("m.sn_anulada = 'N'")
       .getCount();
 
     if (partidasPosteriores > 0) {
@@ -1185,14 +1187,29 @@ export class ContabilidadLogicaService {
     });
 
     if (partidaCierre) {
-      // 4b. La partida de cierre no debe tener transacciones externas (FK RESTRICT)
-      const refs = await this.dataSource.query(
-        `SELECT
-           (SELECT COUNT(*) FROM cotrxref   WHERE partidaId = ?) AS trxref,
-           (SELECT COUNT(*) FROM posfacmov WHERE partidaId = ?) AS posfacmov`,
-        [partidaCierre.partidaId, partidaCierre.partidaId],
+      // 4b. La partida de cierre no debe tener transacciones externas (FK RESTRICT).
+      //     No todas las instalaciones tienen las tablas de referencia, así que se
+      //     consulta information_schema antes de contar.
+      const tablasRef = await this.dataSource.query(
+        `SELECT TABLE_NAME AS tabla FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('cotrxref', 'posfacmov')`,
       );
-      const totalRefs = (Number(refs?.[0]?.trxref) || 0) + (Number(refs?.[0]?.posfacmov) || 0);
+      const tablasRefSet = new Set((tablasRef || []).map((t: any) => t.tabla));
+      let totalRefs = 0;
+      if (tablasRefSet.has('cotrxref')) {
+        const r1 = await this.dataSource.query(
+          'SELECT COUNT(*) AS n FROM cotrxref WHERE partidaId = ?',
+          [partidaCierre.partidaId],
+        );
+        totalRefs += Number(r1?.[0]?.n) || 0;
+      }
+      if (tablasRefSet.has('posfacmov')) {
+        const r2 = await this.dataSource.query(
+          'SELECT COUNT(*) AS n FROM posfacmov WHERE partidaId = ?',
+          [partidaCierre.partidaId],
+        );
+        totalRefs += Number(r2?.[0]?.n) || 0;
+      }
       if (totalRefs > 0) {
         throw new BadRequestException(
           `No se puede revertir el cierre de ${etiqueta}: la partida de cierre #${partidaCierre.nropartida} `
@@ -4066,3 +4083,4 @@ export interface CrearPartidaPlanillaDto {
   importes: PartidaPlanillaImportes;
   Idsucursal?: number;
 }
+
