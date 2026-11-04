@@ -528,6 +528,10 @@ export class FacturacionService {
       }
     }
 
+    if (errores.length > 0) {
+      throw new BadRequestException(errores.join(' | '));
+    }
+
     console.log(`[procesarKardex] finalizado: procesados=${procesados}, errores=${errores.length}`);
     return { procesados, errores };
   }
@@ -986,11 +990,7 @@ export class FacturacionService {
       empresaId,
     }, currentUser);
 
-    try {
-      await this.procesarKardexFactura(factura.facturaId, currentUser);
-    } catch (error) {
-      console.error('Error procesando kardex desde tienda:', error);
-    }
+    await this.procesarKardexFactura(factura.facturaId, currentUser);
 
     carrito.sn_estadocarrito = 'F';
     carrito.Nombrecliente = dto.nombrecliente;
@@ -1563,11 +1563,7 @@ export class FacturacionService {
       // conLink sin pagos no-TP → ninguna fila de caja hasta confirmar el link
     }
 
-    try {
-      await this.procesarKardexFactura(factura.facturaId, currentUser);
-    } catch (error) {
-      console.error('Error procesando kardex desde pedido:', error);
-    }
+    await this.procesarKardexFactura(factura.facturaId, currentUser);
 
     const fechaUpd = await this.fechaSistema.getFecha(empresaId);
     // El pedido queda facturado + trazabilidad del nro. de factura. Se actualiza
