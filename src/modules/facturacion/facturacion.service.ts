@@ -901,10 +901,15 @@ export class FacturacionService {
         estadocivil: 'S',
         limiteCredito: 0,
         diasplazo: 0,
+        // diasgracia en BD es NOT NULL sin default (synchronize: false) - setear explícito
+        diasgracia: 0,
         interes: 0,
         moratorio: 0,
         sn_activo: 'S',
         categoria: 'A',
+        // NOT NULL sin default en BD (synchronize: false) - setear explícito:
+        moduloId: 4,
+        Idsucursal: 1,
         empresaId,
         usuarioCreated: currentUser,
         // Reglas 1 y 4: cxcclientes está en la lista → fecha del backend
@@ -1064,10 +1069,15 @@ export class FacturacionService {
         estadocivil: 'S',
         limiteCredito: 0,
         diasplazo: 0,
+        // diasgracia en BD es NOT NULL sin default (synchronize: false) - setear explícito
+        diasgracia: 0,
         interes: 0,
         moratorio: 0,
         sn_activo: 'S',
         categoria: 'A',
+        // NOT NULL sin default en BD (synchronize: false) - setear explícito:
+        moduloId: 4,
+        Idsucursal: 1,
         empresaId,
         usuarioCreated: currentUser,
         // Reglas 1 y 4: cxcclientes está en la lista → fecha del backend
@@ -1118,6 +1128,32 @@ export class FacturacionService {
       throw new BadRequestException('El pedido ya fue facturado y no se puede modificar');
     }
     return pedido;
+  }
+
+  /**
+   * Control de entrega por ítem (regla aprobada): la cabecera pospedmae.sn_entregado
+   * queda en 'S' automáticamente cuando TODOS sus ítems están en 'S' y vuelve a 'N'
+   * si queda alguno pendiente (o la orden está vacía). El UPDATE solo escribe cuando
+   * el estado cambia (WHERE ... AND sn_entregado <> estado).
+   */
+  private async sincronizarEntregadoPedido(pospedmaeId: number, empresaId: number, currentUser?: string): Promise<void> {
+    const dets = await this.pedDetRepo.find({
+      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    const estado = dets.length > 0 && dets.every((d) => d.sn_entregado === 'S') ? 'S' : 'N';
+    const fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+    const cambios: Record<string, any> = { sn_entregado: estado, fechaUpdated };
+    if (currentUser) cambios.usuarioUpdated = currentUser;
+    await this.pedMaeRepo
+      .createQueryBuilder()
+      .update()
+      .set(cambios)
+      .where('pospedmaeId = :pospedmaeId AND empresaId = :empresaId AND sn_entregado <> :estado', {
+        pospedmaeId,
+        empresaId,
+        estado,
+      })
+      .execute();
   }
 
   /**
@@ -1251,8 +1287,28 @@ export class FacturacionService {
     }
     if (!dto.bodegaId) dto.bodegaId = mae.bodegaId;
 
+    // Control de entrega por ítem: estado inicial según productos.sn_enviar_a_cocina.
+    // 'S' (enviar a cocina) → nace en 'N' (cocina debe despachar);
+    // 'N' → nace en 'S' (entrega inmediata: entradas, bebidas, etc.).
+    // Sin catálogo o sin productoId → 'N' (conservador: queda pendiente).
+    if (dto.sn_entregado !== 'S' && dto.sn_entregado !== 'N') {
+      let estado = 'N';
+      if (dto.productoId) {
+        try {
+          const prod = await this.productoRepo.findOne({
+            where: { produtoId: dto.productoId, empresaId: dto.empresaId } as unknown as FindOptionsWhere<Tproducto>,
+          });
+          if (prod) estado = prod.sn_enviar_a_cocina === 'S' ? 'N' : 'S';
+        } catch {
+          /* sin catálogo → pendiente en cocina */
+        }
+      }
+      dto.sn_entregado = estado;
+    }
+
     const det = await this.createEntity(this.pedDetRepo, dto, currentUser);
     await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     return det;
   }
 
@@ -1263,7 +1319,16 @@ export class FacturacionService {
       throw new BadRequestException('El detalle no pertenece a la misma empresa que el pedido');
     }
     const actualizado = await this.updateEntity(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, dto, currentUser, 'Detalle Pedido');
-    await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    // Un toggle de entrega no mueve dinero: si el único campo útil del payload es
+    // sn_entregado se omite el recálculo de totales (campos de contexto
+    // inyectados por el frontend se ignoran para decidirlo).
+    const meta = new Set(['empresaId', 'Idsucursal', 'usuarioCreated', 'fecharegistro']);
+    const llaves = Object.keys(dto ?? {}).filter((k) => !meta.has(k));
+    const soloCambioEntrega = llaves.length === 1 && llaves[0] === 'sn_entregado';
+    if (!soloCambioEntrega) {
+      await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    }
+    await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     return actualizado;
   }
 
@@ -1291,6 +1356,7 @@ export class FacturacionService {
     const mae = await this.exigirPedidoModificable(entity.pospedmaeId, empresaId);
     await this.pedDetRepo.remove(entity);
     await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
+    await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
     return { deleted: true };
   }
 

@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { secretoJwt } from './jwt-secret';
 import { Tusuarios } from '../users/entities/usuario.entity';
 import { TusuarioInfo } from '../users/entities/usuario-info.entity';
 import { PlEmpleados } from '../planilla/entities/plempleados.entity';
@@ -16,7 +17,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'arcas-software-secret-key-2026',
+      secret: secretoJwt(),
       signOptions: { expiresIn: '24h' },
     }),
   ],

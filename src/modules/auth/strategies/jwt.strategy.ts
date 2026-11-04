@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tusuarios } from '../../users/entities/usuario.entity';
 import { RolesService } from '../../users/roles.service';
+import { secretoJwt } from '../jwt-secret';
 import { JwtPayload } from '../../../common/interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -21,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'arcas-software-secret-key-2026',
+      secretOrKey: secretoJwt(),
     });
   }
 

@@ -68,6 +68,14 @@ export class TPosPedDet {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_anulada: string;
 
+  /**
+   * Control de entrega por ítem: 'S' = entregado a la mesa, 'N' = pendiente (en cocina).
+   * El estado inicial lo decide el backend segun productos.sn_enviar_a_cocina.
+   */
+  @ApiProperty({ enum: ['S', 'N'], required: false, description: 'S = entregado; N = pendiente en cocina' })
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_entregado: string;
+
   @ApiProperty()
   @Column({ type: 'int' })
   empresaId: number;

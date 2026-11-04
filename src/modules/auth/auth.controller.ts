@@ -29,12 +29,12 @@ export class AuthController {
     // La detección es por HTTPS real (req.secure vía trust proxy en main.ts),
     // NO por NODE_ENV — en Render NODE_ENV puede no estar definida.
     const isHttps = request.secure === true;
-    response.cookie('jwt_token', resAuth.access_token, {
+    response.cookie("jwt_token", resAuth.access_token, {
       httpOnly: true,
       secure: isHttps,
-      sameSite: isHttps ? 'none' : 'lax',
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 8 * 60 * 60 * 1000,
-      path: '/',
+      path: "/",
     });
 
     return resAuth;
@@ -44,11 +44,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Cerrar sesión' })
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: any) {
     const isHttps = request.secure === true;
-    response.clearCookie('jwt_token', {
+    response.clearCookie("jwt_token", {
       httpOnly: true,
       secure: isHttps,
-      sameSite: isHttps ? 'none' : 'lax',
-      path: '/',
+      sameSite: isHttps ? "none" : "lax",
+      path: "/",
     });
     return { message: 'Sesión cerrada exitosamente' };
   }
