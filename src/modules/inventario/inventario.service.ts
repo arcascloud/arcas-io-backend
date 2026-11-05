@@ -1330,6 +1330,7 @@ export class InventarioService {
       existencia: existenciaMap.get(p.produtoId) || 0,
       categoria: p.categoria?.descripcion || null,
       categoriaId: p.categoriaId,
+      marcaId: p.marcaId,
       deptoId: p.deptoId,
       categoriaDeptoId: p.categoria?.deptoId || null,
       tipo_giro: p.categoria?.tipo_giro || 'C',
