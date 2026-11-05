@@ -171,6 +171,7 @@ export class InventarioController {
   }
 
   @Get('marcas')
+  @Public()
   @ApiOperation({ summary: 'Listar marcas' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllMarcas(@Query('empresaId', ParseIntPipe) empresaId: number) {
