@@ -32,7 +32,6 @@ import { CxcMovimientoSubscriber } from './modules/cxc/entities/cxcmovimiento.su
         username: configService.get<string>('DB_USER') || process.env.DB_USER,
         password: configService.get<string>('DB_PASSWORD') || process.env.DB_PASSWORD,
         database: configService.get<string>('DB_NAME') || process.env.DB_NAME,
-        charset: 'utf8mb4_unicode_ci', 
         autoLoadEntities: true,
         synchronize: false,
         subscribers: [CxcMovimientoSubscriber],
