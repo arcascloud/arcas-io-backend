@@ -7,11 +7,12 @@ import { TImpresora } from './entities/impresoras.entity';
 import { TCaiAutorizado } from '../facturacion/entities/cai-autorizado.entity';
 import { TCai } from './entities/tcai.entity';
 import { Tsucursal } from '../sucursales/entities/sucursal.entity';
+import { TinvBodega } from '../inventario/entities/bodega.entity';
 import { CompaniesService } from './companies.service';
 import { CompaniesController } from './companies.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Tempresas, TempresasDet, TempresasLogo, TImpresora, TCaiAutorizado, TCai, Tsucursal])],
+  imports: [TypeOrmModule.forFeature([Tempresas, TempresasDet, TempresasLogo, TImpresora, TCaiAutorizado, TCai, Tsucursal, TinvBodega])],
   controllers: [CompaniesController],
   providers: [CompaniesService],
   exports: [CompaniesService],

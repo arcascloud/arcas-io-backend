@@ -40,6 +40,9 @@ export function secretoJwt(): string {
     }
   }
 
-  cache = valor || 'arcas-software-secret-key-2026';
+  cache = valor;
+  if (!cache || cache === '${seed}' || cache.includes('${')) {
+    throw new Error('El login exige JWT_SECRET configurado.');
+  }
   return cache;
 }

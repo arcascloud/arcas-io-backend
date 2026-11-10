@@ -22,7 +22,7 @@ import {
 } from './dto/contabilidad.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Contabilidad')
 @ApiBearerAuth()
@@ -56,7 +56,7 @@ export class ContabilidadController {
   // ===== Ctacontables =====
 
   @Get('ctacontables')
-  @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar cuentas contables' })
   @ApiResponse({ status: 200, description: 'Lista de cuentas contables obtenida exitosamente' })
   findAllCtacontables(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -460,7 +460,7 @@ export class ContabilidadController {
   // ===== Factor de Cambio =====
 
   @Get('factordecambio')
-  @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar factores de cambio' })
   @ApiResponse({ status: 200, description: 'Lista de factores de cambio obtenida exitosamente' })
   findAllFactordecambio(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -1332,7 +1332,7 @@ export class ContabilidadController {
   // ===== Carteras Contables =====
 
   @Get('carteras')
-  @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar carteras contables' })
   @ApiResponse({ status: 200, description: 'Lista de carteras obtenida exitosamente' })
   findAllCarteras(@Query('empresaId', ParseIntPipe) empresaId: number) {

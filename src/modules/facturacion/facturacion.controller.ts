@@ -16,6 +16,7 @@ import {
 } from './dto/posfaccaja.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { FacturacionDashboardService } from './dashboard.service';
 
@@ -301,6 +302,7 @@ export class FacturacionController {
 
   @Post('cotizaciones')
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Crear cotización (carrito tienda online — público, sin sesión)' })
   @ApiResponse({ status: 201, description: 'Cotización creada exitosamente' })
   createCotizacion(@Body() dto: CreatePosCotMaeDto, @CurrentUser() user?: any) {
@@ -341,6 +343,7 @@ export class FacturacionController {
 
   @Post('cotizaciones-det')
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Crear detalle de cotización (carrito tienda online — público, sin sesión)' })
   @ApiResponse({ status: 201, description: 'Detalle de cotización creado exitosamente' })
   createCotizacionDet(@Body() dto: any, @CurrentUser() user?: any) {
@@ -483,8 +486,9 @@ export class FacturacionController {
     return this.service.findAllComboMae(empresaId);
   }
 
-  @Get('combos-ofertas')
   @Public()
+  @Get('combos-ofertas')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Productos en oferta/promoción (combo vigente, tipocombo != C). Público: la tienda online muestra ofertas a visitantes sin sesión' })
   @ApiResponse({ status: 200, description: 'Productos con precio descontado' })
   findProductosEnOferta(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -728,11 +732,14 @@ export class FacturacionController {
 
   // ===== Tienda Virtual =====
 
+  @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Post('tienda/checkout')
-  @ApiOperation({ summary: 'Checkout de tienda virtual — convierte carrito en factura' })
+  @ApiOperation({ summary: 'Checkout de tienda virtual — convierte carrito en factura (público, sin sesión)' })
   @ApiResponse({ status: 201, description: 'Factura creada exitosamente' })
   checkoutTienda(@Body() dto: CheckoutTiendaDto, @CurrentUser() user: any) {
-    return this.service.checkoutTienda(dto, user.usuario);
+    // Checkout público: visitantes sin sesión usan el usuario de sistema "tienda"
+    return this.service.checkoutTienda(dto, user?.usuario || 'tienda');
   }
 
   @Post('pedidos/checkout')
@@ -746,6 +753,7 @@ export class FacturacionController {
 
   @Get('cotizaciones-det/mae/:maeId')
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Obtener detalles de cotización por maestro — público (carrito tienda online)' })
   @ApiResponse({ status: 200, description: 'Detalles encontrados' })
   findCotizacionDetByMaeId(
@@ -768,6 +776,7 @@ export class FacturacionController {
 
   @Delete('cotizaciones-det/:id')
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Eliminar detalle de cotización — público (carrito tienda online)' })
   @ApiResponse({ status: 200, description: 'Detalle eliminado' })
   deleteCotizacionDet(

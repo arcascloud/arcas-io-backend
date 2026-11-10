@@ -4,11 +4,13 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tusuarios } from '../users/entities/usuario.entity';
 import { TusuarioInfo } from '../users/entities/usuario-info.entity';
+import { TusuariosRol } from '../users/entities/tusuarios-rol.entity';
 import { PlEmpleados } from '../planilla/entities/plempleados.entity';
 import { RolesService } from '../users/roles.service';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
@@ -56,7 +58,8 @@ export class AuthService {
       },
     });
 
-    if (!user || user.password !== dto.password) {
+    const passwordValid = user ? (await bcrypt.compare(dto.password, user.password) || user.password === dto.password) : false;
+    if (!user || !passwordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
@@ -100,8 +103,15 @@ export class AuthService {
     // Roles del usuario (ttipo_rol vía tusuarios_rol) para autorizaciones por módulo
     const roles = await this.rolesService.getRoles(user.usuario, user.empresaId);
 
+    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refresh_token = this.jwtService.sign({ usuario: user.usuario, type: 'refresh' }, { expiresIn: '7d' });
+
+    user.refreshToken = refresh_token;
+    await this.usersRepo.save(user);
+
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token,
+      refresh_token,
       usuario: {
         usuarioId: user.usuarioId,
         usuario: user.usuario,
@@ -114,6 +124,36 @@ export class AuthService {
         sn_cliente: info.sn_cliente,
       },
     };
+  }
+
+  async refresh(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify(refreshToken);
+      if (!payload || payload.type !== 'refresh') {
+        throw new UnauthorizedException('Refresh token no válido');
+      }
+      const user = await this.usersRepo.findOne({
+        where: { usuario: payload.usuario, sn_activo: 'S' },
+      });
+      if (!user || user.refreshToken !== refreshToken) {
+        throw new UnauthorizedException('Refresh token no válido o revocado');
+      }
+      const accessPayload: JwtPayload = {
+        usuarioId: user.usuarioId,
+        usuario: user.usuario,
+        empresaId: user.empresaId,
+      };
+      return {
+        access_token: this.jwtService.sign(accessPayload, { expiresIn: '15m' }),
+      };
+    } catch {
+      throw new UnauthorizedException('Refresh token expirado o inválido');
+    }
+  }
+
+  async logout(usuario: string) {
+    await this.usersRepo.update({ usuario }, { refreshToken: null as any });
+    return { ok: true };
   }
 
   /**
@@ -191,6 +231,12 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const EMPRESA_DEFAULT = 2; // AUTOSEL
     const SUCURSAL_DEFAULT = 1;
+
+    // El origen del alta define el tipo de usuario y si es cliente:
+    // RegistroDialog (autoservicio) -> CRM + cliente; UsuarioForm (administrativo) -> ERP + no cliente.
+    const origen = dto.origen ?? 'REGISTRO_DIALOG';
+    const tipoUsuario = origen === 'USUARIO_FORM' ? 'ERP' : 'CRM';
+    const snCliente = origen === 'USUARIO_FORM' ? 'N' : 'S';
 
     const solicitado = dto.usuario.trim();
     if (!solicitado) {
@@ -280,9 +326,9 @@ export class AuthService {
         nombre: dto.nombre.trim(),
         apellidos: dto.apellidos.trim(),
         email,
-        password: dto.password,
+        password: await bcrypt.hash(dto.password, 10),
         sn_activo: 'S',
-        tipo_usuario: 'ERP',
+        tipo_usuario: tipoUsuario,
         empresaId: EMPRESA_DEFAULT,
         Idsucursal: SUCURSAL_DEFAULT,
         usuarioCreated: 'REGISTRO',
@@ -305,9 +351,17 @@ export class AuthService {
         ciudad: dto.ciudad.trim(),
         direccion: dto.direccion.trim(),
         telefono: dto.telefono.trim(),
-        sn_cliente: 'S',
+        sn_cliente: snCliente,
         empleadoId,
         usuarioCreated: 'REGISTRO',
+        fechaCreated: fechaSistema,
+      });
+
+      await em.save(TusuariosRol, {
+        usuarioId: creado.usuarioId,
+        rol: 'consultas',
+        empresaId: EMPRESA_DEFAULT,
+        usuarioCreated: creado.usuario,
         fechaCreated: fechaSistema,
       });
 

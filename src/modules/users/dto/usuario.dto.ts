@@ -54,4 +54,8 @@ export class UpdateUsuarioDto {
   @ApiProperty({ description: 'ID de Sucursal', required: false })
   @IsNumber() @IsOptional()
   Idsucursal?: number;
+
+  @ApiProperty({ description: 'Tipo de usuario', required: false })
+  @IsString() @IsOptional()
+  tipo_usuario?: string;
 }

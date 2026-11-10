@@ -11,6 +11,7 @@ import { CreateDeptoDto, UpdateDeptoDto } from './dto/depto.dto';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Inventario')
@@ -40,8 +41,9 @@ export class InventarioController {
     return this.service.searchProductos(empresaId, termino);
   }
 
-  @Get('tienda/productos')
   @Public()
+  @Get('tienda/productos')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Productos para tienda virtual (con imagen y existencia). Público: sin sesión usa la empresa default' })
   @ApiResponse({ status: 200, description: 'Productos con imagen y stock' })
   findProductosTienda(
@@ -96,8 +98,9 @@ export class InventarioController {
     return this.service.updateProducto(id, empresaId, dto, user.usuario);
   }
 
-  @Get('categorias')
   @Public()
+  @Get('categorias')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar categorías' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllCategorias(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -133,8 +136,9 @@ export class InventarioController {
     return this.service.updateCategoria(id, empresaId, dto, user.usuario);
   }
 
-  @Get('deptos')
   @Public()
+  @Get('deptos')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar departamentos de inventario' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllDeptos(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -170,8 +174,9 @@ export class InventarioController {
     return this.service.updateDepto(id, empresaId, dto, user.usuario);
   }
 
-  @Get('marcas')
   @Public()
+  @Get('marcas')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar marcas' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllMarcas(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -811,9 +816,10 @@ export class InventarioController {
 
   // ===== ProductoImg =====
 
-  @Get('productos-img')
   @Public()
-  @ApiOperation({ summary: 'Listar imágenes de productos' })
+  @Get('productos-img')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
+  @ApiOperation({ summary: 'Listar imágenes de productos. Público: usado por la tienda virtual sin sesión' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllProdImg(
     @Query('empresaId', ParseIntPipe) empresaId: number,
@@ -822,8 +828,9 @@ export class InventarioController {
     return this.service.findAllProdImg(empresaId, productoId ? Number(productoId) : undefined);
   }
 
+  @Public()
   @Get('productos-img/:id')
-  @ApiOperation({ summary: 'Obtener imagen de producto' })
+  @ApiOperation({ summary: 'Obtener imagen de producto. Público: usado por la tienda virtual sin sesión' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findProdImg(
     @Param('id', ParseIntPipe) id: number,

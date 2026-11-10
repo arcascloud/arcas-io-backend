@@ -13,6 +13,10 @@ export class CreateEmpresaDto {
   @ApiProperty({ required: false, description: 'Mensaje de devolución de factura' })
   @IsString() @IsOptional()
   msjdevfactura?: string;
+
+  @ApiProperty({ required: false, description: 'Mensaje de cotización' })
+  @IsString() @IsOptional()
+  msjcotizacion?: string;
 }
 
 export class UpdateEmpresaDto {
@@ -27,6 +31,10 @@ export class UpdateEmpresaDto {
   @ApiProperty({ required: false, description: 'Mensaje de devolución de factura' })
   @IsString() @IsOptional()
   msjdevfactura?: string;
+
+  @ApiProperty({ required: false, description: 'Mensaje de cotización' })
+  @IsString() @IsOptional()
+  msjcotizacion?: string;
 
   @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Estado activo' })
   @IsEnum(['S', 'N']) @IsOptional()

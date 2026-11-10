@@ -9,6 +9,7 @@ import { TImpresora } from './entities/impresoras.entity';
 import { TCaiAutorizado } from '../facturacion/entities/cai-autorizado.entity';
 import { TCai } from './entities/tcai.entity';
 import { Tsucursal } from '../sucursales/entities/sucursal.entity';
+import { TinvBodega } from '../inventario/entities/bodega.entity';
 import { CreateEmpresaDto, UpdateEmpresaDto } from './dto/empresa.dto';
 import { CreateEmpresaDetDto, UpdateEmpresaDetDto } from './dto/empresasdet.dto';
 import { CreateCorrelativoDto, UpdateCorrelativoDto } from './dto/correlativos.dto';
@@ -33,6 +34,8 @@ export class CompaniesService {
     private readonly caiRepo: Repository<TCai>,
     @InjectRepository(Tsucursal)
     private readonly sucRepo: Repository<Tsucursal>,
+    @InjectRepository(TinvBodega)
+    private readonly bodegaRepo: Repository<TinvBodega>,
     private readonly fechaSistema: FechaSistemaService,
   ) {}
 
@@ -262,8 +265,12 @@ export class CompaniesService {
   }
 
   async createSucursal(empresaId: number, dto: Partial<Tsucursal>, currentUser: string) {
+    const datos: Partial<Tsucursal> = { ...dto };
+    delete datos.idsucursal;
+    datos.bodegaId = await this.resolverBodegaSucursal(empresaId, datos.bodegaId, currentUser, true);
+
     const entity = this.sucRepo.create({
-      ...dto,
+      ...datos,
       empresaId,
       usuarioCreated: currentUser,
     });
@@ -273,11 +280,55 @@ export class CompaniesService {
   async updateSucursal(idsucursal: number, dto: Partial<Tsucursal>, currentUser: string) {
     const found = await this.sucRepo.findOne({ where: { idsucursal } });
     if (!found) throw new NotFoundException(`Sucursal ${idsucursal} no encontrada`);
-    Object.assign(found, dto, {
+
+    const datos: Partial<Tsucursal> = { ...dto };
+    delete datos.idsucursal;
+    delete datos.empresaId;
+    delete datos.usuarioCreated;
+    if (datos.bodegaId == null || Number(datos.bodegaId) <= 0) {
+      delete datos.bodegaId;
+    } else {
+      datos.bodegaId = await this.resolverBodegaSucursal(found.empresaId, datos.bodegaId, currentUser, false);
+    }
+
+    Object.assign(found, datos, {
       usuarioUpdated: currentUser,
       fechaUpdated: await this.fechaSistema.getFecha(found.empresaId),
     });
     return this.sucRepo.save(found);
+  }
+
+  private async resolverBodegaSucursal(
+    empresaId: number,
+    bodegaId: number | null | undefined,
+    currentUser: string,
+    crearSiNoExiste: boolean,
+  ): Promise<number> {
+    if (bodegaId != null && Number(bodegaId) > 0) {
+      const bodega = await this.bodegaRepo.findOne({ where: { bodegaId: Number(bodegaId) } });
+      if (!bodega || bodega.empresaId !== empresaId) {
+        throw new BadRequestException('La bodega seleccionada no pertenece a la empresa');
+      }
+      return bodega.bodegaId;
+    }
+
+    const existente = await this.bodegaRepo.findOne({
+      where: { empresaId },
+      order: { bodegaId: 'ASC' },
+    });
+    if (existente) return existente.bodegaId;
+    if (!crearSiNoExiste) {
+      throw new BadRequestException('La empresa no tiene bodegas registradas');
+    }
+
+    const nueva = this.bodegaRepo.create({
+      descripcion: 'Bodega Central',
+      sn_activo: 'S',
+      empresaId,
+      usuarioCreated: currentUser,
+    });
+    const guardada = await this.bodegaRepo.save(nueva);
+    return guardada.bodegaId;
   }
 
   // ===== Logo =====

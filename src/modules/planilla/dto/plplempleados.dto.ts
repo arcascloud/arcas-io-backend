@@ -22,13 +22,13 @@ export class CreatePlEmpleadosDto {
   @IsString() @IsOptional()
   fechanacimiento?: string;
 
-  @ApiProperty({ required: false, enum: ['M', 'F', 'T'], description: 'Sexo' })
-  @IsEnum(['M', 'F', 'T']) @IsOptional()
-  sexo?: string;
+  @ApiProperty({ enum: ['M', 'F', 'T'], description: 'Sexo' })
+  @IsEnum(['M', 'F', 'T']) @IsNotEmpty()
+  sexo: string;
 
-  @ApiProperty({ required: false, enum: ['S', 'C', 'V', 'D', 'U'], description: 'Estado civil' })
-  @IsEnum(['S', 'C', 'V', 'D', 'U']) @IsOptional()
-  estadocivil?: string;
+  @ApiProperty({ enum: ['S', 'C', 'V', 'D', 'U'], description: 'Estado civil' })
+  @IsEnum(['S', 'C', 'V', 'D', 'U']) @IsNotEmpty()
+  estadocivil: string;
 
   @ApiProperty({ required: false, description: 'ID del país de origen' })
   @IsNumber() @IsOptional()
@@ -82,13 +82,13 @@ export class CreatePlEmpleadosDto {
   @IsString() @IsOptional()
   cuentabancaria?: string;
 
-  @ApiProperty({ required: false, description: 'Lugar de nacimiento' })
+  @ApiProperty({ description: 'Lugar de nacimiento' })
   @IsString() @IsOptional()
   lugardenacimiento?: string;
 
-  @ApiProperty({ required: false, enum: ['D', 'M', 'N'], description: 'Jornada: D=Diurna (8h), M=Mixta (7h), N=Nocturna (6h)' })
-  @IsEnum(['D', 'M', 'N']) @IsOptional()
-  sn_jornada?: string;
+  @ApiProperty({ enum: ['D', 'M', 'N'], description: 'Jornada: D=Diurna (8h), M=Mixta (7h), N=Nocturna (6h)' })
+  @IsEnum(['D', 'M', 'N']) @IsNotEmpty()
+  sn_jornada: string;
 
   @ApiProperty({ description: 'ID de tipo de empleado' })
   @IsNumber()

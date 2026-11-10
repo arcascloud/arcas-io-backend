@@ -16,6 +16,13 @@ import { ApiProperty } from '@nestjs/swagger';
 export type TipoDocRegistro = 'D' | 'R' | 'C' | 'P' | 'L';
 
 /**
+ * Origen del alta:
+ * - REGISTRO_DIALOG: registro público/autoservicio → cliente CRM.
+ * - USUARIO_FORM: alta administrativa desde Usuarios → usuario ERP.
+ */
+export type OrigenRegistro = 'REGISTRO_DIALOG' | 'USUARIO_FORM';
+
+/**
  * Registro público de usuario (sin sesión).
  * Límites según estructura real:
  * - `tusuarios`: usuario varchar(20) PK, nombre/apellidos varchar(80),
@@ -129,4 +136,20 @@ export class RegisterDto {
   @IsOptional()
   @IsNumber()
   empleadoId?: number;
+
+  @ApiProperty({ description: '¿Es cliente?', enum: ['S', 'N'], required: false, default: 'N' })
+  @IsOptional()
+  @IsIn(['S', 'N'])
+  sn_cliente?: 'S' | 'N';
+
+  @ApiProperty({
+    description:
+      'Origen del alta. REGISTRO_DIALOG crea cliente CRM (sn_cliente=S); USUARIO_FORM crea usuario ERP (sn_cliente=N)',
+    enum: ['REGISTRO_DIALOG', 'USUARIO_FORM'],
+    required: false,
+    default: 'REGISTRO_DIALOG',
+  })
+  @IsOptional()
+  @IsIn(['REGISTRO_DIALOG', 'USUARIO_FORM'])
+  origen?: OrigenRegistro;
 }

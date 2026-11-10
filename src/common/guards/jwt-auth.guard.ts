@@ -86,7 +86,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
    * la corrección de la fecha.
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Rutas @Public(): sin JWT (ej: /auth/registro y sus catálogos públicos)
     const esPublico = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -97,6 +96,20 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (!autorizado) return false;
 
     const req = context.switchToHttp().getRequest();
+
+    // Validar roles si @Roles está presente
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (requiredRoles && requiredRoles.length > 0) {
+      const userRoles: string[] = req?.user?.roles ?? [];
+      if (!requiredRoles.some((role) => userRoles.includes(role))) {
+        throw new ForbiddenException(
+          `Requiere uno de los roles: ${requiredRoles.join(', ')}`,
+        );
+      }
+    }
 
     // Permisos de módulo (tusuariomnuitem): aplica a GET y escrituras
     await this.validarPermisoModulo(req);

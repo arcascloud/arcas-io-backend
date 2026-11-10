@@ -28,7 +28,7 @@ export class CreateUsuarioInfoDto {
   @IsDateString()
   fecnac?: string;
 
-  @ApiProperty({ description: '¿Es cliente?', enum: ['S', 'N'], required: false, default: 'S' })
+  @ApiProperty({ description: '¿Es cliente?', enum: ['S', 'N'], required: false, default: 'N' })
   @IsOptional()
   @IsIn(['S', 'N'])
   sn_cliente?: 'S' | 'N';

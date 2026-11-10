@@ -33,7 +33,7 @@ export class TusuarioInfo {
   tipodoc: 'D' | 'R' | 'C' | 'P' | 'L';
 
   @ApiProperty({ description: '¿Es cliente?', enum: ['S', 'N'] })
-  @Column({ name: 'sn_cliente', type: 'enum', enum: ['S', 'N'], default: 'S' })
+  @Column({ name: 'sn_cliente', type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_cliente: 'S' | 'N';
 
   @ApiProperty({ description: 'Sexo', enum: ['M', 'F'] })

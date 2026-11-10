@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ObjectLiteral, IsNull } from 'typeorm';
 import { FechaSistemaService } from '../../shared/fecha-sistema.service';
@@ -130,6 +131,13 @@ export class UsersService {
     return users.map(safeUser);
   }
 
+  async findAllGlobal() {
+    const users = await this.repo.find({
+      order: { usuario: 'ASC' },
+    });
+    return users.map(safeUser);
+  }
+
   async findOne(usuario: string, empresaId: number) {
     const found = await this.repo.findOne({ where: { usuario, empresaId } });
     if (!found) throw new NotFoundException(`Usuario ${usuario} no encontrado`);
@@ -142,8 +150,10 @@ export class UsersService {
     });
     if (exists) throw new ConflictException(`Usuario ${dto.usuario} ya existe`);
 
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
     const entity = this.repo.create({
       ...dto,
+      password: hashedPassword,
       usuarioCreated: currentUser,
     });
     return this.repo.save(entity);
@@ -673,7 +683,7 @@ export class UsersService {
       ...data,
       usuario: user.usuario, // denormalizado desde tusuarios
       tipodoc: dto.tipodoc ?? 'D',
-      sn_cliente: dto.sn_cliente ?? 'S',
+      sn_cliente: dto.sn_cliente ?? 'N',
       sexo: dto.sexo ?? 'M',
       fecnac: dto.fecnac ? new Date(dto.fecnac) : null,
       empleadoId: dto.empleadoId ?? null,
@@ -716,7 +726,7 @@ export class UsersService {
     if (!passwordNueva || passwordNueva.trim().length < 4) {
       throw new BadRequestException('La nueva contraseña debe tener al menos 4 caracteres');
     }
-    entity.password = passwordNueva;
+    entity.password = await bcrypt.hash(passwordNueva, 10);
     entity.usuarioUpdated = currentUser;
     entity.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
     await this.repo.save(entity);

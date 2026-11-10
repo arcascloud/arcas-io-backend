@@ -45,6 +45,9 @@ export class Tusuarios {
   @Column({ type: 'datetime', nullable: true })
   fechaUpdated: Date;
 
+  @Column({ type: 'text', nullable: true })
+  refreshToken: string;
+
   @ManyToOne(() => Tempresas, (e) => e.usuarios)
   @JoinColumn({ name: 'empresaId' })
   empresa: Tempresas;

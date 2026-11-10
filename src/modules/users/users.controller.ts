@@ -29,7 +29,13 @@ export class UsersController {
     status: 200,
     description: "Lista de usuarios obtenida exitosamente",
   })
-  findAll(@Query("empresaId", ParseIntPipe) empresaId: number) {
+  findAll(
+    @Query("empresaId", ParseIntPipe) empresaId: number,
+    @Query("todos") todos?: string,
+  ) {
+    if (todos === 'true' || todos === '1') {
+      return this.service.findAllGlobal();
+    }
     return this.service.findAll(empresaId);
   }
 

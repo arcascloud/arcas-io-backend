@@ -12,6 +12,7 @@ import { CreateEmpresaLogoDto, UpdateEmpresaLogoDto } from './dto/empresaslogo.d
 import { CreateImpresoraDto, UpdateImpresoraDto } from './dto/impresoras.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Empresas')
 @ApiBearerAuth()
@@ -185,6 +186,7 @@ export class CompaniesController {
   //  RUTAS CON PARÁMETRO :id DESPUÉS
   // ============================================================
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Obtener empresa por ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {

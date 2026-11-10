@@ -29,6 +29,10 @@ export class Tempresas {
   msjdevfactura: string;
 
   @ApiProperty()
+  @Column({ type: 'varchar', length: 200, default: 'NO SE ACEPTAN DEVOLUCIONES O CAMBIOS DESPUES DE 15 DIAS' })
+  msjcotizacion: string;
+
+  @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;
 

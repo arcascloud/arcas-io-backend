@@ -14,6 +14,7 @@ import { CreateUsuarioCajaDto, UpdateUsuarioCajaDto } from './dto/usuario-caja.d
 
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Parámetros')
@@ -318,8 +319,9 @@ export class ParametrosController {
     return this.service.updateTelefono(id, empresaId, dto, user.usuario);
   }
 
-  @Get('tarjetas-credito')
   @Public()
+  @Get('tarjetas-credito')
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @ApiOperation({ summary: 'Listar tarjetas de crédito. Público: catálogo para el checkout de la tienda online' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findAllTarjetasCredito(@Query('empresaId', ParseIntPipe) empresaId: number) {
@@ -756,6 +758,7 @@ export class ParametrosController {
   // @Public(): catálogo sin datos sensibles, usado por el registro público
   // (/auth/registro) para los selects de País/Departamento/Ciudad sin sesión.
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Get('worldcities')
   @ApiOperation({
     summary: 'Buscar ciudades del mundo (paginado)',
@@ -779,12 +782,14 @@ export class ParametrosController {
   }
 
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Get('worldcities/paises')
   @ApiOperation({ summary: 'Países distintos con conteo de ciudades (público, sin JWT)' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
   findWorldCitiesPaises() { return this.service.findWorldCitiesPaises(); }
 
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Get('worldcities/admin')
   @ApiOperation({ summary: 'Departamentos/estados distintos de un país (iso2) — público, sin JWT' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -794,6 +799,7 @@ export class ParametrosController {
   }
 
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Get('worldcities/capitales')
   @ApiOperation({ summary: 'Capitales (primary/admin) de un país opcional — público, sin JWT' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -802,6 +808,7 @@ export class ParametrosController {
   }
 
   @Public()
+  @Roles('consultas', 'admin', 'supervisor', 'usuario')
   @Get('worldcities/:id')
   @ApiOperation({ summary: 'Obtener ciudad por id — público, sin JWT' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
