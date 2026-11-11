@@ -45,14 +45,22 @@ export class AuthController {
       path: "/",
     });
 
-    return { usuario: resAuth.usuario };
+    // Tokens también en el body: el frontend los usa como Bearer
+    // (cross-site, SameSite=Lax no viaja en XHR) + refresh silencioso.
+    return {
+      usuario: resAuth.usuario,
+      access_token: resAuth.access_token,
+      refresh_token: resAuth.refresh_token,
+    };
   }
 
   @Public()
   @Post('refresh')
   @ApiOperation({ summary: 'Refrescar token de acceso' })
   async refresh(@Req() request: any, @Res({ passthrough: true }) response: Response) {
-    const refreshToken = request.cookies?.ja_refresh;
+    // Body primero (frontend cross-site no envía la cookie SameSite=Lax
+    // en XHR), cookie como fallback (mismo sitio).
+    const refreshToken = request.body?.refresh_token || request.cookies?.ja_refresh;
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token provided');
     }
@@ -68,7 +76,7 @@ export class AuthController {
       path: "/",
     });
 
-    return { ok: true };
+    return { ok: true, access_token: resAuth.access_token };
   }
 
   @Post('logout')
