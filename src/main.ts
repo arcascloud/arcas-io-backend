@@ -66,7 +66,13 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  // `whitelist: true` STRIPPEA los campos no declarados en el DTO (impide
+  // mass-assignment). NO se usa `forbidNonWhitelisted`: `ApiService.withContexto()`
+  // del frontend inyecta `empresaId`/`usuarioCreated` en todos los POST/PUT y solo
+  // 1 de ~185 DTOs declara `usuarioCreated` → con forbidNonWhitelisted casi toda
+  // escritura del ERP respondía 400 "property ... should not exist" (regresión del
+  // 10/11/2026, commit 34a572e).
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());
 
   const config = new DocumentBuilder()
