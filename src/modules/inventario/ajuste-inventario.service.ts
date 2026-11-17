@@ -158,6 +158,15 @@ export class AjusteInventarioService {
 
       if (cantidad <= 0) continue;
 
+      // codbarra del detalle (obligatoria al crear el item); respaldo: producto
+      let codbarra = det.codbarra || '';
+      if (!codbarra) {
+        const prod = await this.productoRepo.findOne({
+          where: { produtoId: productoId, empresaId } as any,
+        });
+        codbarra = prod?.codbarra || '';
+      }
+
       if (mae.sn_entrada === 'S') {
         await this.kardexService.registrarEntrada({
           bodegaId: mae.bodegaId,
@@ -170,6 +179,7 @@ export class AjusteInventarioService {
           subtipoMov: 'A',
           empresaId,
           usuarioCreated: usuario,
+          codbarra,
         });
       } else {
         await this.kardexService.registrarSalida({
@@ -183,6 +193,7 @@ export class AjusteInventarioService {
           subtipoMov: 'A',
           empresaId,
           usuarioCreated: usuario,
+          codbarra,
         });
       }
 
@@ -202,6 +213,7 @@ export class AjusteInventarioService {
     }
 
     await this.maeRepo.update(invmovmaeid, {
+      sn_procesado: 'S',
       sn_anulado: 'N',
       usuarioUpdated: usuario,
       fechaUpdated: await this.fechaSistema.getFecha(empresaId),

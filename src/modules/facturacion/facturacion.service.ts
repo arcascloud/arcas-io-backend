@@ -1,6 +1,6 @@
 ﻿import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, DataSource, In } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TCaiAutorizado } from './entities/cai-autorizado.entity';
 import { TPosFacMae } from './entities/posfacmae.entity';
@@ -24,6 +24,7 @@ import {
   CreatePosPedMaeDto, UpdatePosPedMaeDto,
   CheckoutTiendaDto,
   CheckoutPedidoDto,
+  CrearRondaDto,
 } from './dto/facturacion.dto';
 import { CxcService } from '../cxc/cxc.service';
 import { KardexService } from '../inventario/kardex.service';
@@ -35,6 +36,8 @@ import { TipoParametro } from '../parametros/entities/tipo-parametro.entity';
 import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
 import { TtipoImpuesto } from '../parametros/entities/impuesto.entity';
+import { TtipoGestor } from '../parametros/entities/gestor.entity';
+import { TinvExistencia } from '../inventario/entities/existencia.entity';
 import { Tusuarios } from '../users/entities/usuario.entity';
 import { TusuarioInfo } from '../users/entities/usuario-info.entity';
 import { TusuarioCaja } from '../parametros/entities/usuario-caja.entity';
@@ -46,6 +49,14 @@ import { getTransporter, getMailFrom } from '../../config/mail';
 
 /** ttipoformapago.formapagoId de 'TodoPagoLink' (pago por link — se confirma vía /todopago/confirmar) */
 const FORMAPAGO_TODOPAGO = 6;
+
+/**
+ * Restaurante: rangos de puestos (espejo del front: NUM_MESAS=20 en
+ * restaurante.models.ts, NUM_KIOSKOS=20 en mesero.models.ts). Los kioskos se
+ * guardan en nromesa como 100 + n → 101..120, sin chocar con las mesas 1..20.
+ */
+const RESTAURANTE_NUM_MESAS = 20;
+const RESTAURANTE_NUM_KIOSKOS = 20;
 
 @Injectable()
 export class FacturacionService {
@@ -78,6 +89,9 @@ export class FacturacionService {
     @InjectRepository(TusuarioCaja) private readonly usuarioCajaRepo: Repository<TusuarioCaja>,
     @InjectRepository(Tsucursal) private readonly sucursalRepo: Repository<Tsucursal>,
     @InjectRepository(TCai) private readonly caiRepo: Repository<TCai>,
+    @InjectRepository(TinvExistencia) private readonly existenciaRepo: Repository<TinvExistencia>,
+    @InjectRepository(TtipoGestor) private readonly gestorRepo: Repository<TtipoGestor>,
+    private readonly dataSource: DataSource,
     @Inject(forwardRef(() => CxcService)) private readonly cxcService: CxcService,
     @Inject(forwardRef(() => KardexService)) private readonly kardexService: KardexService,
     @Inject(forwardRef(() => ContabilidadLogicaService)) private readonly contabilidadService: ContabilidadLogicaService,
@@ -1025,17 +1039,84 @@ export class FacturacionService {
     return this.updateEntity(this.cotDetRepo, 'poscotdetId', poscotdetId, empresaId, dto, currentUser, 'Detalle Cotizacion');
   }
 
-  async findAllPedidos(empresaId: number, currentUser?: string) {
+  /**
+   * Lista de pedidos con filtros opcionales para la bandeja de caja
+   * (GET /facturacion/pedidos?cajaId=&estado=): la caja central (1) ve todos
+   * filtrando por su cajaId; Caja 2/3 solo los suyos. El filtro de estado es
+   * aditivo (p.ej. estado=LISTO para ver lo pendiente de servir).
+   */
+  async findAllPedidos(
+    empresaId: number,
+    currentUser?: string,
+    cajaId?: number,
+    estado?: string,
+  ) {
+    const filtros: Record<string, any> = {};
+    if (cajaId) filtros.cajaId = cajaId;
+    if (estado) filtros.estado = estado;
     if (currentUser && currentUser !== 'SYSTEM' && currentUser !== 'admin') {
       const userInfo = await this.usuarioInfoRepo.findOne({ where: { usuario: currentUser } });
       if (userInfo && userInfo.sn_cliente === 'S') {
         return this.pedMaeRepo.find({
-          where: { empresaId, usuarioCreated: currentUser } as any,
+          where: { empresaId, usuarioCreated: currentUser, ...filtros } as any,
           order: { fecharegistro: 'DESC' },
         });
       }
     }
+    if (Object.keys(filtros).length) {
+      return this.pedMaeRepo.find({
+        where: { empresaId, ...filtros } as any,
+        order: { fecharegistro: 'DESC' },
+      });
+    }
     return this.findAllByEmpresaOrdered(this.pedMaeRepo, empresaId, 'fecharegistro');
+  }
+
+  /**
+   * Leyenda oficial de entrega por línea — MISMO CASE que la consulta de estado
+   * del mesero (fuente de verdad frontend + backend):
+   *   sn_entregado = 'S'      → 'Entregado'
+   *   estado_cocina = 'LISTO' → 'Entregar a mesa'
+   *   ELSE                    → 'En preparación'
+   * (La variante 'Entregar a kiosko' es solo de UI, según el puesto que atiende el mesero.)
+   */
+  private leyendaEntrega(det: { sn_entregado?: string | null; estado_cocina?: string | null }): string {
+    if (det.sn_entregado === 'S') return 'Entregado';
+    if (det.estado_cocina === 'LISTO') return 'Entregar a mesa';
+    return 'En preparación';
+  }
+
+  /**
+   * Líneas de cocina pendientes de HOY para el tablero (GET /pedidos-det/abiertos):
+   * estados PENDIENTE / EN_PREPARACION / LISTO, con la descripción del producto
+   * resuelta en lote (las tarjetas de cocina no deben cargar el catálogo entero).
+   * El front las agrupa por pospedmaeId + ronda_uuid contra su lista de pedidos.
+   *
+   * Excluye lo que el mesero ya entregó (sn_entregado = 'S'): eso ya no es de
+   * cocina. Si el mesero revierte la entrega, la línea vuelve al tablero en el
+   * próximo refresco (la cocina pollea cada REFRESCO_MS).
+   */
+  async findPedidoDetAbiertos(empresaId: number) {
+    const dets = await this.pedDetRepo.find({
+      where: {
+        empresaId,
+        estado_cocina: In(['PENDIENTE', 'EN_PREPARACION', 'LISTO']),
+        sn_entregado: 'N',
+      } as unknown as FindOptionsWhere<TPosPedDet>,
+      order: { enviado_at: 'ASC' } as any,
+    });
+    const prodIds = [...new Set(dets.map((d) => d.productoId).filter((p): p is number => !!p))];
+    const prods = prodIds.length
+      ? await this.productoRepo.find({
+          where: { produtoId: In(prodIds), empresaId } as unknown as FindOptionsWhere<Tproducto>,
+        })
+      : [];
+    const mapa = new Map<number, string>(prods.map((p) => [p.produtoId, p.descripcion]));
+    return dets.map((d) => ({
+      ...d,
+      descripcion: d.productoId ? mapa.get(d.productoId) ?? null : null,
+      leyenda: this.leyendaEntrega(d),
+    }));
   }
 
   async findPedido(pospedmaeId: number, empresaId: number, currentUser?: string) {
@@ -1154,6 +1235,69 @@ export class FacturacionService {
         estado,
       })
       .execute();
+  }
+
+  /**
+   * Estado de cabecera derivado de sus líneas (ciclo de vida de restaurante):
+   * 1. Alguna línea LISTO sin servir → LISTO (hay que servir; prioridad, el
+   *    mesero necesita ver que la ronda anterior está lista aunque haya otra
+   *    ronda nueva en curso);
+   * 2. si no, alguna EN_PREPARACION → EN_PREPARACION; si no, alguna PENDIENTE → ENVIADO;
+   * 3. si todas están servidas (sn_entregado 'S') → ENTREGADO; sin líneas → ABIERTO.
+   */
+  private calcularEstadoPedido(dets: TPosPedDet[]): string {
+    if (!dets.length) return 'ABIERTO';
+    if (dets.some((d) => d.estado_cocina === 'LISTO' && d.sn_entregado !== 'S')) return 'LISTO';
+    if (dets.some((d) => d.estado_cocina === 'EN_PREPARACION')) return 'EN_PREPARACION';
+    if (dets.some((d) => d.estado_cocina === 'PENDIENTE')) return 'ENVIADO';
+    if (dets.every((d) => d.sn_entregado === 'S')) return 'ENTREGADO';
+    return 'ABIERTO';
+  }
+
+  /**
+   * Recalcula pospedmae.estado desde las líneas. QueryBuilder (solo columnas no
+   * decimales) y solo escribe cuando el estado cambia.
+   */
+  private async recalcularEstadoPedido(pospedmaeId: number, empresaId: number, currentUser?: string): Promise<void> {
+    const dets = await this.pedDetRepo.find({
+      where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+    });
+    const estado = this.calcularEstadoPedido(dets);
+    const fechaUpdated = await this.fechaSistema.getFecha(empresaId);
+    const cambios: Record<string, any> = { estado, fechaUpdated };
+    if (currentUser) cambios.usuarioUpdated = currentUser;
+    await this.pedMaeRepo
+      .createQueryBuilder()
+      .update()
+      .set(cambios)
+      .where('pospedmaeId = :pospedmaeId AND empresaId = :empresaId', { pospedmaeId, empresaId })
+      .andWhere('(estado IS NULL OR estado <> :estado)', { estado })
+      .execute();
+  }
+
+  /**
+   * Configuración de ISV de restaurante, mismo criterio que el front
+   * (`restaurante.service.cargarISV`): ttipoparametros módulo 3 → field
+   * 'impuestoId' + 'sn_impuestoincluido', con catálogo ttipoimpuestos
+   * (fallback: el activo de módulo 3). Devuelve tasa en decimal.
+   */
+  private async obtenerConfigISV(empresaId: number): Promise<{ tasa: number; incluido: boolean }> {
+    try {
+      const base = { empresaId, sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>;
+      const paramImp = await this.tipoParametroRepo.findOne({ where: { ...base, moduloId: 3, field: 'impuestoId' } as any });
+      const paramInc = await this.tipoParametroRepo.findOne({ where: { ...base, moduloId: 3, field: 'sn_impuestoincluido' } as any });
+      const impuestos = await this.impuestoRepo.find({
+        where: { empresaId } as unknown as FindOptionsWhere<TtipoImpuesto>,
+      });
+      const impuestoId = Number(paramImp?.valor) || null;
+      const activo =
+        impuestos.find((i) => impuestoId != null && i.impuestoId === impuestoId && i.sn_activo === 'S') ??
+        impuestos.find((i) => Number(i.moduloId) === 3 && i.sn_activo === 'S');
+      const pct = Number(activo?.porcentaje) || 0;
+      return { tasa: pct > 0 ? pct / 100 : 0, incluido: paramInc?.valor === 'S' };
+    } catch {
+      return { tasa: 0, incluido: false };
+    }
   }
 
   /**
@@ -1305,10 +1449,18 @@ export class FacturacionService {
       }
       dto.sn_entregado = estado;
     }
+    // Invariante aprobada: PENDIENTE/EN_PREPARACION ⇒ sn_entregado = 'N'. La
+    // línea nace con un estado de cocina coherente con su entrega (sin depender
+    // del DEFAULT de la columna, que en BD es PENDIENTE): si nace entregada
+    // (producto que no pasa por cocina) su estado es ENTREGADO, nunca PENDIENTE.
+    if (!dto.estado_cocina) {
+      dto.estado_cocina = dto.sn_entregado === 'S' ? 'ENTREGADO' : 'PENDIENTE';
+    }
 
     const det = await this.createEntity(this.pedDetRepo, dto, currentUser);
     await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    await this.recalcularEstadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     return det;
   }
 
@@ -1318,25 +1470,89 @@ export class FacturacionService {
     if (dto?.empresaId != null && dto.empresaId !== mae.empresaId) {
       throw new BadRequestException('El detalle no pertenece a la misma empresa que el pedido');
     }
+    // Transiciones de cocina validadas en servidor (la usa la tablet de cocina):
+    // PENDIENTE → EN_PREPARACION → LISTO → ENTREGADO; repetir el mismo estado es
+    // idempotente (dos tablets con la misma pantalla). listo_at se estampa al
+    // entrar en LISTO (lo informa el índice idx_pospeddet_cocina).
+    if (dto?.estado_cocina != null) {
+      const actual = det.estado_cocina ?? 'ENTREGADO';
+      const destino = String(dto.estado_cocina);
+      const permitido: Record<string, string[]> = {
+        PENDIENTE: ['EN_PREPARACION'],
+        EN_PREPARACION: ['LISTO'],
+        LISTO: ['ENTREGADO'],
+        ENTREGADO: ['ENTREGADO'],
+      };
+      // Envío a cocina desde el escritorio: una línea que llega con su
+      // ronda_uuid entra o permanece en PENDIENTE (default de la columna es
+      // PENDIENTE; las líneas heredadas en ENTREGADO también entran). Sin
+      // ronda no se permite entrar ni retroceder en el ciclo. enviado_at es
+      // reloj operativo (ver nota en crearRonda) y solo se estampa en el
+      // primer envío.
+      if (destino === 'PENDIENTE' && !!dto.ronda_uuid) {
+        if (det.sn_entregado === 'S') {
+          throw new BadRequestException('La línea ya está entregada: no se puede enviar a cocina');
+        }
+        if (actual !== 'PENDIENTE' && actual !== 'ENTREGADO') {
+          throw new BadRequestException(`Transición de cocina inválida: ${actual} → ${destino}`);
+        }
+        if (det.enviado_at == null) dto.enviado_at = new Date();
+      } else if (destino !== actual && !permitido[actual]?.includes(destino)) {
+        throw new BadRequestException(`Transición de cocina inválida: ${actual} → ${destino}`);
+      }
+      if (destino === 'LISTO' && actual !== 'LISTO') {
+        // Reloj operativo de cocina (ver nota en crearRonda): no fechaSistema.
+        dto.listo_at = new Date();
+      }
+    }
+    // Entrega por ítem (regla aprobada): sn_entregado solo es modificable — ida o
+    // vuelta — cuando la cocina dejó la línea en LISTO. En cualquier otro estado la
+    // entrega queda vedada: cocina habilita, el mesero ejecuta (la tablet de cocina
+    // y el toggle del mesero no se pisan).
+    if (dto?.sn_entregado != null && dto.sn_entregado !== det.sn_entregado) {
+      const estadoEntrega = dto?.estado_cocina != null ? String(dto.estado_cocina) : det.estado_cocina;
+      if (estadoEntrega !== 'LISTO') {
+        throw new BadRequestException(
+          `La línea está en "${estadoEntrega ?? 'SIN ESTADO'}": solo se puede cambiar la entrega cuando la cocina la dejó en LISTO`,
+        );
+      }
+    }
     const actualizado = await this.updateEntity(this.pedDetRepo, 'pospeddetId', pospeddetId, empresaId, dto, currentUser, 'Detalle Pedido');
-    // Un toggle de entrega no mueve dinero: si el único campo útil del payload es
-    // sn_entregado se omite el recálculo de totales (campos de contexto
-    // inyectados por el frontend se ignoran para decidirlo).
-    const meta = new Set(['empresaId', 'Idsucursal', 'usuarioCreated', 'fecharegistro']);
+    // Un toggle de entrega / transición de cocina no mueve dinero: si los campos
+    // útiles del payload son solo esos, se omite el recálculo de totales (campos
+    // de contexto inyectados por el frontend se ignoran para decidirlo).
+    const meta = new Set(['empresaId', 'Idsucursal', 'usuarioCreated', 'fecharegistro', 'listo_at', 'enviado_at', 'ronda_uuid']);
     const llaves = Object.keys(dto ?? {}).filter((k) => !meta.has(k));
-    const soloCambioEntrega = llaves.length === 1 && llaves[0] === 'sn_entregado';
-    if (!soloCambioEntrega) {
+    const soloCocina =
+      llaves.length === 1 && (llaves[0] === 'sn_entregado' || llaves[0] === 'estado_cocina');
+    if (!soloCocina) {
       await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     }
     await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
+    await this.recalcularEstadoPedido(mae.pospedmaeId, mae.empresaId, currentUser);
     return actualizado;
   }
 
   async findPedidoDetByPedidoId(pospedmaeId: number, empresaId: number) {
     const detalles = await this.pedDetRepo.find({
       where: { pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+      // Orden oficial del mesero: ronda_uuid ASC (NULL primero, igual que MySQL)
+      // con desempate por línea dentro de la misma ronda.
+      order: { ronda_uuid: 'ASC', pospeddetId: 'ASC' } as any,
     });
-    return detalles;
+    // JOIN de la consulta oficial: productos por codbarra → descripcion, resuelto en lote.
+    const barras = [...new Set(detalles.map((d) => d.codbarra).filter((b): b is string => !!b))];
+    const prods = barras.length
+      ? await this.productoRepo.find({
+          where: { codbarra: In(barras), empresaId } as unknown as FindOptionsWhere<Tproducto>,
+        })
+      : [];
+    const mapa = new Map<string, string>(prods.map((p) => [p.codbarra, p.descripcion]));
+    return detalles.map((d) => ({
+      ...d,
+      descripcion: d.codbarra ? mapa.get(d.codbarra) ?? null : null,
+      leyenda: this.leyendaEntrega(d),
+    }));
   }
 
   async deletePedido(pospedmaeId: number, empresaId: number) {
@@ -1357,7 +1573,245 @@ export class FacturacionService {
     await this.pedDetRepo.remove(entity);
     await this.recalcularTotalesPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
     await this.sincronizarEntregadoPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
+    await this.recalcularEstadoPedido(mae.pospedmaeId, mae.empresaId, currentUser || entity.usuarioCreated);
     return { deleted: true };
+  }
+
+  /**
+   * Ronda del mesero (POST /facturacion/restaurante/rondas) — mesero → caja/cocina.
+   *
+   * En UNA transacción (plan 4):
+   *  1. Valida puesto en rango, cajaId >= 1, gestorId en ttipogestores (activo),
+   *     nombrecliente y líneas; cada producto con tipo_giro 'R' y existencia
+   *     (misma regla que /inventario/tienda/productos: SUMA por empresa).
+   *  2. Busca la cuenta abierta del puesto (hoy, sn_facturado='N', ≠ ANULADO) con
+   *     bloqueo de fila; si no existe, la crea con cajaId, gestorId (mesero),
+   *     nombrecliente (cliente) y enviado_at. Si ya existe, se conservan su caja,
+   *     su gestor y su cliente (una cuenta se cobra en una sola caja y nace con
+   *     un solo mesero).
+   *  3. Dedupe por rondaId: si ya hay líneas con ese UUID se devuelve el pedido
+   *     tal cual (reintento seguro tras un corte de señal).
+   *  4. Inserta una LÍNEA NUEVA por producto (no suma a una existente: cocina ve
+   *     cada ronda por separado) con estado_cocina='PENDIENTE'; subtotal/impuesto
+   *     calculados en servidor con el mismo criterio que el front.
+   *  5. Recalcula totales y estado de la cabecera.
+   *
+   * A diferencia de createPedido (web/CRM) NO sobreescribe `nombrecliente`:
+   * el nombre que manda el mesero es el del cliente de la cuenta.
+   */
+  async crearRonda(dto: CrearRondaDto, currentUser: string): Promise<TPosPedMae> {
+    const empresaId = Number(dto.empresaId) || (await this.fechaSistema.empresaDefault());
+    const nromesa = Number(dto.nromesa);
+    const enRango =
+      (nromesa >= 1 && nromesa <= RESTAURANTE_NUM_MESAS) ||
+      (nromesa > 100 && nromesa <= 100 + RESTAURANTE_NUM_KIOSKOS);
+    if (!enRango) {
+      throw new BadRequestException(`Número de mesa/kiosko fuera de rango: ${nromesa}`);
+    }
+    if (!dto.cajaId || Number(dto.cajaId) < 1) {
+      throw new BadRequestException('La caja es requerida (cajaId >= 1)');
+    }
+    const nombrecliente = String(dto.nombrecliente ?? '').trim();
+    if (!nombrecliente) throw new BadRequestException('El nombre del cliente es requerido');
+    if (!dto.lineas?.length) throw new BadRequestException('La ronda no tiene líneas');
+    if (dto.gestorId != null) {
+      const gestor = await this.gestorRepo.findOne({
+        where: {
+          gestorId: Number(dto.gestorId),
+          empresaId,
+          sn_activo: 'S',
+        } as unknown as FindOptionsWhere<TtipoGestor>,
+      });
+      if (!gestor) throw new BadRequestException(`El mesero (gestor ${dto.gestorId}) no existe o no está activo`);
+    }
+
+    // Configuración de ISV y validación de líneas (precio + impuesto en servidor)
+    const cfg = await this.obtenerConfigISV(empresaId);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const lineasOk: Array<{
+      productoId: number;
+      cantidad: number;
+      codbarra: string;
+      precioventa: number;
+      subtotal: number;
+      impuesto: number;
+    }> = [];
+    for (const l of dto.lineas) {
+      const cantidad = Number(l.cantidad) || 0;
+      if (!(cantidad > 0)) throw new BadRequestException('Cantidad inválida en una línea de la ronda');
+      const prod = await this.productoRepo.findOne({
+        where: { produtoId: Number(l.productoId), empresaId } as unknown as FindOptionsWhere<Tproducto>,
+        relations: ['categoria'],
+      });
+      if (!prod) throw new BadRequestException(`El producto ${l.productoId} no existe`);
+      // Misma regla que las pantallas: solo categorías de giro 'R'
+      // (sin categoría → default 'C' → rechazado, igual que el filtro del front)
+      if ((prod.categoria?.tipo_giro ?? 'C') !== 'R') {
+        throw new BadRequestException(`${prod.descripcion} no es de venta de restaurante (tipo de giro)`);
+      }
+      const existencias = await this.existenciaRepo.find({
+        where: { productoId: prod.produtoId, empresaId } as unknown as FindOptionsWhere<TinvExistencia>,
+      });
+      const existencia = existencias.reduce((s, e) => s + (Number(e.existencia) || 0), 0);
+      // Bajo demanda (sn_solicitado_bajo_demanda='S'): NO se exige existencia —
+      // el kardex descuenta igual y puede quedar en negativo (es lo esperado).
+      if (cantidad > existencia && prod.sn_solicitado_bajo_demanda !== 'S') {
+        throw new BadRequestException(`${prod.descripcion}: solo hay ${existencia} en existencia`);
+      }
+      const precioventa = Number(prod.precioventa) || 0;
+      const subtotal = r2(cantidad * precioventa);
+      const impuesto = cfg.incluido ? r2((subtotal * cfg.tasa) / (1 + cfg.tasa)) : r2(subtotal * cfg.tasa);
+      lineasOk.push({
+        productoId: prod.produtoId,
+        cantidad,
+        codbarra: prod.codbarra || '',
+        precioventa,
+        subtotal,
+        impuesto,
+      });
+    }
+
+    // Contexto de cuenta NUEVA (bodega/cliente/sucursal) — fuera de la transacción
+    const bodegaId =
+      (await this.getBodegaPorUsuario(currentUser, empresaId)) ??
+      (await this.getParamDefecto(empresaId, 'bodegaId', 1));
+    const tienda = await this.obtenerClienteTienda(empresaId, currentUser);
+    let Idsucursal = Number(dto.Idsucursal) || 1;
+    if (!dto.Idsucursal) {
+      try {
+        const u = await this.usuariosRepo.findOne({ where: { usuario: currentUser, empresaId } as any });
+        Idsucursal = Number(u?.Idsucursal) || 1;
+      } catch {
+        Idsucursal = 1;
+      }
+    }
+    const fecharegistro = await this.fechaSistema.obtenerFechaRegistro(currentUser, empresaId);
+    const fechaUpd = (await this.fechaSistema.getFecha(empresaId)) as Date;
+    const inicioDia = new Date(fechaUpd.getTime());
+    inicioDia.setHours(0, 0, 0, 0);
+    // enviado_at / listo_at son RELOJ OPERATIVO de cocina (hora de envío y
+    // minutos de espera del tablero), no fecha transaccional: NO se usa
+    // fechaSistema (medianoche) porque destruiría el cálculo de espera.
+    const ahora = new Date();
+
+    return await this.dataSource.transaction(async (em) => {
+      // 3) Reintento seguro: si este rondaId ya existe (en cualquier pedido), devolver tal cual
+      const yaInsertada = await em.getRepository(TPosPedDet).findOne({
+        where: { ronda_uuid: dto.rondaId } as unknown as FindOptionsWhere<TPosPedDet>,
+      });
+      if (yaInsertada) {
+        const previo = await em.getRepository(TPosPedMae).findOne({
+          where: { pospedmaeId: yaInsertada.pospedmaeId } as unknown as FindOptionsWhere<TPosPedMae>,
+        });
+        if (previo) return previo;
+      }
+
+      // 2) Cuenta abierta del puesto (hoy) con bloqueo de fila
+      let pedido = await em
+        .getRepository(TPosPedMae)
+        .createQueryBuilder('p')
+        .setLock('pessimistic_write')
+        .where('p.empresaId = :empresaId', { empresaId })
+        .andWhere('p.nromesa = :nromesa', { nromesa })
+        .andWhere("p.sn_facturado = 'N'")
+        .andWhere("COALESCE(p.estado, 'ABIERTO') <> 'ANULADO'")
+        .andWhere('p.fecharegistro >= :inicioDia', { inicioDia })
+        .getOne();
+
+      if (!pedido) {
+        if (dto.gestorId == null) {
+          throw new BadRequestException('Seleccione el mesero para abrir una cuenta nueva.');
+        }
+        pedido = em.create(TPosPedMae, {
+          nombrecliente,
+          nrotelefono: 'N/A',
+          nromesa,
+          sn_entregado: 'N',
+          estado: 'ABIERTO',
+          enviado_at: ahora,
+          cajaId: Number(dto.cajaId),
+          gestorId: Number(dto.gestorId),
+          clienteId: tienda.clienteId,
+          nrocliente: tienda.nrocliente,
+          bodegaId,
+          Idsucursal,
+          // La BD trae sn_facturado DEFAULT 'S' (peligroso) → se fuerza 'N'
+          sn_facturado: 'N',
+          sn_pagada: 'N',
+          sn_enviogratis: 'N',
+          tipofactura: 'E',
+          empresaId,
+          usuarioCreated: currentUser,
+          fecharegistro,
+        });
+        pedido = await em.getRepository(TPosPedMae).save(pedido);
+      }
+
+      // 4) Líneas nuevas de la ronda
+      const previos = await em.getRepository(TPosPedDet).find({
+        where: { pospedmaeId: pedido.pospedmaeId } as unknown as FindOptionsWhere<TPosPedDet>,
+      });
+      const nrofilaBase = previos.reduce((m, d) => Math.max(m, Number(d.nrofila) || 0), 0);
+      const nuevas: TPosPedDet[] = [];
+      for (let i = 0; i < lineasOk.length; i++) {
+        const l = lineasOk[i];
+        const det = em.create(TPosPedDet, {
+          pospedmaeId: pedido.pospedmaeId,
+          productoId: l.productoId,
+          codbarra: l.codbarra,
+          cantidad: l.cantidad,
+          precioventa: l.precioventa,
+          subtotal: l.subtotal,
+          descuento: 0,
+          p_descuento: 0,
+          impuesto: l.impuesto,
+          nrofila: nrofilaBase + i + 1,
+          bodegaId: pedido.bodegaId,
+          // Cada ronda es un ticket nuevo para cocina: línea nace PENDIENTE
+          estado_cocina: 'PENDIENTE',
+          ronda_uuid: dto.rondaId,
+          enviado_at: ahora,
+          sn_entregado: 'N',
+          empresaId,
+          usuarioCreated: currentUser,
+          fecharegistro,
+        });
+        nuevas.push(await em.getRepository(TPosPedDet).save(det));
+      }
+
+      // 5) Totales + estado derivados del detalle (decimals vía QueryBuilder)
+      const dets = [...previos, ...nuevas];
+      let subTotal = 0;
+      let impuestoTot = 0;
+      let descuentoTot = 0;
+      for (const d of dets) {
+        subTotal += Number(d.subtotal) || 0;
+        impuestoTot += Number(d.impuesto) || 0;
+        descuentoTot += Number(d.descuento) || 0;
+      }
+      subTotal = r2(subTotal);
+      impuestoTot = r2(impuestoTot);
+      descuentoTot = r2(descuentoTot);
+      await em
+        .getRepository(TPosPedMae)
+        .createQueryBuilder()
+        .update()
+        .set({
+          subTotal,
+          impuesto: impuestoTot,
+          descuento: descuentoTot,
+          total: r2(subTotal + impuestoTot - descuentoTot),
+          estado: this.calcularEstadoPedido(dets),
+          usuarioUpdated: currentUser,
+          fechaUpdated: fechaUpd,
+        })
+        .where('pospedmaeId = :id AND empresaId = :empresaId', { id: pedido.pospedmaeId, empresaId })
+        .execute();
+
+      return (await em.getRepository(TPosPedMae).findOne({
+        where: { pospedmaeId: pedido.pospedmaeId } as unknown as FindOptionsWhere<TPosPedMae>,
+      }))!;
+    });
   }
 
   async checkoutPedido(dto: CheckoutPedidoDto, currentUser: string) {
@@ -1574,6 +2028,8 @@ export class FacturacionService {
       .set({
         sn_facturado: 'S',
         sn_pagada: esCredito || conLink ? 'N' : 'S',
+        // Ciclo de vida de restaurante: el cobro cierra la cuenta
+        estado: 'COBRADO',
         facturaId: factura.facturaId,
         nrofactura: nrofactura.nrofactura,
         usuarioUpdated: currentUser,

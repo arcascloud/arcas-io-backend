@@ -1,0 +1,23 @@
+[31m[Nest] 15204  - [39m15/11/2026, 10:16:52 p. m. [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use :::3000[39m[38;5;3m +70ms[39m
+node:net:2167
+    const ex = new UVExceptionWithHostPort(err, 'listen', address, port);
+               ^
+
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at Server.listen (node:net:2344:7)
+    at ExpressAdapter.listen (E:\desarrollo\proyectos angular\erp\Backend\node_modules\@nestjs\platform-express\adapters\express-adapter.js:115:32)
+    at E:\desarrollo\proyectos angular\erp\Backend\node_modules\@nestjs\core\nest-application.js:190:30
+    at new Promise (<anonymous>)
+    at NestApplication.listen (E:\desarrollo\proyectos angular\erp\Backend\node_modules\@nestjs\core\nest-application.js:180:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async bootstrap (E:\desarrollo\proyectos angular\erp\Backend\dist\main.js:83:5) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+
+Node.js v24.19.0

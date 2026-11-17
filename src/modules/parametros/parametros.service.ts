@@ -327,15 +327,21 @@ export class ParametrosService {
   async removeZonaVtaCob(id: number, eid: number) { return this.softDelete(this.zonaVtaCobRepo, 'ttipozonasvtacobId', id, eid, 'Zona Vta Cob'); }
 
   // ── Precios de Venta ─────────────────────────────────────
+  /** Devuelve TODOS los registros (activos e inactivos) para que el catálogo
+   *  muestre la columna Estado y permita reactivar. Los consumidores que solo
+   *  quieren los activos filtran por `sn_activo === 'S'`. */
   async findAllPreciosVta(empresaId: number) {
     return this.posPrecioVtaRepo.find({
-      where: { empresaId, sn_activo: 'S' } as any,
+      where: { empresaId } as any,
       order: { descripcion: 'ASC' } as any,
     });
   }
   async findPreciosVta(id: number, empresaId: number) {
-    return this.posPrecioVtaRepo.findOne({ where: { preciovtaId: id, empresaId } as any });
+    return this.findOneById(this.posPrecioVtaRepo, 'preciovtaId', id, empresaId, 'Precio de Venta');
   }
+  async createPreciosVta(dto: any, user: string) { return this.createEntity(this.posPrecioVtaRepo, dto, user); }
+  async updatePreciosVta(id: number, eid: number, dto: any, user: string) { return this.updateEntity(this.posPrecioVtaRepo, 'preciovtaId', id, eid, dto, user, 'Precio de Venta'); }
+  async removePreciosVta(id: number, eid: number) { return this.softDelete(this.posPrecioVtaRepo, 'preciovtaId', id, eid, 'Precio de Venta'); }
 
   // ── Usuarios de Caja (tusuarios_caja) ────────────────────
   async findAllUsuarioCaja(empresaId: number) {

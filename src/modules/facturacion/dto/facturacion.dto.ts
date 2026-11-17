@@ -515,6 +515,18 @@ export class UpdatePosPedMaeDto {
   @ApiProperty({ enum: ['S', 'N'], required: false, description: 'Pedido facturado' })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_facturado?: string;
+
+  @ApiProperty({
+    enum: ['ABIERTO', 'ENVIADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO', 'ANULADO'],
+    required: false,
+    description: 'Ciclo de vida del pedido en restaurante (calculado por el servidor)',
+  })
+  @IsEnum(['ABIERTO', 'ENVIADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO', 'ANULADO']) @IsOptional()
+  estado?: string;
+
+  @ApiProperty({ required: false, description: 'Fecha/hora en que la ronda fue enviada a cocina' })
+  @IsOptional()
+  enviado_at?: string | Date;
 }
 
 export class CheckoutTiendaDto {
@@ -597,6 +609,59 @@ export class CheckoutPedidoDto {
   })
   @IsArray() @IsOptional()
   pagos?: any[];
+
+  @ApiProperty({ required: false, description: 'ID de la sucursal (inyectado por el controller desde el JWT)' })
+  @IsNumber() @IsOptional()
+  Idsucursal?: number;
+}
+
+/** Línea de una ronda enviada por el mesero. */
+export class LineaRondaDto {
+  @ApiProperty({ description: 'ID del producto (tproductos)' })
+  @IsNumber() @IsNotEmpty()
+  productoId: number;
+
+  @ApiProperty({ description: 'Cantidad pedida', minimum: 0.01 })
+  @IsNumber() @IsNotEmpty()
+  cantidad: number;
+}
+
+/**
+ * Cuerpo de POST /facturacion/restaurante/rondas (mesero → caja).
+ * A diferencia de createPedido (web/CRM), NO sobreescribe `nombrecliente`:
+ * el nombre que manda el mesero es el del cliente de la cuenta.
+ */
+export class CrearRondaDto {
+  @ApiProperty({
+    description:
+      'UUID del envío: si el teléfono reintenta tras un corte, el servidor no duplica la ronda',
+  })
+  @IsString() @IsNotEmpty()
+  rondaId: string;
+
+  @ApiProperty({ description: 'Número de mesa (1..15) o kiosko (100+n)' })
+  @IsNumber() @IsNotEmpty()
+  nromesa: number;
+
+  @ApiProperty({ description: 'Caja que cobra la cuenta' })
+  @IsNumber() @IsNotEmpty()
+  cajaId: number;
+
+  @ApiProperty({ required: false, description: 'Mesero (ttipogestores.gestorId). En cuenta abierta el servidor conserva el original' })
+  @IsNumber() @IsOptional()
+  gestorId?: number | null;
+
+  @ApiProperty({ description: 'Nombre del cliente anotado en la cuenta' })
+  @IsString() @IsNotEmpty()
+  nombrecliente: string;
+
+  @ApiProperty({ type: [LineaRondaDto], description: 'Líneas de la ronda' })
+  @IsArray() @IsNotEmpty()
+  lineas: LineaRondaDto[];
+
+  @ApiProperty({ required: false, description: 'ID de la empresa (inyectado por el ApiService)' })
+  @IsNumber() @IsOptional()
+  empresaId?: number;
 
   @ApiProperty({ required: false, description: 'ID de la sucursal (inyectado por el controller desde el JWT)' })
   @IsNumber() @IsOptional()

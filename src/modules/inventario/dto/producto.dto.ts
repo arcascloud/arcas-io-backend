@@ -98,6 +98,14 @@ export class CreateProductoDto {
   @IsEnum(['S', 'N']) @IsOptional()
   sn_enviar_a_cocina?: string;
 
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Solicitado bajo demanda: se vende aunque no tenga existencia',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_solicitado_bajo_demanda?: string;
+
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber()
   empresaId: number;
@@ -204,4 +212,12 @@ export class UpdateProductoDto {
   })
   @IsEnum(['S', 'N']) @IsOptional()
   sn_enviar_a_cocina?: string;
+
+  @ApiProperty({
+    enum: ['S', 'N'],
+    required: false,
+    description: 'Solicitado bajo demanda: se vende aunque no tenga existencia',
+  })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_solicitado_bajo_demanda?: string;
 }

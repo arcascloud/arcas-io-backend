@@ -11,6 +11,11 @@
 npm-debug.log
 yarn-error.log
 
+#Archivos que no van a subir
+/doc
+/js
+
+
 # IDEs and editors
 .idea/
 .project

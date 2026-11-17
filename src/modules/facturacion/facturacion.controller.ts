@@ -10,6 +10,7 @@ import {
   CreatePosPedMaeDto, UpdatePosPedMaeDto,
   CheckoutTiendaDto,
   CheckoutPedidoDto,
+  CrearRondaDto,
 } from './dto/facturacion.dto';
 import {
   CreatePosFacCajaDto, UpdatePosFacCajaDto,
@@ -365,13 +366,31 @@ export class FacturacionController {
   // ===== Pedidos =====
 
   @Get('pedidos')
-  @ApiOperation({ summary: 'Listar pedidos' })
+  @ApiOperation({ summary: 'Listar pedidos (filtros opcionales de bandeja: cajaId, estado)' })
   @ApiResponse({ status: 200, description: 'Lista de pedidos obtenida exitosamente' })
   findAllPedidos(
     @Query('empresaId', ParseIntPipe) empresaId: number,
-    @CurrentUser() user: any,
+    @Query('cajaId') cajaId?: string,
+    @Query('estado') estado?: string,
+    @CurrentUser() user?: any,
   ) {
-    return this.service.findAllPedidos(empresaId, user?.usuario);
+    // cajaId/estado son opcionales → sin ParseIntPipe (lección: valida siempre
+    // con Number() manual en query params opcionales)
+    return this.service.findAllPedidos(
+      empresaId,
+      user?.usuario,
+      cajaId ? Number(cajaId) : undefined,
+      estado || undefined,
+    );
+  }
+
+  @Post('restaurante/rondas')
+  @ApiOperation({ summary: 'Enviar ronda de productos (mesero → caja/cocina): crea o reutiliza la cuenta del puesto, inserta las líneas PENDIENTE y recalcula totales/estado' })
+  @ApiResponse({ status: 201, description: 'Ronda procesada; devuelve el pedido completo' })
+  crearRonda(@Body() dto: CrearRondaDto, @CurrentUser() user: any) {
+    // pospedmae.Idsucursal es NOT NULL sin default → desde el JWT (igual que createPedido)
+    if (!dto.Idsucursal) dto.Idsucursal = user.idsucursal;
+    return this.service.crearRonda(dto, user.usuario);
   }
 
   @Get('pedidos/:id')
@@ -414,6 +433,13 @@ export class FacturacionController {
   @ApiResponse({ status: 200, description: 'Lista de detalle de pedidos obtenida exitosamente' })
   findAllPedidoDet(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllPedidoDet(empresaId);
+  }
+
+  @Get('pedidos-det/abiertos')
+  @ApiOperation({ summary: 'Líneas de cocina pendientes (PENDIENTE/EN_PREPARACION/LISTO) con descripción — tablero de cocina' })
+  @ApiResponse({ status: 200, description: 'Lista de líneas para el tablero' })
+  findPedidoDetAbiertos(@Query('empresaId', ParseIntPipe) empresaId: number) {
+    return this.service.findPedidoDetAbiertos(empresaId);
   }
 
   @Get('pedidos-det/:id')

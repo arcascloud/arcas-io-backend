@@ -1334,6 +1334,8 @@ export class InventarioService {
       deptoId: p.deptoId,
       categoriaDeptoId: p.categoria?.deptoId || null,
       tipo_giro: p.categoria?.tipo_giro || 'C',
+      // Bajo demanda: el front permite vender/agregar aunque la existencia sea 0
+      sn_solicitado_bajo_demanda: p.sn_solicitado_bajo_demanda === 'S' ? 'S' : 'N',
     }));
 
     if (giroFiltro) {

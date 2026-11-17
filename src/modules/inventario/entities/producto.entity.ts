@@ -90,7 +90,11 @@ export class Tproducto {
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_enviar_a_cocina: string; //PLATILLOS QUE SON SOLICITADO A COCINA
-  
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
+  sn_solicitado_bajo_demanda: string; //PRODUCTO SOLICITADO BAJO DEMANDA: NO SE EXIGE EXISTENCIA PARA VENDER
+
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })
   sn_activo: string;

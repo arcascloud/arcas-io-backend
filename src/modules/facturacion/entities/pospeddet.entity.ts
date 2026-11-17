@@ -76,6 +76,30 @@ export class TPosPedDet {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_entregado: string;
 
+  @ApiProperty({
+    enum: ['PENDIENTE', 'EN_PREPARACION', 'LISTO', 'ENTREGADO'],
+    required: false,
+    description: 'Estado en cocina. Default ENTREGADO: lo anterior a la integración no aparece en cocina',
+  })
+  @Column({
+    type: 'enum',
+    enum: ['PENDIENTE', 'EN_PREPARACION', 'LISTO', 'ENTREGADO'],
+    default: 'ENTREGADO',
+  })
+  estado_cocina: string;
+
+  @ApiProperty({ required: false, description: 'UUID de ronda: evita duplicar líneas si el teléfono reintenta' })
+  @Column({ type: 'char', length: 36, nullable: true })
+  ronda_uuid: string;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  enviado_at: Date;
+
+  @ApiProperty({ required: false })
+  @Column({ type: 'datetime', nullable: true })
+  listo_at: Date;
+
   @ApiProperty()
   @Column({ type: 'int' })
   empresaId: number;

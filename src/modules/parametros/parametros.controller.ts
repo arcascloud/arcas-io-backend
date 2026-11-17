@@ -11,6 +11,7 @@ import { CreateMonedaDto, UpdateMonedaDto } from './dto/moneda.dto';
 import { CreateGestorDto, UpdateGestorDto } from './dto/gestor.dto';
 import { CreateImpuestoDto, UpdateImpuestoDto } from './dto/impuesto.dto';
 import { CreateUsuarioCajaDto, UpdateUsuarioCajaDto } from './dto/usuario-caja.dto';
+import { CreatePrecioVtaDto, UpdatePrecioVtaDto } from './dto/precio-vta.dto';
 
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -596,6 +597,35 @@ export class ParametrosController {
     @Query('empresaId', ParseIntPipe) empresaId: number,
   ) {
     return this.service.findPreciosVta(id, empresaId);
+  }
+
+  @Post('precios-vta')
+  @ApiOperation({ summary: 'Crear precio de venta' })
+  @ApiResponse({ status: 201, description: 'Creado' })
+  createPreciosVta(@Body() dto: CreatePrecioVtaDto, @CurrentUser() user: any) {
+    return this.service.createPreciosVta(dto, user.usuario);
+  }
+
+  @Put('precios-vta/:id')
+  @ApiOperation({ summary: 'Actualizar precio de venta' })
+  @ApiResponse({ status: 200, description: 'Actualizado' })
+  updatePreciosVta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Body() dto: UpdatePrecioVtaDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updatePreciosVta(id, empresaId, dto, user.usuario);
+  }
+
+  @Delete('precios-vta/:id')
+  @ApiOperation({ summary: 'Desactivar precio de venta (soft delete)' })
+  @ApiResponse({ status: 200, description: 'Desactivado' })
+  removePreciosVta(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.removePreciosVta(id, empresaId);
   }
 
   // ── Usuarios de Caja (tusuarios_caja) ─────────────────────

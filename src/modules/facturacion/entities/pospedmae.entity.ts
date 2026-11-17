@@ -110,6 +110,22 @@ export class TPosPedMae {
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_entregado: string;
 
+  @ApiProperty({
+    enum: ['ABIERTO', 'ENVIADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO', 'ANULADO'],
+    required: false,
+    description: 'Ciclo de vida del pedido en restaurante',
+  })
+  @Column({
+    type: 'enum',
+    enum: ['ABIERTO', 'ENVIADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO', 'ANULADO'],
+    default: 'ABIERTO',
+  })
+  estado: string;
+
+  @ApiProperty({ required: false, description: 'Fecha/hora en que la ronda fue enviada a cocina' })
+  @Column({ type: 'datetime', nullable: true })
+  enviado_at: Date;
+
   @ApiProperty()
   @Column({ type: 'varchar', length: 20 })
   nrotelefono: string;

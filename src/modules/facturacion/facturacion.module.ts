@@ -25,6 +25,8 @@ import { Tproducto } from '../inventario/entities/producto.entity';
 import { TproductoImg } from '../inventario/entities/producto-img.entity';
 import { TinvCategoria } from '../inventario/entities/categoria.entity';
 import { TtipoImpuesto } from '../parametros/entities/impuesto.entity';
+import { TtipoGestor } from '../parametros/entities/gestor.entity';
+import { TinvExistencia } from '../inventario/entities/existencia.entity';
 import { Tusuarios } from '../users/entities/usuario.entity';
 import { TusuarioInfo } from '../users/entities/usuario-info.entity';
 import { TusuarioCaja } from '../parametros/entities/usuario-caja.entity';
@@ -65,6 +67,8 @@ import { ContabilidadModule } from '../contabilidad/contabilidad.module';
       TproductoImg,
       TinvCategoria,
       TtipoImpuesto,
+      TtipoGestor,
+      TinvExistencia,
       Tusuarios,
       TusuarioInfo,
       TusuarioCaja,
