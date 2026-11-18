@@ -699,8 +699,16 @@ export class FacturacionService {
       throw new NotFoundException(`Factura ${dto.facturaId} no encontrada`);
     }
 
-    if (facturaOriginal.sn_anulada === 'S') {
-      throw new BadRequestException('La factura ya esta anulada');
+    const yaAnulada = await this.facMaeAnulRepo.findOne({
+      where: { facturaId: dto.facturaId, empresaId: dto.empresaId } as any,
+    });
+
+    if (facturaOriginal.sn_anulada === 'S' || yaAnulada) {
+      if (facturaOriginal.sn_anulada !== 'S' && yaAnulada) {
+        facturaOriginal.sn_anulada = 'S';
+        await this.facMaeRepo.save(facturaOriginal);
+      }
+      throw new BadRequestException('La factura ya se encuentra anulada');
     }
 
     if (facturaOriginal.tipofactura === 'C') {
