@@ -470,7 +470,11 @@ export class FacturacionService {
       where: { facturaId } as FindOptionsWhere<TPosFacDet>,
     });
 
-    console.log(`[procesarKardex] facturaId=${facturaId}, detalles encontrados: ${detalles.length}`);
+    // nroreferencia con patrón legible para el usuario final: FACT-<nrofactura>
+    const fact = await this.facMaeRepo.findOne({ where: { facturaId } as FindOptionsWhere<TPosFacMae> });
+    const nroReferencia = fact ? `FACT-${fact.nrofactura}` : `FACT-${facturaId}`;
+
+    console.log(`[procesarKardex] facturaId=${facturaId}, nrofactura=${fact?.nrofactura}, detalles encontrados: ${detalles.length}`);
 
     let procesados = 0;
     const errores: string[] = [];
@@ -482,7 +486,7 @@ export class FacturacionService {
           productoId: Number(det.productoId),
           cantidad: Number(det.cantidad) || 1,
           costoUnitario: Number(det.precioventa) || 0,
-          nroreferencia: facturaId.toString(),
+          nroreferencia: nroReferencia,
           moduloId: 3,
           tipomov: 'S',
           subtipoMov: 'V',

@@ -189,6 +189,7 @@ export class TomaInventarioService {
           subtipoMov: 'A',
           empresaId,
           usuarioCreated: usuario,
+          codbarra: det.codbarra || prod.codbarra || '',
         });
       }
 
@@ -204,6 +205,7 @@ export class TomaInventarioService {
           subtipoMov: 'A',
           empresaId,
           usuarioCreated: usuario,
+          codbarra: det.codbarra || prod.codbarra || '',
         });
       }
 

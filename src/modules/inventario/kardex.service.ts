@@ -15,7 +15,7 @@ export interface KardexEntradaDto {
   nroreferencia: string;
   moduloId: number;
   tipomov: 'E';
-  subtipoMov: 'C' | 'A' | 'T' | 'D' | 'O' | 'AN';
+  subtipoMov: 'C' | 'A' | 'T' | 'D' | 'O' | 'AN' | 'DM';
   empresaId: number;
   usuarioCreated: string;
   factordecambio?: number;
@@ -31,7 +31,7 @@ export interface KardexSalidaDto {
   nroreferencia: string;
   moduloId: number;
   tipomov: 'S';
-  subtipoMov: 'V' | 'A' | 'T' | 'AN' | 'O';
+  subtipoMov: 'V' | 'A' | 'T' | 'AN' | 'O' | 'DM';
   empresaId: number;
   usuarioCreated: string;
   factordecambio?: number;
@@ -54,40 +54,85 @@ export class KardexService {
   ) {}
 
   async registrarEntrada(dto: KardexEntradaDto): Promise<TinvKardex> {
+    const cantidad = Number(dto.cantidad) || 0;
+    const costoUnitario = Number(dto.costoUnitario) || 0;
+    const factordecambio = Number(dto.factordecambio) || 1;
+
+    // PRODUCTOS BAJO DEMANDA (sn_solicitado_bajo_demanda = 'S'): reversión
+    // de venta bajo demanda — registra el movimiento en Kardex pero NO mueve
+    // inventario. Preserva el subtipoMov del caller (ej. 'AN' para anulación).
+    const producto = await this.productoRepo.findOne({
+      where: { produtoId: dto.productoId, empresaId: dto.empresaId } as any,
+    });
+    const esBajoDemanda = producto?.sn_solicitado_bajo_demanda === 'S';
+
+    if (esBajoDemanda) {
+      const costoTotal = cantidad * costoUnitario;
+      const kardex = this.kardexRepo.create({
+        bodegaId: dto.bodegaId,
+        productoId: dto.productoId,
+        codbarra: await this.resolverCodbarra(dto.codbarra, dto.productoId, dto.empresaId),
+        FechaIngreso: dto.FechaIngreso || await this.fechaSistema.getFecha(dto.empresaId),
+        fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
+        factordecambio,
+        cantidad,
+        // Sin control de existencia para productos bajo demanda
+        existencia: 0,
+        costoUnitario,
+        subTotal: costoTotal,
+        existencia_anterior: 0,
+        exisencia_actual: 0,
+        costoTotal,
+        costoUSD: costoTotal / factordecambio,
+        subTotalUSD: costoTotal / factordecambio,
+        nroreferencia: dto.nroreferencia,
+        tipomov: 'E',
+        subtipoMov: dto.subtipoMov || 'DM',
+        moduloId: dto.moduloId,
+        empresaId: dto.empresaId,
+        usuarioCreated: dto.usuarioCreated,
+      });
+
+      const saved = await this.kardexRepo.save(kardex);
+      this.eventEmitter.emit('kardex.entrada.registrada', { kardex: saved, dto });
+      return saved;
+    }
+
     const existencia = await this.obtenerOCrearExistencia(dto.bodegaId, dto.productoId, dto.empresaId, dto.usuarioCreated);
     // DEFENSA OBLIGATORIA: los detalles decimal de MySQL llegan como string
     // ("10.00"). Sin Number(), `saldo + cantidad` CONCATENA en vez de sumar
     // (300 + "10.00" = "30010.00" → 3001010 en la siguiente entrada).
-    const cantidad = Number(dto.cantidad) || 0;
-    const costoUnitario = Number(dto.costoUnitario) || 0;
-    const factordecambio = Number(dto.factordecambio) || 1;
+    const cantidadNum = Number(dto.cantidad) || 0;
+    const costoUnitarioNum = Number(dto.costoUnitario) || 0;
+    const factordecambioNum = Number(dto.factordecambio) || 1;
     const saldoAnterior = Number(existencia.existencia) || 0;
-    const saldoActual = saldoAnterior + cantidad;
-    const costoTotal = cantidad * costoUnitario;
+    const saldoActual = saldoAnterior + cantidadNum;
+    const costoTotal = cantidadNum * costoUnitarioNum;
 
     const kardex = this.kardexRepo.create({
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
-      codbarra: dto.codbarra || '',
+      codbarra: await this.resolverCodbarra(dto.codbarra, dto.productoId, dto.empresaId),
       // FechaIngreso: campo de negocio distinto, fuera del alcance de las
       // 4 reglas → se conserva la compuerta (acepta valor del cliente).
       FechaIngreso: dto.FechaIngreso || await this.fechaSistema.getFecha(dto.empresaId),
       // Reglas 1 y 4: fecharegistro lo impone el backend (nunca el default
       // CURRENT_TIMESTAMP de la columna en MySQL = reloj del servidor)
       fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
-      factordecambio,
-      cantidad,
+      factordecambio: factordecambioNum,
+      cantidad: cantidadNum,
       existencia: saldoActual,
-      costoUnitario,
+      costoUnitario: costoUnitarioNum,
       subTotal: costoTotal,
       // 2 renombres kardex: los nombres de columna reales en invkardex
       existencia_anterior: saldoAnterior,
       exisencia_actual: saldoActual,
       costoTotal,
-      costoUSD: costoTotal / factordecambio,
-      subTotalUSD: costoTotal / factordecambio,
+      costoUSD: costoTotal / factordecambioNum,
+      subTotalUSD: costoTotal / factordecambioNum,
       nroreferencia: dto.nroreferencia,
       tipomov: 'E',
+      subtipoMov: dto.subtipoMov || 'C',
       moduloId: dto.moduloId,
       empresaId: dto.empresaId,
       usuarioCreated: dto.usuarioCreated,
@@ -95,7 +140,7 @@ export class KardexService {
 
     const saved = await this.kardexRepo.save(kardex);
 
-    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitario, dto.usuarioCreated);
+    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitarioNum, dto.usuarioCreated);
 
     this.eventEmitter.emit('kardex.entrada.registrada', { kardex: saved, dto });
 
@@ -103,44 +148,91 @@ export class KardexService {
   }
 
   async registrarSalida(dto: KardexSalidaDto): Promise<TinvKardex> {
+    const cantidad = Number(dto.cantidad) || 0;
+    const costoUnitario = Number(dto.costoUnitario) || 0;
+    const factordecambio = Number(dto.factordecambio) || 1;
+
+    // PRODUCTOS BAJO DEMANDA (sn_solicitado_bajo_demanda = 'S'): se registra la
+    // cantidad vendida en el Kardex, pero NO se lleva control de existencia.
+    // - Sin validación de stock (no exige existencia para vender).
+    // - Los campos existencia/anterior/exisencia_actual quedan en 0.
+    // - subtipoMov = 'DM'.
+    const producto = await this.productoRepo.findOne({
+      where: { produtoId: dto.productoId, empresaId: dto.empresaId } as any,
+    });
+    const esBajoDemanda = producto?.sn_solicitado_bajo_demanda === 'S';
+
+    if (esBajoDemanda) {
+      const costoTotal = cantidad * costoUnitario;
+      const kardex = this.kardexRepo.create({
+        bodegaId: dto.bodegaId,
+        productoId: dto.productoId,
+        codbarra: await this.resolverCodbarra(dto.codbarra, dto.productoId, dto.empresaId),
+        FechaIngreso: await this.fechaSistema.getFecha(dto.empresaId),
+        fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
+        factordecambio,
+        cantidad,
+        // Sin control de existencia para productos bajo demanda
+        existencia: 0,
+        costoUnitario,
+        subTotal: costoTotal,
+        existencia_anterior: 0,
+        exisencia_actual: 0,
+        costoTotal,
+        costoUSD: costoTotal / factordecambio,
+        subTotalUSD: costoTotal / factordecambio,
+        nroreferencia: dto.nroreferencia,
+        tipomov: 'S',
+        subtipoMov: 'DM',
+        moduloId: dto.moduloId,
+        empresaId: dto.empresaId,
+        usuarioCreated: dto.usuarioCreated,
+      });
+
+      const saved = await this.kardexRepo.save(kardex);
+      this.eventEmitter.emit('kardex.salida.registrada', { kardex: saved, dto });
+      return saved;
+    }
+
     const existencia = await this.obtenerOCrearExistencia(dto.bodegaId, dto.productoId, dto.empresaId, dto.usuarioCreated);
     // DEFENSA OBLIGATORIA: misma coerción que en registrarEntrada (decimal
     // llega como string; la resta sí coerce, pero se unifica para no depender
     // de esa particularidad de JS).
-    const cantidad = Number(dto.cantidad) || 0;
-    const costoUnitario = Number(dto.costoUnitario) || 0;
-    const factordecambio = Number(dto.factordecambio) || 1;
+    const cantidadNum = Number(dto.cantidad) || 0;
+    const costoUnitarioNum = Number(dto.costoUnitario) || 0;
+    const factordecambioNum = Number(dto.factordecambio) || 1;
     const saldoAnterior = Number(existencia.existencia) || 0;
 
-    if (saldoAnterior < cantidad) {
+    if (saldoAnterior < cantidadNum) {
       // BadRequestException (y no Error plano): un Error plano lo devuelve Nest como 500
-      throw new BadRequestException(`Stock insuficiente. Disponible: ${saldoAnterior}, Solicitado: ${cantidad}`);
+      throw new BadRequestException(`Stock insuficiente. Disponible: ${saldoAnterior}, Solicitado: ${cantidadNum}`);
     }
 
-    const saldoActual = saldoAnterior - cantidad;
-    const costoTotal = cantidad * costoUnitario;
+    const saldoActual = saldoAnterior - cantidadNum;
+    const costoTotal = cantidadNum * costoUnitarioNum;
 
     const kardex = this.kardexRepo.create({
       bodegaId: dto.bodegaId,
       productoId: dto.productoId,
-      codbarra: dto.codbarra || '',
+      codbarra: await this.resolverCodbarra(dto.codbarra, dto.productoId, dto.empresaId),
       FechaIngreso: await this.fechaSistema.getFecha(dto.empresaId),
       // Reglas 1 y 4: fecharegistro lo impone el backend (nunca el default
       // CURRENT_TIMESTAMP de la columna en MySQL = reloj del servidor)
       fecharegistro: await this.fechaSistema.obtenerFechaRegistro(dto.usuarioCreated, dto.empresaId),
-      factordecambio,
-      cantidad,
+      factordecambio: factordecambioNum,
+      cantidad: cantidadNum,
       existencia: saldoActual,
-      costoUnitario,
+      costoUnitario: costoUnitarioNum,
       subTotal: costoTotal,
       // 2 renombres kardex: los nombres de columna reales en invkardex
       existencia_anterior: saldoAnterior,
       exisencia_actual: saldoActual,
       costoTotal,
-      costoUSD: costoTotal / factordecambio,
-      subTotalUSD: costoTotal / factordecambio,
+      costoUSD: costoTotal / factordecambioNum,
+      subTotalUSD: costoTotal / factordecambioNum,
       nroreferencia: dto.nroreferencia,
       tipomov: 'S',
+      subtipoMov: dto.subtipoMov || 'V',
       moduloId: dto.moduloId,
       empresaId: dto.empresaId,
       usuarioCreated: dto.usuarioCreated,
@@ -148,7 +240,7 @@ export class KardexService {
 
     const saved = await this.kardexRepo.save(kardex);
 
-    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitario, dto.usuarioCreated);
+    await this.actualizarExistencia(dto.bodegaId, dto.productoId, dto.empresaId, saldoActual, costoUnitarioNum, dto.usuarioCreated);
 
     this.eventEmitter.emit('kardex.salida.registrada', { kardex: saved, dto });
 
@@ -160,6 +252,12 @@ export class KardexService {
       return this.registrarEntrada(dto as KardexEntradaDto);
     }
     return this.registrarSalida(dto as KardexSalidaDto);
+  }
+
+  private async resolverCodbarra(codbarra: string | undefined | null, productoId: number, empresaId: number): Promise<string> {
+    if (codbarra && codbarra.trim()) return codbarra.trim();
+    const prod = await this.productoRepo.findOne({ where: { produtoId: productoId, empresaId } as any });
+    return prod?.codbarra || '';
   }
 
   private async obtenerOCrearExistencia(bodegaId: number, productoId: number, empresaId: number, usuario: string): Promise<TinvExistencia> {

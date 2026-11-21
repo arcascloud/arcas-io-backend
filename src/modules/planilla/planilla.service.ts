@@ -2404,7 +2404,10 @@ export class PlanillaService {
     const aDia = new Date(a.getFullYear(), a.getMonth(), a.getDate());
     const hDia = new Date(h.getFullYear(), h.getMonth(), h.getDate());
     if (aDia > hDia) return 0;
-    const meses = h.getMonth() - a.getMonth() + 1;
+    // Meses completos: días reales / 30, redondeado hacia abajo.
+    // 18/10 → 20/11 = 33 días = 1 mes completo (no 2 meses calendario).
+    const diffDias = Math.round((hDia.getTime() - aDia.getTime()) / 86400000);
+    const meses = Math.floor(diffDias / 30);
     return Math.max(0, Math.min(12, meses));
   }
 

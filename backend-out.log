@@ -853,3 +853,59 @@ Note: This will throw an error in the next major version.[39m
 [32m[Nest] 15204  - [39m15/11/2026, 10:16:52 p. m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/todopago/confirmar, POST} route[39m[38;5;3m +1ms[39m
 [32m[Nest] 15204  - [39m15/11/2026, 10:16:52 p. m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/todopago/webhook, POST} route[39m[38;5;3m +1ms[39m
 [32m[Nest] 15204  - [39m15/11/2026, 10:16:52 p. m. [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +194ms[39m
+                                                                                            [asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120057, disponible=6944
+[32m[Nest] 18764  - [39m17/11/2026, 6:22:14 p. m. [32m    LOG[39m [38;5;3m[CxcService] [39m[32mCorrelativo nro_debito: → 8[39m
+[procesarKardex] facturaId=47, detalles encontrados: 1
+[procesarKardex] producto=7, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=7
+[32m[Nest] 18764  - [39m17/11/2026, 6:22:17 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120057: ventaBruta=52000, descuento=0, impuesto=7800, costoVenta=42000, total=59800[39m
+[95m[Nest] 18764  - [39m17/11/2026, 6:22:17 p. m. [95m  DEBUG[39m [38;5;3m[ContabilidadLogicaService] [39m[95mLínea omitida (monto=0): DESCUENTO — 4-3-10-001[39m
+[32m[Nest] 18764  - [39m17/11/2026, 6:22:21 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mPartida 115 contabilizada por admin - Empresa 2[39m
+[32m[Nest] 18764  - [39m17/11/2026, 6:22:22 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120057 contabilizada automáticamente (partida 115, 5 líneas)[39m
+[procesarKardex] Movimientos CxC vinculados a partida 116
+[procesarKardex] finalizado: procesados=1, errores=0
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120058, disponible=6943
+[procesarKardex] facturaId=48, detalles encontrados: 2
+[procesarKardex] producto=26, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] producto=19, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=19
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120059, disponible=6942
+[procesarKardex] facturaId=49, detalles encontrados: 1
+[procesarKardex] producto=19, cantidad=1.00, bodega=1, empresa=2
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120060, disponible=6941
+[procesarKardex] facturaId=50, detalles encontrados: 1
+[procesarKardex] producto=26, cantidad=1.00, bodega=1, empresa=2
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120061, disponible=6940
+[procesarKardex] facturaId=51, detalles encontrados: 1
+[procesarKardex] producto=35, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=35
+[32m[Nest] 18764  - [39m17/11/2026, 8:33:46 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120061: ventaBruta=35, descuento=0, impuesto=4.57, costoVenta=1.5, total=39.57[39m
+[95m[Nest] 18764  - [39m17/11/2026, 8:33:46 p. m. [95m  DEBUG[39m [38;5;3m[ContabilidadLogicaService] [39m[95mLínea omitida (monto=0): DESCUENTO — 4-3-10-001[39m
+[32m[Nest] 18764  - [39m17/11/2026, 8:33:48 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mPartida 116 contabilizada por admin - Empresa 2[39m
+[32m[Nest] 18764  - [39m17/11/2026, 8:33:49 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120061 contabilizada automáticamente (partida 116, 5 líneas)[39m
+[procesarKardex] finalizado: procesados=1, errores=0
+[32m[Nest] 18764  - [39m17/11/2026, 8:45:04 p. m. [32m    LOG[39m [38;5;3m[TodopagoService] [39m[32m[SANDBOX] Link simulado para factura 47: http://localhost:4200/facturacion/pago-confirmado?Answer=SIM-FA-47-1794969904425&Order=FA-47-1794969904425[39m
+[32m[Nest] 18764  - [39m17/11/2026, 8:45:04 p. m. [32m    LOG[39m [38;5;3m[TodopagoService] [39m[32mLink de pago generado: factura=47 op=FA-47-1794969904425 monto=59800 sandbox=true[39m
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120062, disponible=6939
+[procesarKardex] facturaId=52, detalles encontrados: 2
+[procesarKardex] producto=35, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=35
+[procesarKardex] producto=36, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=36
+[32m[Nest] 18764  - [39m17/11/2026, 8:54:09 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120062: ventaBruta=38.5, descuento=1.93, impuesto=5.49, costoVenta=3, total=42.06[39m
+[32m[Nest] 18764  - [39m17/11/2026, 8:54:12 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mPartida 117 contabilizada por admin - Empresa 2[39m
+[32m[Nest] 18764  - [39m17/11/2026, 8:54:13 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mFactura 120062 contabilizada automáticamente (partida 117, 6 líneas)[39m
+[procesarKardex] finalizado: procesados=2, errores=0
+[asignarCorrelativo] CAI: empresaId=2, sucursal=1, nrofactura=120063, disponible=6938
+[procesarKardex] facturaId=53, detalles encontrados: 3
+[procesarKardex] producto=19, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] producto=12, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=12
+[procesarKardex] producto=30, cantidad=1.00, bodega=1, empresa=2
+[procesarKardex] OK producto=30
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:09 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32m[CxP Event] Movimiento creado: movId=41, tipo=D, importe=1000.00, origen=compra, TipoCompra=ORC[39m
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:10 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32m[CxP Event] Enrutando a PDA 15 (tipomov=D, origen=compra, TipoCompra=ORC)[39m
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:11 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mPartida 118 contabilizada por admin - Empresa 2[39m
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:12 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32mMovimiento CxP 41 contabilizado (partida 118, ref=2558589, monto=1000)[39m
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:12 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32m[CxP Event] contabilizarCxP resultado: 119 (PDA 15)[39m
+[32m[Nest] 18764  - [39m17/11/2026, 9:36:12 p. m. [32m    LOG[39m [38;5;3m[ContabilidadLogicaService] [39m[32m[CxP Event] Compra 18 marcada como contabilizada (partida 119)[39m
