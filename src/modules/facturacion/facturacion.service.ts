@@ -45,8 +45,14 @@ import { Tsucursal } from '../sucursales/entities/sucursal.entity';
 import { TCai } from '../companies/entities/tcai.entity';
 import { FechaSistemaService, TABLAS_FECHAREGISTRO } from '../../shared/fecha-sistema.service';
 import { CorrelativosService } from '../../shared/correlativos.service';
+import { CajaSesionService } from './caja-sesion.service';
+import { TPosCajaSesion } from './entities/poscajasesion.entity';
 import { getTransporter, getMailFrom } from '../../config/mail';
 
+/** ttipoformapago.formapagoId del catálogo base (Efectivo / Tarjeta / Transferencia) */
+const FORMAPAGO_EFECTIVO = 1;
+const FORMAPAGO_TARJETA = 2;
+const FORMAPAGO_TRANSFERENCIA = 3;
 /** ttipoformapago.formapagoId de 'TodoPagoLink' (pago por link — se confirma vía /todopago/confirmar) */
 const FORMAPAGO_TODOPAGO = 6;
 
@@ -98,6 +104,7 @@ export class FacturacionService {
     private readonly eventEmitter: EventEmitter2,
     private readonly fechaSistema: FechaSistemaService,
     private readonly correlativos: CorrelativosService,
+    private readonly cajaSesionService: CajaSesionService,
   ) {}
 
   private async findAllByEmpresa<T extends ObjectLiteral>(repo: Repository<T>, empresaId: number) {
@@ -322,17 +329,30 @@ export class FacturacionService {
       caiCodigo = empresaDet.find((d) => d.tipo === 'CAI')?.descripcion || null;
     }
 
-    // ----- Cajero (tusuarios) + TPV (tusuarios_caja.codigo) del usuario que emitió -----
+    // ----- Cajero (tusuarios) + terminal/TPV (tusuarios_caja) del usuario que emitió -----
+    // `tpv` = tusuarios_caja.id (terminal del usuario), NO cxccajeros.cajaId.
     const usuarioTicket = factura.usuarioCreated || null;
     const cajeroRow = usuarioTicket
       ? await this.usuariosRepo.findOne({ where: { usuario: usuarioTicket } as unknown as FindOptionsWhere<Tusuarios> })
       : null;
-    const cajaRow = usuarioTicket
-      ? await this.usuarioCajaRepo.findOne({
-          where: { usuario: usuarioTicket, empresaId } as unknown as FindOptionsWhere<TusuarioCaja>,
+    // La terminal se resuelve por (usuario, cajaId) de la factura. Si el usuario
+    // no tiene fila para esa caja se cae a la primera asignación histórica
+    // (compatibilidad con facturas emitidas antes de este cambio).
+    let cajaRow: TusuarioCaja | null = null;
+    if (usuarioTicket) {
+      const base = { usuario: usuarioTicket, empresaId } as unknown as FindOptionsWhere<TusuarioCaja>;
+      if (factura.cajaId) {
+        cajaRow = await this.usuarioCajaRepo.findOne({
+          where: { ...(base as any), cajaId: Number(factura.cajaId) },
+        });
+      }
+      if (!cajaRow) {
+        cajaRow = await this.usuarioCajaRepo.findOne({
+          where: base,
           order: { id: 'ASC' } as any,
-        })
-      : null;
+        });
+      }
+    }
 
     // ----- Sucursal de la factura (tsucursal: descripción, dirección, teléfonos) -----
     const sucursalRow = factura.Idsucursal
@@ -352,7 +372,7 @@ export class FacturacionService {
             apellidos: cajeroRow.apellidos || '',
           }
         : null,
-      tpv: cajaRow?.codigo ?? null,
+      tpv: cajaRow?.id ?? null,
       impuestos: {
         exonerado: r2(exonerado),
         excento: r2(excento),
@@ -391,6 +411,27 @@ export class FacturacionService {
   }
 
   /**
+   * Método de pago para poscajamovimiento — se deriva de `formapagoId`
+   * (catálogo ttipoformapago), NO de importe_efectivo/importe_otros ni de
+   * flags del frontend: esos campos pueden venir desincronizados del pago real.
+   */
+  private resolverMetodoCaja(
+    formapagoId: number | string | null | undefined,
+    tarjetacreditoId?: number | string | null,
+  ): { metodo: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'OTRO'; tipo: string } {
+    const id = Number(formapagoId) || 0;
+    if (id === FORMAPAGO_EFECTIVO) return { metodo: 'EFECTIVO', tipo: 'VENTA_EFECTIVO' };
+    if (id === FORMAPAGO_TARJETA) return { metodo: 'TARJETA', tipo: 'COBRO_TARJETA' };
+    if (id === FORMAPAGO_TRANSFERENCIA) return { metodo: 'TRANSFERENCIA', tipo: 'COBRO_TRANSFERENCIA' };
+    if (id === FORMAPAGO_TODOPAGO) return { metodo: 'OTRO', tipo: 'COBRO_TRANSFERENCIA' };
+    // Compatibilidad con pedidos legacy que no envían formapagoId
+    if (tarjetacreditoId != null && Number(tarjetacreditoId) > 0) {
+      return { metodo: 'TARJETA', tipo: 'COBRO_TARJETA' };
+    }
+    return { metodo: 'OTRO', tipo: 'COBRO_TRANSFERENCIA' };
+  }
+
+  /**
    * Parámetro por defecto de facturación (bodega/caja) desde ttipoparametros.
    * Busca primero en módulo 3 (facturación); si no existe, en cualquier módulo
    * de la empresa (bodegaId vive en módulo 1, cajaId en módulo 4). Fallback numérico.
@@ -423,7 +464,55 @@ export class FacturacionService {
     }
   }
 
+  /**
+   * Caja transaccional (R4): la del turno ABIERTO del usuario autenticado.
+   * El parámetro `cajaId` de ttipoparametros queda solo como respaldo cuando
+   * el usuario no tiene sesión abierta (ej. facturas de crédito / tienda virtual).
+   */
+  private async resolverCajaIdDesdeSesion(empresaId: number, usuario: string): Promise<number | null> {
+    try {
+      if (!empresaId || !usuario) return null;
+      const u = await this.usuariosRepo.findOne({ where: { usuario, empresaId } as any });
+      if (!u?.usuarioId) return null;
+      const sesion = await this.cajaSesionService.obtenerSesionActivaDeUsuario(empresaId, Number(u.usuarioId));
+      return sesion ? Number(sesion.cajaId) : null;
+    } catch (error) {
+      console.error('Error resolviendo caja desde la sesión activa:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Turno ABIERTO del usuario autenticado (R3). Obligatorio para la emisión
+   * sin cobro del POS de asesor: sin sesión no se asigna correlativo ni se factura.
+   */
+  private async exigirSesionCajaAbierta(empresaId: number, usuario: string): Promise<TPosCajaSesion> {
+    let usuarioId: number | null = null;
+    try {
+      const u = await this.usuariosRepo.findOne({ where: { usuario, empresaId } as any });
+      usuarioId = u?.usuarioId ? Number(u.usuarioId) : null;
+    } catch (error) {
+      console.error('Error resolviendo usuario para exigir sesión de caja:', error);
+    }
+
+    const sesion = usuarioId
+      ? await this.cajaSesionService.obtenerSesionActivaDeUsuario(empresaId, usuarioId)
+      : null;
+    if (!sesion) {
+      throw new BadRequestException(
+        'No hay una sesión de caja abierta para su usuario. Abra la caja en Facturación → Caja antes de emitir facturas.',
+      );
+    }
+    return sesion;
+  }
+
   async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
+    // Emisión de asesor (sin cobro): solo asigna correlativo y persiste posfacmae.
+    // El flag NO se persiste (no existe columna); se usa para exigir el turno
+    // del usuario, forzar sn_pagada='N' y evitar movimientos CxC.
+    const soloEmision = (dto as any).sn_solo_emision === 'S';
+    delete (dto as any).sn_solo_emision;
+
     // Validar que el período esté abierto
     const fechaDoc = await this.fechaSistema.getFecha(dto.empresaId);
     await this.contabilidadService.validarPeriodoAbierto(dto.empresaId, fechaDoc);
@@ -434,8 +523,32 @@ export class FacturacionService {
         (await this.getBodegaPorUsuario(currentUser, dto.empresaId)) ??
         (await this.getParamDefecto(dto.empresaId, 'bodegaId', 1));
     }
-    // Caja por defecto: parámetro de facturación con fallback (checkout hace lo mismo)
-    if (!dto.cajaId) dto.cajaId = await this.getParamDefecto(dto.empresaId, 'cajaId', 1);
+    // Caja: la del turno ABIERTO del usuario (R4). El parámetro solo es respaldo
+    // si no hay sesión abierta (crédito, tienda virtual, operaciones sin caja).
+    const cajaIdSesion = await this.resolverCajaIdDesdeSesion(dto.empresaId, currentUser);
+    if (cajaIdSesion) dto.cajaId = cajaIdSesion;
+    else if (!dto.cajaId) dto.cajaId = await this.getParamDefecto(dto.empresaId, 'cajaId', 1);
+
+    if (soloEmision) {
+      const sesion = await this.exigirSesionCajaAbierta(dto.empresaId, currentUser);
+      dto.cajaId = Number(sesion.cajaId);
+      dto.sn_pagada = 'N';
+      dto.sn_anulada = 'N';
+      dto.sn_contabilizada = 'N';
+      dto.efectivo_recibido = 0;
+      dto.importe_cambio = 0;
+      if (!dto.Idsucursal) {
+        const u = await this.usuariosRepo.findOne({
+          where: { usuario: currentUser, empresaId: dto.empresaId } as any,
+        });
+        dto.Idsucursal = Number(u?.Idsucursal) || 1;
+      }
+    } else if (dto.tipofactura !== 'C') {
+      const sesionActiva = await this.cajaSesionService.obtenerSesionActiva(dto.empresaId, dto.cajaId);
+      if (!sesionActiva) {
+        throw new BadRequestException(`La caja #${dto.cajaId} no tiene ninguna sesión (turno) abierta. Debe abrir turno antes de facturar.`);
+      }
+    }
 
     let caiInfo: { rangoDesde?: string; rangoHasta?: string; disponible?: number; alerta?: string } | undefined;
     if (!dto.nrofactura) {
@@ -449,7 +562,7 @@ export class FacturacionService {
     }
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
 
-    if (dto.tipofactura === 'C') {
+    if (!soloEmision && dto.tipofactura === 'C') {
       try {
         await this.cxcService.generarMovimientoDesdeFactura(factura, currentUser);
       } catch (error) {
@@ -458,14 +571,20 @@ export class FacturacionService {
     }
 
     // Integración contable automática (se ejecuta después del kardex)
-    // Se llama desde procesarKardexFactura porque necesita que el inventario esté procesado
-
-    this.eventEmitter.emit('factura.creada', { factura, currentUser });
+    // Se llama desde procesarKardexFactura porque necesita que el inventario esté procesado.
+    // En emisión de asesor se omite para NO contabilizar la factura.
+    if (!soloEmision) {
+      this.eventEmitter.emit('factura.creada', { factura, currentUser });
+    }
 
     return { ...factura, ...caiInfo };
   }
 
-  async procesarKardexFactura(facturaId: number, currentUser: string): Promise<{ procesados: number; errores: string[] }> {
+  async procesarKardexFactura(
+    facturaId: number,
+    currentUser: string,
+    omitirContabilidad = false,
+  ): Promise<{ procesados: number; errores: string[] }> {
     const detalles = await this.facDetRepo.find({
       where: { facturaId } as FindOptionsWhere<TPosFacDet>,
     });
@@ -505,8 +624,9 @@ export class FacturacionService {
     }
 
     // Integración contable automática post-kardex
-    // Se ejecuta después de procesar kardex porque necesita que el inventario esté actualizado
-    if (errores.length === 0) {
+    // Se ejecuta después de procesar kardex porque necesita que el inventario esté actualizado.
+    // `omitirContabilidad` = true para emisión de asesor: rebaja existencia/kardex pero NO contabiliza.
+    if (errores.length === 0 && !omitirContabilidad) {
       try {
         const factura = await this.facMaeRepo.findOne({
           where: { facturaId } as FindOptionsWhere<TPosFacMae>,
@@ -1001,6 +1121,8 @@ export class FacturacionService {
       nrofila++;
     }
 
+    const esEfectivoTienda = Number(dto.formapagoId) === FORMAPAGO_EFECTIVO;
+    const recibidoTienda = Number(dto.efectivo_recibido) || total;
     await this.createEntity(this.facCajaRepo, {
       facturaId: factura.facturaId,
       formapagoId: dto.formapagoId,
@@ -1008,9 +1130,9 @@ export class FacturacionService {
       nrotarjeta: dto.nrotarjeta || null,
       nroautorizacion: dto.nroautorizacion || null,
       factordecambio: 1,
-      importe_efectivo: dto.efectivo_recibido || total,
-      importe_otros: 0,
-      importe_cambio: (dto.efectivo_recibido || total) - total,
+      importe_efectivo: esEfectivoTienda ? recibidoTienda : 0,
+      importe_otros: esEfectivoTienda ? 0 : total,
+      importe_cambio: esEfectivoTienda ? Math.max(0, recibidoTienda - total) : 0,
       cajaId,
       Idsucursal: idsucursal,
       empresaId,
@@ -1844,6 +1966,8 @@ export class FacturacionService {
     });
     if (detalles.length === 0) throw new BadRequestException('El pedido está vacío');
 
+    const esCredito = (pedido.tipofactura || 'E') === 'C';
+
     const getParamPedido = async (field: string, def: any) => {
       try {
         const row = await this.tipoParametroRepo.findOne({
@@ -1858,7 +1982,17 @@ export class FacturacionService {
       Number(pedido.bodegaId) ||
       (await this.getBodegaPorUsuario(currentUser, empresaId)) ||
       (await getParamPedido('bodegaId', 1));
-    const cajaId = Number(pedido.cajaId) || (await getParamPedido('cajaId', 1));
+    // R4: el turno abierto del usuario manda; el pedido y el parámetro son respaldo.
+    const cajaIdSesion = await this.resolverCajaIdDesdeSesion(empresaId, currentUser);
+    const cajaId = cajaIdSesion || Number(pedido.cajaId) || (await getParamPedido('cajaId', 1));
+
+    let sesionActiva: any = null;
+    if (!dto.esVirtual && !esCredito) {
+      sesionActiva = await this.cajaSesionService.obtenerSesionActiva(empresaId, cajaId);
+      if (!sesionActiva) {
+        throw new BadRequestException(`La caja #${cajaId} no tiene ninguna sesión (turno) abierta. Debe abrir turno antes de facturar.`);
+      }
+    }
 
     // Sucursal de la factura: la del usuario autenticado
     // (posfacmae.Idsucursal es NOT NULL sin default — mismo criterio que createFactura)
@@ -1884,6 +2018,7 @@ export class FacturacionService {
       descuentoTotal += Number(det.descuento);
     }
     const total = subTotal + impuestoTotal - descuentoTotal;
+    const cambioPedido = Math.max(0, (Number(dto.efectivo_recibido) || 0) - total);
 
     // Cliente de la factura: el del pedido si existe (ERP); si no viene o ya no
     // existe en cxcclientes → cliente TIENDA (CRM / pedidos-virtual)
@@ -1899,7 +2034,6 @@ export class FacturacionService {
 
     // Paridad con posfacmae: TODA la cabecera del pedido pasa a la factura
     // (tipo, RTN, exenta/constancia, crédito, gestor, factor de cambio).
-    const esCredito = (pedido.tipofactura || 'E') === 'C';
 
     // ── Pagos del checkout: detección de pago por link TodoPago ──────────
     // TodoPagoLink (formapagoId=6): el pago por link NO se registra en
@@ -1931,7 +2065,7 @@ export class FacturacionService {
       descuento: descuentoTotal,
       total,
       efectivo_recibido: esCredito ? 0 : (dto.efectivo_recibido || total),
-      importe_cambio: esCredito ? 0 : (dto.efectivo_recibido || total) - total,
+      importe_cambio: esCredito ? 0 : cambioPedido,
       diascredito: esCredito ? Number(pedido.diascredito) || 0 : 0,
       fechavencimiento: esCredito ? pedido.fechavencimiento ?? null : null,
       bodegaId,
@@ -1957,6 +2091,7 @@ export class FacturacionService {
     }
 
     const factura = await this.createEntity(this.facMaeRepo, facturaPayload, currentUser);
+    const motivoFactura = `Factura #${factura.nrofactura || factura.facturaId}`;
 
     // Crédito: movimiento en CxC (mismo flujo que createFactura →
     // procesarKardexFactura luego vincula el movimiento a la partida)
@@ -2004,14 +2139,16 @@ export class FacturacionService {
             nrotarjeta: p.nrotarjeta || null,
             nroautorizacion: p.nroautorizacion || null,
             factordecambio: 1,
-            importe_efectivo: p.esEfectivo ? importePago : 0,
-            importe_otros: p.esEfectivo ? 0 : importePago,
-            importe_cambio: 0,
+            importe_efectivo: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? importePago : 0,
+            importe_otros: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? 0 : importePago,
+            importe_cambio: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? cambioPedido : 0,
             cajaId,
             empresaId,
           }, currentUser);
         }
       } else if (!conLink) {
+        const esEfectivo = Number(dto.formapagoId) === FORMAPAGO_EFECTIVO;
+        const recibido = Number(dto.efectivo_recibido) || total;
         await this.createEntity(this.facCajaRepo, {
           facturaId: factura.facturaId,
           formapagoId: dto.formapagoId,
@@ -2019,9 +2156,9 @@ export class FacturacionService {
           nrotarjeta: dto.nrotarjeta || null,
           nroautorizacion: dto.nroautorizacion || null,
           factordecambio: 1,
-          importe_efectivo: dto.efectivo_recibido || total,
-          importe_otros: 0,
-          importe_cambio: (dto.efectivo_recibido || total) - total,
+          importe_efectivo: esEfectivo ? recibido : 0,
+          importe_otros: esEfectivo ? 0 : total,
+          importe_cambio: esEfectivo ? cambioPedido : 0,
           cajaId,
           empresaId,
         }, currentUser);
@@ -2030,6 +2167,55 @@ export class FacturacionService {
     }
 
     await this.procesarKardexFactura(factura.facturaId, currentUser);
+
+    if (!dto.esVirtual && !esCredito && sesionActiva) {
+      if (pagosNoTP.length > 0) {
+        for (const p of pagosNoTP) {
+          const importePago = Number(p.importe) || 0;
+          if (importePago > 0) {
+            const { metodo: metodoPago, tipo: tipoMov } = this.resolverMetodoCaja(p.formapagoId, p.tarjetacreditoId);
+            await this.cajaSesionService.registrarMovimiento({
+              empresaId,
+              sesionId: sesionActiva.id,
+              tipo: tipoMov,
+              signo: 1,
+              monto: importePago,
+              metodo_pago: metodoPago,
+              referencia_tipo: 'FACTURA',
+              referencia_id: factura.facturaId,
+              motivo: motivoFactura,
+            }, currentUser);
+          }
+        }
+      } else if (!conLink) {
+        const { metodo: metodoPago, tipo: tipoMov } = this.resolverMetodoCaja(dto.formapagoId, dto.tarjetacreditoId);
+        await this.cajaSesionService.registrarMovimiento({
+          empresaId,
+          sesionId: sesionActiva.id,
+          tipo: tipoMov,
+          signo: 1,
+          monto: total,
+          metodo_pago: metodoPago,
+          referencia_tipo: 'FACTURA',
+          referencia_id: factura.facturaId,
+          motivo: motivoFactura,
+        }, currentUser);
+      }
+
+      if (cambioPedido > 0) {
+        await this.cajaSesionService.registrarMovimiento({
+          empresaId,
+          sesionId: sesionActiva.id,
+          tipo: 'DEVOLUCION_EFECTIVO',
+          signo: -1,
+          monto: cambioPedido,
+          metodo_pago: 'EFECTIVO',
+          referencia_tipo: 'FACTURA',
+          referencia_id: factura.facturaId,
+          motivo: motivoFactura,
+        }, currentUser);
+      }
+    }
 
     const fechaUpd = await this.fechaSistema.getFecha(empresaId);
     // El pedido queda facturado + trazabilidad del nro. de factura. Se actualiza
@@ -2267,7 +2453,58 @@ export class FacturacionService {
   }
 
   async createFacCaja(dto: any, currentUser: string) {
-    return this.createEntity(this.facCajaRepo, dto, currentUser);
+    const empresaId = Number(dto.empresaId);
+    const facMae = await this.facMaeRepo.findOne({
+      where: { facturaId: Number(dto.facturaId), empresaId } as FindOptionsWhere<TPosFacMae>,
+    });
+    const motivoFactura = `Factura #${facMae?.nrofactura ?? dto.facturaId}`;
+    // R4: persistir la caja del turno abierto, no la que venga en el payload.
+    const cajaIdSesion = await this.resolverCajaIdDesdeSesion(empresaId, currentUser);
+    if (cajaIdSesion) dto.cajaId = cajaIdSesion;
+
+    const facCaja = await this.createEntity(this.facCajaRepo, dto, currentUser);
+
+    try {
+      const cajaId = Number(dto.cajaId) || 1;
+      const sesionActiva = await this.cajaSesionService.obtenerSesionActiva(empresaId, cajaId);
+      if (sesionActiva) {
+        const monto = (Number(dto.importe_efectivo) || 0) + (Number(dto.importe_otros) || 0);
+        const { metodo: metodoPago, tipo: tipoMov } = this.resolverMetodoCaja(dto.formapagoId, dto.tarjetacreditoId);
+
+        if (monto > 0) {
+          await this.cajaSesionService.registrarMovimiento({
+            empresaId,
+            sesionId: sesionActiva.id,
+            tipo: tipoMov,
+            signo: 1,
+            monto,
+            metodo_pago: metodoPago,
+            referencia_tipo: 'FACTURA',
+            referencia_id: dto.facturaId,
+            motivo: motivoFactura,
+          }, currentUser);
+        }
+
+        const cambio = Number(dto.importe_cambio) || 0;
+        if (cambio > 0) {
+          await this.cajaSesionService.registrarMovimiento({
+            empresaId,
+            sesionId: sesionActiva.id,
+            tipo: 'DEVOLUCION_EFECTIVO',
+            signo: -1,
+            monto: cambio,
+            metodo_pago: 'EFECTIVO',
+            referencia_tipo: 'FACTURA',
+            referencia_id: dto.facturaId,
+            motivo: motivoFactura,
+          }, currentUser);
+        }
+      }
+    } catch (err) {
+      console.error('Error registrando movimiento de caja desde facCaja:', err);
+    }
+
+    return facCaja;
   }
 
   async updateFacCaja(id: number, empresaId: number, dto: any, currentUser: string) {

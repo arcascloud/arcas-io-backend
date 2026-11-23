@@ -15,8 +15,12 @@ import { TPosCboDet } from './entities/poscbodet.entity';
 import { TPosPrecioVtas } from './entities/tpospreciovtas.entity';
 import { TPosDescuentos } from './entities/tposdescuentos.entity';
 import { TPosFacCaja } from './entities/posfaccaja.entity';
+import { TPosCajaSesion } from './entities/poscajasesion.entity';
+import { TPosCajaMovimiento } from './entities/poscajamovimiento.entity';
+import { TPosCajaCorte } from './entities/poscajacorte.entity';
 import { TCoTipoDocumentoFiscal } from '../contabilidad/entities/tcotipodocumentofiscal.entity';
 import { CxcCliente } from '../cxc/entities/cxccliente.entity';
+import { Cxccajero } from '../cxc/entities/cxccajero.entity';
 import { Tempresas } from '../companies/entities/empresa.entity';
 import { TempresasDet } from '../companies/entities/empresasdet.entity';
 import { TImpresora } from '../companies/entities/impresoras.entity';
@@ -34,10 +38,13 @@ import { Tsucursal } from '../sucursales/entities/sucursal.entity';
 import { TCai } from '../companies/entities/tcai.entity';
 import { FacturacionService } from './facturacion.service';
 import { FacturacionDashboardService } from './dashboard.service';
+import { CajaSesionService } from './caja-sesion.service';
 import { FacturacionController } from './facturacion.controller';
+import { CajaSesionController } from './caja-sesion.controller';
 import { InventarioModule } from '../inventario/inventario.module';
 import { CxcModule } from '../cxc/cxc.module';
 import { ContabilidadModule } from '../contabilidad/contabilidad.module';
+import { FechaSistemaModule } from '../../shared/fecha-sistema.module';
 
 @Module({
   imports: [
@@ -57,8 +64,12 @@ import { ContabilidadModule } from '../contabilidad/contabilidad.module';
       TPosPrecioVtas,
       TPosDescuentos,
       TPosFacCaja,
+      TPosCajaSesion,
+      TPosCajaMovimiento,
+      TPosCajaCorte,
       TCoTipoDocumentoFiscal,
       CxcCliente,
+      Cxccajero,
       Tempresas,
       TempresasDet,
       TImpresora,
@@ -77,10 +88,11 @@ import { ContabilidadModule } from '../contabilidad/contabilidad.module';
     ]),
     InventarioModule,
     CxcModule,
+    FechaSistemaModule,
     forwardRef(() => ContabilidadModule),
   ],
-  controllers: [FacturacionController],
-  providers: [FacturacionService, FacturacionDashboardService],
-  exports: [FacturacionService],
+  controllers: [FacturacionController, CajaSesionController],
+  providers: [FacturacionService, FacturacionDashboardService, CajaSesionService],
+  exports: [FacturacionService, CajaSesionService],
 })
 export class FacturacionModule {}

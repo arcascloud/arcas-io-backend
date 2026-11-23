@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray, IsIn, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePosFacMaeDto {
@@ -125,6 +125,14 @@ export class CreatePosFacMaeDto {
   @ApiProperty({ required: false, description: 'Correlativo CAI autorizado (tcai_autorizado) del que proviene el nrofactura' })
   @IsNumber() @IsOptional()
   caiAutorizadoId?: number;
+
+  @ApiProperty({
+    required: false,
+    enum: ['S', 'N'],
+    description: 'Solo emisión (asesor): exige turno de caja abierta del usuario; asigna correlativo y guarda en posfacmae sin pagos, sin CxC y sin contabilizar',
+  })
+  @IsIn(['S', 'N']) @IsOptional()
+  sn_solo_emision?: string;
 }
 
 export class UpdatePosFacMaeDto {
@@ -613,9 +621,11 @@ export class CheckoutPedidoDto {
   @ApiProperty({ required: false, description: 'ID de la sucursal (inyectado por el controller desde el JWT)' })
   @IsNumber() @IsOptional()
   Idsucursal?: number;
-}
 
-/** Línea de una ronda enviada por el mesero. */
+  @ApiProperty({ required: false, description: 'Indica si es pedido virtual / e-commerce' })
+  @IsBoolean() @IsOptional()
+  esVirtual?: boolean;
+}
 export class LineaRondaDto {
   @ApiProperty({ description: 'ID del producto (tproductos)' })
   @IsNumber() @IsNotEmpty()

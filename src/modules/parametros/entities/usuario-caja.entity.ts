@@ -16,9 +16,9 @@ export class TusuarioCaja {
   @Column({ type: 'varchar', length: 20 })
   usuario: string;
 
-  @ApiProperty({ description: 'Código de caja' })
+  @ApiProperty({ description: 'ID de caja (cxccajeros.cajaId)' })
   @Column({ type: 'int', default: 0 })
-  codigo: number;
+  cajaId: number;
 
   @ApiProperty({ enum: ['S', 'N'] })
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'S' })

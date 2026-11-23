@@ -345,7 +345,7 @@ export class ParametrosService {
 
   // ── Usuarios de Caja (tusuarios_caja) ────────────────────
   async findAllUsuarioCaja(empresaId: number) {
-    return this.usuarioCajaRepo.find({ where: { empresaId }, order: { usuario: 'ASC', codigo: 'ASC' } });
+    return this.usuarioCajaRepo.find({ where: { empresaId }, order: { usuario: 'ASC', cajaId: 'ASC' } });
   }
 
   async findUsuarioCaja(id: number, empresaId: number) {
@@ -365,7 +365,7 @@ export class ParametrosService {
   /**
    * Validaciones de negocio de tusuarios_caja:
    * - El usuario debe existir en tunidades/tusuarios (FK fk_create_..._usuario)
-   * - UNIQUE (usuario, codigo) global — coincide con el índice tusuarioipaddressUnique
+   * - UNIQUE (usuario, cajaId) global — coincide con el índice tusuarioipaddressUnique
    */
   private async validarUsuarioCaja(dto: any, excludeId?: number) {
     if (dto.usuario !== undefined && dto.usuario !== null && dto.usuario !== '') {
@@ -373,11 +373,24 @@ export class ParametrosService {
       if (!existe) throw new BadRequestException(`El usuario ${dto.usuario} no existe`);
     }
 
-    if (dto.usuario && dto.codigo !== undefined && dto.codigo !== null) {
-      const where: any = { usuario: dto.usuario, codigo: Number(dto.codigo) };
+    // Regla de negocio (apertura de turno): 1 usuario = 1 caja.
+    // Solo aplica al crear; en edición se modifica el registro existente.
+    if (excludeId === undefined && dto.usuario && dto.empresaId !== undefined) {
+      const yaTiene = await this.usuarioCajaRepo.findOne({
+        where: { usuario: dto.usuario, empresaId: Number(dto.empresaId) },
+      });
+      if (yaTiene) {
+        throw new ConflictException(
+          `El usuario ${dto.usuario} ya tiene una caja asignada (caja #${yaTiene.cajaId}). Edite el registro existente.`,
+        );
+      }
+    }
+
+    if (dto.usuario && dto.cajaId !== undefined && dto.cajaId !== null) {
+      const where: any = { usuario: dto.usuario, cajaId: Number(dto.cajaId) };
       const dup = await this.usuarioCajaRepo.findOne({ where });
       if (dup && dup.id !== excludeId) {
-        throw new ConflictException(`El usuario ${dto.usuario} ya tiene asignado el código ${dto.codigo}`);
+        throw new ConflictException(`El usuario ${dto.usuario} ya tiene asignada la caja ${dto.cajaId}`);
       }
     }
   }

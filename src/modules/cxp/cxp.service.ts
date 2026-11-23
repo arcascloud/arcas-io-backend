@@ -290,8 +290,8 @@ export class CxpService {
       monedaId: dto.monedaId,
       factorcambio: dto.factorcambio || 1,
       subtotal: 0,
-      descuento: 0,
-      impuesto: 0,
+      descuento: dto.descuento != null ? Number(dto.descuento) : 0,
+      impuesto: dto.impuesto != null ? Number(dto.impuesto) : 0,
       total: 0,
       sn_pagada: 'N',
       // cxpcomprasmae.partidaId es NOT NULL en la BD sin default (la columna se
@@ -363,9 +363,7 @@ export class CxpService {
     const subtotal = detalles.reduce((sum, d) => sum + Number(d.subtotal || 0), 0);
     const compra = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
     compra.subtotal = subtotal;
-    const descuento = Number(compra.descuento || 0);
-    const impuesto = Number(compra.impuesto || 0);
-    compra.total = Math.max(0, Number(subtotal) - descuento + impuesto);
+    compra.total = subtotal;
     await this.compraMaeRepo.save(compra);
   }
 
@@ -482,7 +480,7 @@ export class CxpService {
 
     const compraActualizada = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
     const sumaDetalles = detalles.reduce((sum, d) => sum + Number(d.subtotal || 0), 0);
-    const totalEsperado = Math.max(0, sumaDetalles - Number(compraActualizada.descuento || 0) + Number(compraActualizada.impuesto || 0));
+    const totalEsperado = sumaDetalles;
     if (Math.abs(Number(compraActualizada.total) - totalEsperado) > 0.01) {
       throw new BadRequestException(`El total del header (${compraActualizada.total}) no coincide con el total del detalle (${totalEsperado}). El total del detalle debe ser igual al total del header.`);
     }
@@ -639,9 +637,7 @@ export class CxpService {
     if (dto.subtotal !== undefined || dto.descuento !== undefined || dto.impuesto !== undefined) {
       const compra = await this.findOneById(this.compraMaeRepo, 'compraId', compraId, empresaId, 'Compra');
       const sub = dto.subtotal !== undefined ? Number(dto.subtotal) : Number(compra.subtotal || 0);
-      const desc = dto.descuento !== undefined ? Number(dto.descuento) : Number(compra.descuento || 0);
-      const imp = dto.impuesto !== undefined ? Number(dto.impuesto) : Number(compra.impuesto || 0);
-      dto.total = Math.max(0, sub - desc + imp);
+      dto.total = sub;
     }
     return this.updateEntity(this.compraMaeRepo, 'compraId', compraId, empresaId, dto, currentUser, 'Compra');
   }

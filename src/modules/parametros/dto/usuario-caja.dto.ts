@@ -6,9 +6,9 @@ export class CreateUsuarioCajaDto {
   @IsString() @IsNotEmpty()
   usuario: string;
 
-  @ApiProperty({ required: false, description: 'Código de caja (default 0)' })
+  @ApiProperty({ required: false, description: 'ID de caja (cxccajeros.cajaId, default 0)' })
   @IsNumber() @IsOptional()
-  codigo?: number;
+  cajaId?: number;
 
   @ApiProperty({ required: false, enum: ['S', 'N'] })
   @IsEnum(['S', 'N']) @IsOptional()
@@ -32,9 +32,9 @@ export class UpdateUsuarioCajaDto {
   @IsString() @IsOptional()
   usuario?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'ID de caja (cxccajeros.cajaId)' })
   @IsNumber() @IsOptional()
-  codigo?: number;
+  cajaId?: number;
 
   @ApiProperty({ required: false, enum: ['S', 'N'] })
   @IsEnum(['S', 'N']) @IsOptional()

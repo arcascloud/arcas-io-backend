@@ -150,8 +150,9 @@ export class FacturacionController {
   procesarKardexFactura(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: any,
+    @Query('omitirContabilidad') omitirContabilidad?: string,
   ) {
-    return this.service.procesarKardexFactura(id, user.usuario);
+    return this.service.procesarKardexFactura(id, user.usuario, omitirContabilidad === 'S');
   }
 
   // ===== Facturas Detalle =====
