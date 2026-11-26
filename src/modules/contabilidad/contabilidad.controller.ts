@@ -23,6 +23,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Contabilidad')
 @ApiBearerAuth()
@@ -459,9 +460,9 @@ export class ContabilidadController {
 
   // ===== Factor de Cambio =====
 
+  @Public()
   @Get('factordecambio')
-  @Roles('consultas', 'admin', 'supervisor', 'usuario')
-  @ApiOperation({ summary: 'Listar factores de cambio' })
+  @ApiOperation({ summary: 'Listar factores de cambio (público: lo consulta la tienda sin sesión)' })
   @ApiResponse({ status: 200, description: 'Lista de factores de cambio obtenida exitosamente' })
   findAllFactordecambio(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findAllFactordecambio(empresaId);
