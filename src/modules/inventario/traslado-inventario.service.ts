@@ -69,6 +69,7 @@ export class TrasladoInventarioService {
       bodegaDestinoId: dto.bodegaDestinoId,
       nroreferencia,
       observaciones: dto.observaciones || '',
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
       sn_procesado: 'N',
       sn_anulado: 'N',
       empresaId: dto.empresaId,

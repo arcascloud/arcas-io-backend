@@ -22,6 +22,10 @@ export class CreateSucursalDto {
   @IsNumber() @IsOptional()
   bodegaId?: number;
 
+  @ApiProperty({ required: false, enum: ['S', 'N'], description: 'Estado activo' })
+  @IsEnum(['S', 'N']) @IsOptional()
+  sn_activo?: string;
+
   @ApiProperty({ description: 'ID de la empresa' })
   @IsNumber()
   empresaId: number;

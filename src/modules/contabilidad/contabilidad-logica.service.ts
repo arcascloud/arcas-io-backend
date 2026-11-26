@@ -108,7 +108,7 @@ export class ContabilidadLogicaService {
       moduloId: dto.moduloId,
       documentoId: dto.documentoId,
       fechadocumento: dto.fechadocumento ? new Date(dto.fechadocumento) : fecha,
-      factordecambio: dto.factordecambio ?? 0,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
       nroreferencia: dto.nroreferencia,
       descripcion: dto.descripcion,
       nropartida,
@@ -136,7 +136,7 @@ export class ContabilidadLogicaService {
         descripcion: linea.descripcion ?? dto.descripcion,
         debito: linea.debito,
         credito: linea.credito,
-        factordecambio: dto.factordecambio ?? 0,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
         sn_anulada: 'N',
         sn_contabilizada: 'S',
         fecharegistro,
@@ -266,7 +266,7 @@ export class ContabilidadLogicaService {
       moduloId: original.moduloId,
       documentoId: original.documentoId,
       fechadocumento: fecha,
-      factordecambio: original.factordecambio ?? 0,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(original.empresaId),
       nroreferencia: original.nroreferencia,
       descripcion: `Contra partida #${original.nropartida}: ${original.descripcion}`,
       nropartida,
@@ -294,7 +294,7 @@ export class ContabilidadLogicaService {
         descripcion: det.descripcion,
         debito: Number(det.credito) || 0,
         credito: Number(det.debito) || 0,
-        factordecambio: det.factordecambio ?? 0,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(original.empresaId),
         sn_anulada: 'N',
         sn_contabilizada: 'S',
         fecharegistro,
@@ -409,6 +409,7 @@ export class ContabilidadLogicaService {
 
     // 5. Delegar en contabilizarPartida: revalida, crea copdamae/copdadet
     //    y actualiza coctamov + coctasaldos
+    const factorCambio = await this.fechaSistema.getFactorCambioDolar(empresaId);
     return this.contabilizarPartida(
       {
         empresaId,
@@ -420,7 +421,7 @@ export class ContabilidadLogicaService {
         fechadocumento,
         nroreferencia,
         descripcion: dto.descripcion?.trim() || 'balances inicial de operaciones mercantiles',
-        factordecambio: 1,
+        factordecambio: factorCambio,
         lineas: dto.lineas,
       },
       currentUser,
@@ -962,7 +963,7 @@ export class ContabilidadLogicaService {
       moduloId: 7, // Contabilidad
       documentoId: 0,
       fechadocumento: fecha,
-      factordecambio: 0,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
       nroreferencia: `CIERRE-${dto.periodo}-${dto.anio}`,
       descripcion: dto.observacion ?? `Partida de cierre período ${dto.periodo}/${dto.anio}`,
       nropartida,
@@ -989,7 +990,7 @@ export class ContabilidadLogicaService {
         descripcion: linea.descripcion,
         debito: linea.debito,
         credito: linea.credito,
-        factordecambio: 0,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
         sn_anulada: 'N',
         sn_contabilizada: 'S',
         fecharegistro,
@@ -3985,7 +3986,7 @@ export class ContabilidadLogicaService {
       moduloId: 8, // Planilla
       documentoId: 0,
       fechadocumento: fecha,
-      factordecambio: 0,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
       nroreferencia: dto.nroreferencia,
       descripcion: dto.descripcion,
       nropartida,
@@ -4012,7 +4013,7 @@ export class ContabilidadLogicaService {
         descripcion: linea.descripcion,
         debito: linea.debito,
         credito: linea.credito,
-        factordecambio: 0,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
         sn_anulada: 'N',
         sn_contabilizada: 'S',
         fecharegistro,

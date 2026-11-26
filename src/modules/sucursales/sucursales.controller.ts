@@ -8,6 +8,11 @@ import { CreateSucursalDto, UpdateSucursalDto } from './dto/sucursal.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
+/** Query param opcional: ParseIntPipe rompe cuando no viene (o viene vacío) */
+function parseEmpresaId(empresaId?: string): number | undefined {
+  return empresaId != null && empresaId !== '' ? Number(empresaId) : undefined;
+}
+
 @ApiTags('Sucursales')
 @ApiBearerAuth()
 @Controller('sucursales')
@@ -16,39 +21,45 @@ export class SucursalesController {
   constructor(private readonly service: SucursalesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar sucursales' })
+  @ApiOperation({ summary: 'Listar sucursales (empresaId opcional: sin él lista todas las empresas)' })
   @ApiResponse({ status: 200, description: 'Lista de sucursales obtenida exitosamente' })
-  findAll(@Query('empresaId', ParseIntPipe) empresaId: number) {
-    return this.service.findAll(empresaId);
+  findAll(@Query('empresaId') empresaId?: string) {
+    return this.service.findAll(parseEmpresaId(empresaId));
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener sucursal por ID' })
+  @ApiOperation({ summary: 'Obtener sucursal por ID (empresaId opcional)' })
   @ApiResponse({ status: 200, description: 'Sucursal encontrada' })
   @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
   findOne(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('empresaId') empresaId?: string,
   ) {
-    return this.service.findOne(id, empresaId);
+    return this.service.findOne(id, parseEmpresaId(empresaId));
   }
 
   @Post()
-  @ApiOperation({ summary: 'Crear sucursal' })
+  @ApiOperation({ summary: 'Crear sucursal (crea automáticamente su bodega por defecto)' })
   @ApiResponse({ status: 201, description: 'Sucursal creada exitosamente' })
   create(@Body() dto: CreateSucursalDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.usuario);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Actualizar sucursal' })
+  @ApiOperation({ summary: 'Actualizar sucursal (empresaId opcional)' })
   @ApiResponse({ status: 200, description: 'Sucursal actualizada exitosamente' })
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
+    @Query('empresaId') empresaId: string | undefined,
     @Body() dto: UpdateSucursalDto,
     @CurrentUser() user: any,
   ) {
-    return this.service.update(id, empresaId, dto, user.usuario);
+    return this.service.update(
+      id,
+      parseEmpresaId(empresaId),
+      dto,
+      user.usuario,
+      user.empresaId,
+    );
   }
 }

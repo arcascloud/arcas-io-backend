@@ -27,6 +27,10 @@ export class TInvTrasladoMae {
   @Column({ type: 'varchar', length: 200, nullable: true })
   observaciones: string;
 
+  @ApiProperty({ required: false })
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  factordecambio: number;
+
   @ApiProperty()
   @Column({ type: 'enum', enum: ['S', 'N'], default: 'N' })
   sn_procesado: string;

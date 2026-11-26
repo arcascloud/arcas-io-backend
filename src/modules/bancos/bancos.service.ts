@@ -549,7 +549,7 @@ export class BancosService {
           importe: totalCheque,
           nroreferencia: nroChq,
           nrochq: nroChq,
-          factordecambio: 1,
+          factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
           concepto: conceptoBanco,
           empresaId: dto.empresaId,
           // Reglas 1 y 4: fecha impuesta por el backend, no el reloj del servidor
@@ -677,7 +677,7 @@ export class BancosService {
         importe: dto.importe,
         nroreferencia: nroChq,
         nrochq: nroChq,
-        factordecambio: 1,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
         concepto: `Pago a ${dto.beneficiario} — ${dto.concepto}`,
         empresaId: dto.empresaId,
         // Reglas 1 y 4: fecha impuesta por el backend, no el reloj del servidor

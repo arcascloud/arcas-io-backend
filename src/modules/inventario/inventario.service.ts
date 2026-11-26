@@ -1322,6 +1322,9 @@ export class InventarioService {
       descripcion_corta: p.descripcion_corta,
       codbarra: p.codbarra,
       precioventa: Number(p.precioventa),
+      // cstounit = productos.cstounit (costo unitario real, base del piso de combos cstounit*1.03).
+      // NO confundir con precioventa (precio de venta) ni con preciocosto (promedio de invexistencias.costounitario).
+      cstounit: Number(p.cstounit),
       preciocosto: costoCountMap.get(p.produtoId)
         ? Number(costoMap.get(p.produtoId)) /
           Number(costoCountMap.get(p.produtoId))

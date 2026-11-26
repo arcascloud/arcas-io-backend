@@ -520,7 +520,7 @@ export class TodopagoService {
           facturaId: factura.facturaId,
           formapagoId: FORMAPAGO_TODOPAGO,
           nroautorizacion: tx.operationId.slice(0, 20),
-          factordecambio: Number(factura.factordecambio) || 1,
+          factordecambio: await this.fechaSistema.getFactorCambioDolar(Number(factura.empresaId)),
           importe_efectivo: 0,
           importe_otros: monto,
           importe_cambio: 0,

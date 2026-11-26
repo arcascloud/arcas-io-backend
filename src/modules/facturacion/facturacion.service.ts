@@ -560,6 +560,8 @@ export class FacturacionService {
       }
       caiInfo = { rangoDesde: result.rangoDesde, rangoHasta: result.rangoHasta, disponible: result.disponible, alerta: result.alerta };
     }
+    // La tasa es la vigente en ttipofactordecambios, no la que envíe el cliente.
+    dto.factordecambio = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
     const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
 
     if (!soloEmision && dto.tipofactura === 'C') {
@@ -611,7 +613,6 @@ export class FacturacionService {
           subtipoMov: 'V',
           empresaId: Number(det.empresaId) || 1,
           usuarioCreated: currentUser,
-          factordecambio: 1,
           codbarra: det.codbarra || '',
         });
         procesados++;
@@ -844,6 +845,7 @@ export class FacturacionService {
       }
     }
 
+    dto.factordecambio = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
     const anulacion = await this.createEntity(this.facMaeAnulRepo, dto, currentUser);
 
     if (facturaOriginal) {
@@ -1001,6 +1003,7 @@ export class FacturacionService {
     if (carrito.sn_estadocarrito === 'F') throw new NotFoundException('El carrito ya fue facturado');
 
     const empresaId = carrito.empresaId;
+    const factorCambio = await this.fechaSistema.getFactorCambioDolar(empresaId);
 
     const detalles = await this.cotDetRepo.find({
       where: { poscotmaeId: dto.poscotmaeId } as unknown as FindOptionsWhere<TPosCotDet>,
@@ -1077,7 +1080,7 @@ export class FacturacionService {
       nrocliente: clienteTienda.nrocliente,
       nombrecliente: dto.nombrecliente,
       direccion: dto.direccion || '',
-      factordecambio: 1,
+      factordecambio: factorCambio,
       subTotal,
       impuesto: impuestoTotal,
       descuento: 0,
@@ -1129,7 +1132,7 @@ export class FacturacionService {
       tarjetacreditoId: dto.tarjetacreditoId || null,
       nrotarjeta: dto.nrotarjeta || null,
       nroautorizacion: dto.nroautorizacion || null,
-      factordecambio: 1,
+      factordecambio: factorCambio,
       importe_efectivo: esEfectivoTienda ? recibidoTienda : 0,
       importe_otros: esEfectivoTienda ? 0 : total,
       importe_cambio: esEfectivoTienda ? Math.max(0, recibidoTienda - total) : 0,
@@ -1518,6 +1521,8 @@ export class FacturacionService {
       dto.sn_enviogratis = dto.sn_enviogratis ?? 'N';
       dto.tipofactura = dto.tipofactura ?? 'E';
 
+      // La tasa se toma de ttipofactordecambios (mayor id D), no del payload.
+      dto.factordecambio = await this.fechaSistema.getFactorCambioDolar(empresaId);
       const pedido = await this.createEntity(this.pedMaeRepo, dto, currentUser);
       // Cabecera coherente con el detalle desde el primer momento
       await this.recalcularTotalesPedido(pedido.pospedmaeId, empresaId, currentUser);
@@ -1956,6 +1961,7 @@ export class FacturacionService {
     if (pedido.sn_facturado === 'S') throw new BadRequestException('El pedido ya fue facturado');
 
     const empresaId = pedido.empresaId;
+    const factorCambio = await this.fechaSistema.getFactorCambioDolar(empresaId);
 
     // Mismo criterio que createFactura: no facturar en período contable cerrado
     const fechaDoc = await this.fechaSistema.getFecha(empresaId);
@@ -2059,7 +2065,7 @@ export class FacturacionService {
       nombrecliente: dto.nombrecliente || pedido.nombrecliente,
       direccion: pedido.direccion_entrega || '',
       rtn_cliente: pedido.rtn_cliente || '',
-      factordecambio: Number(pedido.factordecambio) || 1,
+      factordecambio: factorCambio,
       subTotal,
       impuesto: impuestoTotal,
       descuento: descuentoTotal,
@@ -2138,7 +2144,7 @@ export class FacturacionService {
             tarjetacreditoId: p.tarjetacreditoId || null,
             nrotarjeta: p.nrotarjeta || null,
             nroautorizacion: p.nroautorizacion || null,
-            factordecambio: 1,
+            factordecambio: factorCambio,
             importe_efectivo: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? importePago : 0,
             importe_otros: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? 0 : importePago,
             importe_cambio: Number(p.formapagoId) === FORMAPAGO_EFECTIVO ? cambioPedido : 0,
@@ -2155,7 +2161,7 @@ export class FacturacionService {
           tarjetacreditoId: dto.tarjetacreditoId || null,
           nrotarjeta: dto.nrotarjeta || null,
           nroautorizacion: dto.nroautorizacion || null,
-          factordecambio: 1,
+          factordecambio: factorCambio,
           importe_efectivo: esEfectivo ? recibido : 0,
           importe_otros: esEfectivo ? 0 : total,
           importe_cambio: esEfectivo ? cambioPedido : 0,
@@ -2462,6 +2468,7 @@ export class FacturacionService {
     const cajaIdSesion = await this.resolverCajaIdDesdeSesion(empresaId, currentUser);
     if (cajaIdSesion) dto.cajaId = cajaIdSesion;
 
+    dto.factordecambio = await this.fechaSistema.getFactorCambioDolar(empresaId);
     const facCaja = await this.createEntity(this.facCajaRepo, dto, currentUser);
 
     try {

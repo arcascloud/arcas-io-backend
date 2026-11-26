@@ -11,6 +11,13 @@ export interface EstadoFechaSistema {
   fechaServidor: string;
   /** `true` cuando ambas fechas (solo día) son iguales. */
   coincide: boolean;
+  /**
+   * `true` si existe en `ttipofactordecambios` un registro de cambio en
+   * DÓLARES (`tipomoneda='D'`) con `DATE(fecharegistro)` = `CURDATE()`
+   * para la empresa. Requisito de las escrituras en tablas con tipo de
+   * cambio (ver `exigirTipoCambioDolar`).
+   */
+  tipoCambioDolarHoy: boolean;
 }
 
 /**
@@ -106,6 +113,7 @@ export class FechaSistemaService {
    * evitar cualquier corrimiento de día por zona horaria en mysql2.
    */
   async getEstado(empresaId: number): Promise<EstadoFechaSistema> {
+    const tipoCambioDolarHoy = await this.tieneCambioDolarHoy(empresaId);
     const filas: { fechaSistema: string | null; fechaServidor: string }[] =
       await this.dataSource.query(
         `SELECT DATE_FORMAT(fechasistema, '%Y-%m-%d') AS fechaSistema,
@@ -121,11 +129,105 @@ export class FechaSistemaService {
         `SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS fechaServidor`,
       );
       const fechaServidor = (servidor[0] as any)?.fechaServidor ?? '';
-      return { fechaSistema: null, fechaServidor, coincide: false };
+      return { fechaSistema: null, fechaServidor, coincide: false, tipoCambioDolarHoy };
     }
 
     const { fechaSistema, fechaServidor } = filas[0];
-    return { fechaSistema, fechaServidor, coincide: !!fechaSistema && fechaSistema === fechaServidor };
+    return {
+      fechaSistema,
+      fechaServidor,
+      coincide: !!fechaSistema && fechaSistema === fechaServidor,
+      tipoCambioDolarHoy,
+    };
+  }
+
+  /**
+   * ¿Existe un cambio en DÓLARES (`tipomoneda='D'`) de `ttipofactordecambios`
+   * para el día del servidor (`DATE(fecharegistro) = CURDATE()`) de la empresa?
+   *
+   * `fecharegistro` lo impone el backend con la Fecha del Sistema (reglas 1 y 4),
+   * por lo que el registro "del día" solo puede existir cuando la Fecha del
+   * Sistema ya fue alineada con el servidor.
+   */
+  private async tieneCambioDolarHoy(empresaId: number): Promise<boolean> {
+    if (!empresaId) return false;
+    try {
+      const filas = await this.dataSource.query(
+        `SELECT 1 AS ok
+           FROM ttipofactordecambios
+          WHERE empresaId = ?
+            AND tipomoneda = 'D'
+            AND DATE(fecharegistro) = CURDATE()
+          LIMIT 1`,
+        [empresaId],
+      );
+      return filas.length > 0;
+    } catch {
+      return false; // Error de consulta → se asume sin registro (el chequeo de escritura volverá a intentarlo)
+    }
+  }
+
+  /**
+   * Tasa USD a registrar en las tablas transaccionales (requisito 25/11/2026):
+   * `precioventa` del MAYOR `factordecambioid` con `tipomoneda='D'` de la
+   * empresa — exactamente el SQL indicado por el usuario, parametrizado por
+   * `empresaId` en vez de hardcodear 1.
+   *
+   * Se usa en TODA escritura nueva de: posfaccaja, posfacmae, pospedmae,
+   * copdadet, copdamae, cxccajadet, cxcmovimientos, invkardex, invtrasmae,
+   * bcosmovimientos y posfacmaeanul. Devuelve `1` solo si no hay cambio D
+   * registrado (compatibilidad con datos históricos / empresas sin tasa).
+   */
+  async getFactorCambioDolar(empresaId: number): Promise<number> {
+    if (!empresaId) return 1;
+    try {
+      const filas = await this.dataSource.query(
+        `SELECT precioventa
+           FROM ttipofactordecambios
+          WHERE factordecambioid = (
+                SELECT MAX(factordecambioid)
+                  FROM ttipofactordecambios
+                 WHERE tipomoneda = 'D' AND empresaId = ?
+          )
+            AND tipomoneda = 'D' AND empresaId = ?
+          LIMIT 1`,
+        [empresaId, empresaId],
+      );
+      return filas.length ? Number(filas[0].precioventa) || 1 : 1;
+    } catch {
+      return 1;
+    }
+  }
+
+  /**
+   * VALIDACIÓN (requisito aprobado 25/11/2026): las escrituras en tablas que
+   * usan el tipo de cambio exigen que exista en `ttipofactordecambios` un
+   * registro de cambio en DÓLARES (`tipomoneda='D'`) con
+   * `DATE(fecharegistro) = CURDATE()` (día del servidor) para la empresa.
+   *
+   * Tablas objetivo (lista del usuario): bcosmovimientos, copdadet, copdamae,
+   * cxccajadet, cxcmovimientos, invkardex, invtrasmae, posfaccaja, posfacmae,
+   * posfacmaeanul, pospedmae — el mapa de rutas vive en `JwtAuthGuard`
+   * (`RUTAS_REQUIEREN_TIPO_CAMBIO`).
+   *
+   * **Excepción**: el usuario con rango VIGENTE en `tfecmae`/`tfecdet` queda
+   * exceptuado también de este chequeo (misma excepción del chequeo de fecha,
+   * decisión del usuario 25/11/2026).
+   *
+   * Lanza `409 Conflict` con `code: 'TIPO_CAMBIO_FALTA'`.
+   */
+  async exigirTipoCambioDolar(usuario: string | undefined, empresaId: number): Promise<void> {
+    if (await this.esExceptado(usuario, empresaId)) return;
+    if (await this.tieneCambioDolarHoy(empresaId)) return;
+
+    throw new ConflictException({
+      statusCode: 409,
+      code: 'TIPO_CAMBIO_FALTA',
+      message:
+        'No existe registro de cambio en dólares (ttipofactordecambios, tipomoneda=D) ' +
+        'para el día del servidor. Registre el tipo de cambio del día en ' +
+        'Contabilidad › Factor de Cambio para continuar.',
+    });
   }
 
   /**

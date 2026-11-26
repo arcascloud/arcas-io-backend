@@ -9,12 +9,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    let code: string | undefined;
     let stack: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
       message = typeof res === 'string' ? res : (res as any).message || message;
+      // Preserva el código de negocio (ej: FECHA_SISTEMA, TIPO_CAMBIO_FALTA)
+      // que los HttpException traen en su payload — el frontend lo lee en
+      // error.error.code para mostrar el toast específico.
+      if (typeof res === 'object' && res !== null && typeof (res as any).code === 'string') {
+        code = (res as any).code;
+      }
     } else if (exception instanceof Error) {
       message = exception.message;
       stack = exception.stack;
@@ -26,6 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       message,
     };
+    if (code) errorResponse.code = code;
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR && isDev) {
       errorResponse.stack = stack;

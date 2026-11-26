@@ -32,7 +32,9 @@ export class Tsucursal {
   sn_activo: string;
 
   @ApiProperty({ required: false, description: 'Bodega por defecto de la sucursal (facturación/kardex)' })
-  @Column({ type: 'int', nullable: true })
+  // NOT NULL sin default en la BD (synchronize:false): create() SIEMPRE asigna
+  // la bodega recién creada antes del INSERT
+  @Column({ type: 'int', nullable: false })
   bodegaId: number;
 
   @ApiProperty()

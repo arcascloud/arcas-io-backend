@@ -17,6 +17,60 @@ const METODOS_ESCRITURA = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  */
 const RUTAS_EXENTAS = ['/parametros/fechas-sistema'];
 
+/**
+ * Rutas de ESCRITURA que afectan tablas con tipo de cambio → exigen que
+ * exista en `ttipofactordecambios` un registro de cambio en DÓLARES
+ * (`tipomoneda='D'`) con `DATE(fecharegistro) = CURDATE()` (día del servidor)
+ * para la empresa. Si falta → 409 `TIPO_CAMBIO_FALTA`
+ * (`FechaSistemaService.exigirTipoCambioDolar`).
+ *
+ * Requisito aprobado por el usuario (25/11/2026). Tablas objetivo:
+ *   bcosmovimientos, copdadet, copdamae, cxccajadet, cxcmovimientos,
+ *   invkardex, invtrasmae, posfaccaja, posfacmae, posfacmaeanul, pospedmae
+ *
+ * Los patrones se evalúan sobre la ruta RELATIVA (sin prefijo `/api`),
+ * anclados al inicio; los IDs dinámicos usan `[^/]+`. Para agregar una ruta:
+ * verificar PRIMERO en el service correspondiente qué tabla escribe.
+ */
+const RUTAS_REQUIEREN_TIPO_CAMBIO: RegExp[] = [
+  // ── bcosmovimientos (Bancos) ──
+  /^\/bancos\/movimientos(\/|$)/,
+  /^\/bancos\/cheques\/emitir(-particular)?$/,
+  // ── copdamae / copdadet (Contabilidad + integraciones) ──
+  /^\/contabilidad\/copdamae(\/|$)/,
+  /^\/contabilidad\/copdadet(\/|$)/,
+  /^\/contabilidad\/cierrectable\/(realizar|revertir)$/,
+  /^\/contabilidad\/partida-inicial$/,
+  /^\/contabilidad\/integracion\/(factura|cxc|cxp|bancos)$/,
+  /^\/contabilidad\/posfacmov\/contabilizar-cxc$/,
+  /^\/contabilidad\/trasaviblidad(\/|$)/,
+  /^\/cxp\/compras\/[^/]+\/(procesar|anular|contabilizar)$/,
+  /^\/cxc\/prestamos\/[^/]+\/contabilizar$/,
+  /^\/planilla\/planillas\/[^/]+\/contabilizar$/,
+  // ── cxccajadet / cxcmovimientos (CxC) ──
+  /^\/cxc\/caja-mae(\/|$)/,
+  /^\/cxc\/caja-det(\/|$)/,
+  /^\/cxc\/movimientos(\/|$)/,
+  // ── invkardex / invtrasmae (Inventario) ──
+  /^\/inventario\/kardex(\/|$)/,
+  /^\/inventario\/ajustes/, // ajustes/positivo|negativo + ajustes-inventario/*
+  /^\/inventario\/toma-inventario(\/|$)/,
+  /^\/inventario\/traslados(\/|$)/, // traslados + traslados-mae
+  // ── posfacmae / posfaccaja / posfacmaeanul / pospedmae (Facturación) ──
+  /^\/facturacion\/facturas(-det|-anul|-det-anul)?(\/|$)/,
+  /^\/facturacion\/fac-caja(\/|$)/,
+  /^\/facturacion\/pedidos(\/|$)/,
+  /^\/facturacion\/tienda\/checkout$/,
+  /^\/todopago\/confirmar$/,
+];
+
+/** ¿La ruta relativa (sin `/api`) es una escritura que requiere el cambio en dólares del día? */
+function requiereTipoCambio(rutaRel: string): boolean {
+  // Enviar factura por correo no escribe tablas con tipo de cambio
+  if (rutaRel.endsWith('/enviar-correo')) return false;
+  return RUTAS_REQUIEREN_TIPO_CAMBIO.some((re) => re.test(rutaRel));
+}
+
 // ═══════════════ Permisos de módulo (tusuariomnuitem) ═══════════════
 //
 // Regla (11/10/2026): un usuario solo puede usar los endpoints de un módulo
@@ -76,6 +130,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
    * 1. Autentica el JWT (heredado).
    * 2. Si es una escritura, exige que `tempresas.fechasistema` coincida con la
    *    fecha del servidor, salvo usuario exceptuado por rango vigente en `tfecdet`.
+   * 2b. Si la escritura afecta tablas con tipo de cambio (ver
+   *    `RUTAS_REQUIEREN_TIPO_CAMBIO`), exige además un registro de cambio en
+   *    DÓLARES de `ttipofactordecambios` para el día del servidor
+   *    (409 `TIPO_CAMBIO_FALTA`), salvo usuario con rango vigente en
+   *    `tfecmae`/`tfecdet` (misma excepción del chequeo de fecha).
    * 3. Si el usuario TIENE un rango vigente en `tfecdet`, valida además que
    *    ninguna fecha de documento enviada en el body esté fuera del rango
    *    [desde, hasta]. `fecharegistro` queda FUERA de esta validación: ya no
@@ -124,6 +183,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const empresaId = req?.user?.empresaId;
 
     await this.fechaSistema.exigirFechaVigente(usuario, empresaId);
+
+    // Requisito 25/11/2026: si la ruta escribe en tablas con tipo de cambio,
+    // exige un registro en DÓLARES de ttipofactordecambios para el día del
+    // servidor (se valida DESPUÉS de la fecha: con fecha desalineada el 409
+    // de FECHA_SISTEMA tiene prioridad). Usuario con rango vigente en
+    // tfecmae/tfecdet → exceptuado también de este chequeo.
+    const rutaRel = ruta.startsWith('/api/') ? ruta.slice(4) : ruta;
+    if (requiereTipoCambio(rutaRel)) {
+      await this.fechaSistema.exigirTipoCambioDolar(usuario, empresaId);
+    }
 
     // Validación especial: con rango vigente activo, ninguna fecha del
     // payload puede caer fuera de [fec_vig_desde, fec_vig_hasta].

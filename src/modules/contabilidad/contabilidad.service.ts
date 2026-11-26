@@ -2210,7 +2210,11 @@ export class ContabilidadService {
     // Correlativo automático desde ttipoparametros (field='nropartida'):
     // el dto.nropartida del cliente se ignora.
     const nropartida = await this.siguienteNropartida(currentUser, dto.empresaId);
-    return this.createEntity(this.copdamaeRepo, { ...dto, nropartida }, currentUser);
+    return this.createEntity(this.copdamaeRepo, {
+      ...dto,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
+      nropartida,
+    }, currentUser);
   }
 
   async updateCopdamae(partidaId: number, empresaId: number, dto: UpdateCopdamaeDto, currentUser: string) {
@@ -2302,7 +2306,10 @@ export class ContabilidadService {
         'no puede recibir nuevas líneas',
       );
     }
-    return this.createEntity(this.copdadetRepo, dto, currentUser);
+    return this.createEntity(this.copdadetRepo, {
+      ...dto,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
+    }, currentUser);
   }
 
   async updateCopdadet(copdadetId: number, empresaId: number, dto: UpdateCopdadetDto, currentUser: string) {

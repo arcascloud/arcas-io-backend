@@ -385,6 +385,8 @@ export class CxcService {
 
     const cajaDet = await this.createEntity<CxccajaDet>(this.cajaDetRepo, {
       ...dto,
+      // Tasa vigente de ttipofactordecambios (mayor id D), no la del payload.
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(dto.empresaId),
       // Forzamos 'N' porque el default real de la BD es 'S' (synchronize:false).
       // Sin esto, todo detalle nacería anulado y procesarAbonoCaja no lo vería.
       sn_anulado: 'N',
@@ -416,7 +418,7 @@ export class CxcService {
       documentoId: caja.documentoId,
       tipomov: 'C',
       nroreferencia: caja.nrodocumento,
-      factordecambio: 1,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(caja.empresaId),
       importe: 0,
       concepto: `Pago Caja #${caja.cxccajaId} - ${caja.concepto || ''}`,
       sn_cotabilizada: 'N',
@@ -451,7 +453,7 @@ export class CxcService {
       documentoId: cajaMae.documentoId,
       tipomov: 'C',
       nroreferencia: cajaMae.nrodocumento,
-      factordecambio: cajaDet.factordecambio || 1,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(cajaDet.empresaId),
       importe: cajaDet.importe,
       concepto: `Abono Caja #${cajaMae.cxccajaId} - ${cajaMae.concepto || ''}`,
       sn_cotabilizada: 'N',
@@ -581,7 +583,7 @@ export class CxcService {
         documentoId: parcial.documentoId,
         tipomov,
         nroreferencia: cajaMae.nrodocumento,
-        factordecambio: 1,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(empresaId),
         importe: r2(parcial.importe),
         concepto: parcial.concepto,
         sn_cotabilizada: 'N',
@@ -912,7 +914,7 @@ export class CxcService {
         documentoId, // 13=PPR capital, 11=ICS interés, 12=ICM mora
         tipomov,
         nroreferencia,
-        factordecambio: 1,
+        factordecambio: await this.fechaSistema.getFactorCambioDolar(empresaId),
         importe: r2(importe),
         concepto,
         sn_cotabilizada: 'N',
@@ -1698,7 +1700,7 @@ export class CxcService {
       fechadocumento: fechaDoc,
       nroreferencia: nroprestamo,
       descripcion: concepto,
-      factordecambio: 1,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(empresaId),
       lineas,
     };
     const copdamae = await this.contabilidadService.contabilizarPartida(partidaDto, currentUser);
@@ -1715,7 +1717,7 @@ export class CxcService {
       documentoId: 13, // PPR = Préstamo
       tipomov: 'D',
       nroreferencia: nroprestamo,
-      factordecambio: 1,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(empresaId),
       importe: capitalneto,
       concepto: `Desembolso préstamo ${nroprestamo}`,
       partidaId: copdamae.partidaId,
@@ -1807,7 +1809,7 @@ export class CxcService {
       documentoId: 1, // tipodocumentofiscalId = 1 (FAC)
       tipomov: 'D',
       nroreferencia: factura.nrofactura.toString(),
-      factordecambio: factura.factordecambio || 1,
+      factordecambio: await this.fechaSistema.getFactorCambioDolar(factura.empresaId),
       importe: factura.total,
       concepto: `Factura Crédito #${factura.nrofactura}`,
       sn_cotabilizada: 'N',

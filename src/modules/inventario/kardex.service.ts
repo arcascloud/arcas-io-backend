@@ -56,7 +56,7 @@ export class KardexService {
   async registrarEntrada(dto: KardexEntradaDto): Promise<TinvKardex> {
     const cantidad = Number(dto.cantidad) || 0;
     const costoUnitario = Number(dto.costoUnitario) || 0;
-    const factordecambio = Number(dto.factordecambio) || 1;
+    const factordecambio = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
 
     // PRODUCTOS BAJO DEMANDA (sn_solicitado_bajo_demanda = 'S'): reversión
     // de venta bajo demanda — registra el movimiento en Kardex pero NO mueve
@@ -104,7 +104,7 @@ export class KardexService {
     // (300 + "10.00" = "30010.00" → 3001010 en la siguiente entrada).
     const cantidadNum = Number(dto.cantidad) || 0;
     const costoUnitarioNum = Number(dto.costoUnitario) || 0;
-    const factordecambioNum = Number(dto.factordecambio) || 1;
+    const factordecambioNum = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
     const saldoAnterior = Number(existencia.existencia) || 0;
     const saldoActual = saldoAnterior + cantidadNum;
     const costoTotal = cantidadNum * costoUnitarioNum;
@@ -150,7 +150,7 @@ export class KardexService {
   async registrarSalida(dto: KardexSalidaDto): Promise<TinvKardex> {
     const cantidad = Number(dto.cantidad) || 0;
     const costoUnitario = Number(dto.costoUnitario) || 0;
-    const factordecambio = Number(dto.factordecambio) || 1;
+    const factordecambio = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
 
     // PRODUCTOS BAJO DEMANDA (sn_solicitado_bajo_demanda = 'S'): se registra la
     // cantidad vendida en el Kardex, pero NO se lleva control de existencia.
@@ -200,7 +200,7 @@ export class KardexService {
     // de esa particularidad de JS).
     const cantidadNum = Number(dto.cantidad) || 0;
     const costoUnitarioNum = Number(dto.costoUnitario) || 0;
-    const factordecambioNum = Number(dto.factordecambio) || 1;
+    const factordecambioNum = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
     const saldoAnterior = Number(existencia.existencia) || 0;
 
     if (saldoAnterior < cantidadNum) {
