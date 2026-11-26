@@ -150,8 +150,9 @@ export class CompaniesController {
 
   // ===== Logo =====
 
+  @Public()
   @Get('logo')
-  @ApiOperation({ summary: 'Obtener logo de la empresa' })
+  @ApiOperation({ summary: 'Obtener logo de la empresa (público: lo usa la tienda sin sesión)' })
   findLogo(@Query('empresaId', ParseIntPipe) empresaId: number) {
     return this.service.findLogo(empresaId);
   }
