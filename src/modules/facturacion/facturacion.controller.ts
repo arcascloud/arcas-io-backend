@@ -132,6 +132,17 @@ export class FacturacionController {
     return this.service.createFactura(dto, user.usuario);
   }
 
+  @Post('facturas/completa')
+  @ApiOperation({
+    summary: 'Crear factura completa (cabecera + detalle + pagos) en una sola transacción',
+  })
+  @ApiResponse({ status: 201, description: 'Factura completa creada exitosamente' })
+  crearFacturaCompleta(@Body() dto: any, @CurrentUser() user: any) {
+    dto.Idsucursal = user.idsucursal;
+    return this.service.crearFacturaCompleta(dto, user.usuario);
+  }
+
+
   @Put('facturas/:id')
   @ApiOperation({ summary: 'Actualizar factura' })
   @ApiResponse({ status: 200, description: 'Factura actualizada exitosamente' })

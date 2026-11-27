@@ -1,6 +1,6 @@
 ﻿import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral, DataSource, In } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, DataSource, In, EntityManager, QueryRunner } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TCaiAutorizado } from './entities/cai-autorizado.entity';
 import { TPosFacMae } from './entities/posfacmae.entity';
@@ -506,7 +506,8 @@ export class FacturacionService {
     return sesion;
   }
 
-  async createFactura(dto: CreatePosFacMaeDto, currentUser: string) {
+  async createFactura(dto: CreatePosFacMaeDto, currentUser: string, em?: EntityManager) {
+    const facRepo = em ? em.getRepository(TPosFacMae) : this.facMaeRepo;
     // Emisión de asesor (sin cobro): solo asigna correlativo y persiste posfacmae.
     // El flag NO se persiste (no existe columna); se usa para exigir el turno
     // del usuario, forzar sn_pagada='N' y evitar movimientos CxC.
@@ -552,7 +553,13 @@ export class FacturacionService {
 
     let caiInfo: { rangoDesde?: string; rangoHasta?: string; disponible?: number; alerta?: string } | undefined;
     if (!dto.nrofactura) {
-      const result = await this.asignarCorrelativo(dto.empresaId, dto.Idsucursal!, currentUser);
+      const result = await this.asignarCorrelativo(
+        dto.empresaId,
+        dto.Idsucursal!,
+        currentUser,
+        em?.queryRunner,
+        em,
+      );
       dto.nrofactura = result.nrofactura;
       // Trazabilidad: registrar el correlativo CAI del que proviene el número
       if (result.caiAutorizadoId != null) {
@@ -562,12 +569,15 @@ export class FacturacionService {
     }
     // La tasa es la vigente en ttipofactordecambios, no la que envíe el cliente.
     dto.factordecambio = await this.fechaSistema.getFactorCambioDolar(dto.empresaId);
-    const factura = await this.createEntity(this.facMaeRepo, dto, currentUser);
+    const factura = await this.createEntity(facRepo, dto, currentUser);
 
     if (!soloEmision && dto.tipofactura === 'C') {
       try {
-        await this.cxcService.generarMovimientoDesdeFactura(factura, currentUser);
+        await this.cxcService.generarMovimientoDesdeFactura(factura, currentUser, em);
       } catch (error) {
+        // Dentro de una transacción el error DEBE propagarse para hacer rollback:
+        // si no se puede crear el movimiento CxC, la factura de crédito no debe existir.
+        if (em) throw error;
         console.error('Error generando movimiento CXC:', error);
       }
     }
@@ -575,11 +585,92 @@ export class FacturacionService {
     // Integración contable automática (se ejecuta después del kardex)
     // Se llama desde procesarKardexFactura porque necesita que el inventario esté procesado.
     // En emisión de asesor se omite para NO contabilizar la factura.
-    if (!soloEmision) {
+    // Dentro de una transacción el evento se emite DESPUÉS del commit (lo hace
+    // el llamador) para no notificar una factura que podría revertirse.
+    if (!soloEmision && !em) {
       this.eventEmitter.emit('factura.creada', { factura, currentUser });
     }
 
     return { ...factura, ...caiInfo };
+  }
+
+  /**
+   * Factura completa en UNA sola petición: cabecera + detalles + pagos.
+   *
+   * ATOMICIDAD TOTAL: cabecera (posfacmae), correlativo (CAI o
+   * ttipoparametros), movimiento CxC de crédito, todos los detalles y todos
+   * los pagos se ejecutan dentro de UNA sola transacción. Si algo falla se
+   * revierte TODO (incluido el correlativo consumido) y no queda factura a
+   * medias. No hay compensación: no hace falta.
+   *
+   * El kardex/contabilidad se ejecuta después del commit: un fallo ahí no
+   * deshace el documento (misma semántica que procesar-kardex), pero se
+   * devuelve `kardexOk=false` para que el POS avise al usuario.
+   */
+  async crearFacturaCompleta(dto: any, currentUser: string) {
+    const { detalles = [], pagos = [], ...maeDto } = dto ?? {};
+    const soloEmision = maeDto.sn_solo_emision === 'S';
+
+    const factura = await this.dataSource.transaction(async (em) => {
+      // 1) Cabecera + correlativo + CxC (todo con el EntityManager de la tx).
+      const fac = await this.createFactura(
+        maeDto as CreatePosFacMaeDto,
+        currentUser,
+        em,
+      );
+
+      // 2) Detalles.
+      const detRepo = em.getRepository(TPosFacDet);
+      const empresaId = Number(fac.empresaId);
+      let nrofila = 1;
+      for (const d of detalles) {
+        await this.createEntity(
+          detRepo,
+          {
+            ...d,
+            empresaId,
+            facturaId: fac.facturaId,
+            bodegaId: d.bodegaId ?? fac.bodegaId,
+            nrofila: d.nrofila ?? nrofila,
+          },
+          currentUser,
+        );
+        nrofila++;
+      }
+
+      // 3) Pagos.
+      const cajaRepo = em.getRepository(TPosFacCaja);
+      for (const p of pagos) {
+        await this.createEntity(
+          cajaRepo,
+          { ...p, empresaId, facturaId: fac.facturaId },
+          currentUser,
+        );
+      }
+
+      return fac;
+    });
+
+    // Post-commit: notificación (el evento no tiene listener de escritura hoy,
+    // pero se emite fuera de la tx para no notificar algo que podría revertirse).
+    if (!soloEmision) {
+      this.eventEmitter.emit('factura.creada', { factura, currentUser });
+    }
+
+    let kardexOk = true;
+    let kardexError: string | null = null;
+    try {
+      const resultado = await this.procesarKardexFactura(factura.facturaId, currentUser);
+      if (resultado?.errores?.length) {
+        kardexOk = false;
+        kardexError = resultado.errores.join('; ');
+      }
+    } catch (error) {
+      kardexOk = false;
+      kardexError = error?.message ?? String(error);
+    }
+
+    return { ...factura, kardexOk, kardexError };
   }
 
   async procesarKardexFactura(
@@ -695,7 +786,13 @@ export class FacturacionService {
    *   ttipoparametros (field='nrofactura'). TODOS los correlativos del ERP se
    *   administran desde ttipoparametros; tcotipodocumentofiscal.nrocorrelativo se eliminó.
    */
-  private async asignarCorrelativo(empresaId: number, idsucursal: number, currentUser: string): Promise<{
+  private async asignarCorrelativo(
+    empresaId: number,
+    idsucursal: number,
+    currentUser: string,
+    qr?: QueryRunner,
+    em?: EntityManager,
+  ): Promise<{
     nrofactura: number;
     caiAutorizadoId?: number;
     rangoDesde?: string;
@@ -703,8 +800,11 @@ export class FacturacionService {
     disponible?: number;
     alerta?: string;
   }> {
+    const paramRepo = em ? em.getRepository(TipoParametro) : this.tipoParametroRepo;
+    const caiRepo = em ? em.getRepository(TCaiAutorizado) : this.correlativosRepo;
+
     // 1. Leer modo_correlativo desde ttipoparametros (field='modo_correlativo', empresa)
-    const paramModo = await this.tipoParametroRepo.findOne({
+    const paramModo = await paramRepo.findOne({
       where: { empresaId, field: 'modo_correlativo', sn_activo: 'S' } as unknown as FindOptionsWhere<TipoParametro>,
     });
 
@@ -715,7 +815,7 @@ export class FacturacionService {
     //     Se usa el contador de TICKET y no el de factura para no contradecir
     //     los correlativos fiscales secuestrados de la SAR.)
     if (modo === 'M') {
-      const siguiente = await this.correlativos.siguiente('nroticket', empresaId, currentUser);
+      const siguiente = await this.correlativos.siguiente('nroticket', empresaId, currentUser, qr);
 
       console.log(`[asignarCorrelativo] Modo manual: ttipoparametros.nroticket → ${siguiente} (empresaId=${empresaId})`);
 
@@ -724,7 +824,7 @@ export class FacturacionService {
     }
 
     // 3. Buscar correlativo (CAI) en tcai_autorizado para esta empresa/sucursal
-    const corr = await this.correlativosRepo.findOne({
+    const corr = await caiRepo.findOne({
       where: { empresaId, Idsucursal: idsucursal } as unknown as FindOptionsWhere<TCaiAutorizado>,
       order: { caiAutorizadoId: 'DESC' },
     });
@@ -758,7 +858,7 @@ export class FacturacionService {
       corr.nrofactura = siguiente;
       corr.usuarioUpdated = currentUser;
       corr.fechaUpdated = await this.fechaSistema.getFecha(empresaId);
-      await this.correlativosRepo.save(corr);
+      await caiRepo.save(corr);
 
       console.log(`[asignarCorrelativo] CAI: empresaId=${empresaId}, sucursal=${idsucursal}, nrofactura=${siguiente}, disponible=${disponible}`);
 
@@ -775,7 +875,7 @@ export class FacturacionService {
     // 5. NO hay correlativo (CAI) → contador de ttipoparametros (field='nrofactura')
     //    Todos los correlativos del ERP se administran desde ttipoparametros;
     //    el fallback a tcotipodocumentofiscal.nrocorrelativo fue eliminado.
-    const siguiente = await this.correlativos.siguiente('nrofactura', empresaId, currentUser);
+    const siguiente = await this.correlativos.siguiente('nrofactura', empresaId, currentUser, qr);
     console.log(`[asignarCorrelativo] Sin CAI → ttipoparametros.nrofactura: empresaId=${empresaId}, nrofactura=${siguiente}`);
     return { nrofactura: siguiente };
   }

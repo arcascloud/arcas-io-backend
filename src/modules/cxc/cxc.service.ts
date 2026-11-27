@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ObjectLiteral, Like, Not, In } from 'typeorm';
+import { Repository, FindOptionsWhere, ObjectLiteral, Like, Not, In, EntityManager, QueryRunner } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CxcCliente } from './entities/cxccliente.entity';
@@ -91,9 +91,14 @@ export class CxcService {
    * tipomov='D' → field='nro_debito'  (notas/movimientos de débito)
    * tipomov='C' → field='nro_credito' (notas/movimientos de crédito)
    */
-  async generarNroMovimiento(empresaId: number, tipomov: 'D' | 'C', currentUser: string): Promise<number> {
+  async generarNroMovimiento(
+    empresaId: number,
+    tipomov: 'D' | 'C',
+    currentUser: string,
+    qr?: QueryRunner,
+  ): Promise<number> {
     const field = tipomov === 'D' ? 'nro_debito' : 'nro_credito';
-    const siguiente = await this.correlativos.siguiente(field, empresaId, currentUser);
+    const siguiente = await this.correlativos.siguiente(field, empresaId, currentUser, qr);
     this.logger.log(`Correlativo ${field}: → ${siguiente}`);
     return siguiente;
   }
@@ -1795,12 +1800,22 @@ export class CxcService {
     return this.updateEntity(this.parienteRepo, 'parienteId', parienteId, empresaId, dto, currentUser, 'Pariente');
   }
 
-  async generarMovimientoDesdeFactura(factura: any, currentUser: string): Promise<CxcMovimiento> {
+  async generarMovimientoDesdeFactura(
+    factura: any,
+    currentUser: string,
+    em?: EntityManager,
+  ): Promise<CxcMovimiento> {
+    const movRepo = em ? em.getRepository(CxcMovimiento) : this.movimientoRepo;
     const cliente = await this.findCliente(factura.clienteId, factura.empresaId);
     const fecharegistro = await this.fechaSistema.obtenerFechaRegistro(currentUser, factura.empresaId);
-    const nromovimiento = await this.generarNroMovimiento(factura.empresaId, 'D', currentUser);
+    const nromovimiento = await this.generarNroMovimiento(
+      factura.empresaId,
+      'D',
+      currentUser,
+      em?.queryRunner,
+    );
 
-    const movimiento = this.movimientoRepo.create({
+    const movimiento = movRepo.create({
       fecharegistro,
       nromovimiento,
       clienteId: factura.clienteId,
@@ -1819,7 +1834,7 @@ export class CxcService {
       usuarioCreated: currentUser,
     });
 
-    const saved = await this.movimientoRepo.save(movimiento);
+    const saved = await movRepo.save(movimiento);
 
     // El partidaId se asigna después en procesarKardexFactura cuando se contabiliza la factura
     return saved;
