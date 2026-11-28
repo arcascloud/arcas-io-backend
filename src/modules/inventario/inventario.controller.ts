@@ -643,16 +643,6 @@ export class InventarioController {
     return this.service.findAllKardex(empresaId);
   }
 
-  @Get('kardex/:id')
-  @ApiOperation({ summary: 'Obtener movimiento kardex' })
-  @ApiResponse({ status: 200, description: 'Exitoso' })
-  findKardex(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('empresaId', ParseIntPipe) empresaId: number,
-  ) {
-    return this.service.findKardex(id, empresaId);
-  }
-
   @Get('kardex/consulta')
   @ApiOperation({ summary: 'Consultar kardex con filtros' })
   @ApiResponse({ status: 200, description: 'Exitoso' })
@@ -678,6 +668,16 @@ export class InventarioController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });
+  }
+
+  @Get('kardex/:id')
+  @ApiOperation({ summary: 'Obtener movimiento kardex' })
+  @ApiResponse({ status: 200, description: 'Exitoso' })
+  findKardex(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('empresaId', ParseIntPipe) empresaId: number,
+  ) {
+    return this.service.findKardex(id, empresaId);
   }
 
   @Get('kardex/saldo/:bodegaId/:productoId')
